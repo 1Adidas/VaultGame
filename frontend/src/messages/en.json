@@ -1,0 +1,57 @@
+{
+  "nav": {
+    "home": "Home",
+    "games": "Store",
+    "library": "Library",
+    "wishlist": "Wishlist",
+    "orders": "Orders",
+    "ai": "AI Assistant",
+    "admin": "Admin",
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout"
+  },
+  "home": {
+    "hero": "Discover your next game",
+    "subtitle": "Buy, try demos and download digital games",
+    "featured": "Featured games",
+    "comingSoon": "Coming soon",
+    "freeGames": "Free games",
+    "discountedGames": "Discounted games",
+    "browse": "Browse all"
+  },
+  "game": {
+    "buy": "Buy now",
+    "wishlist": "Wishlist",
+    "demo": "Play demo",
+    "reviews": "Reviews",
+    "requirements": "Requirements",
+    "owned": "Owned"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "fullName": "Full name",
+    "loginTitle": "Login",
+    "registerTitle": "Register"
+  },
+  "payment": {
+    "scanQr": "Scan QR to pay",
+    "waiting": "Waiting for payment...",
+    "success": "Payment successful!",
+    "loading": "Initializing payment QR code...",
+    "error": "Failed to initialize payment QR code. Please try again."
+  },
+  "ai": {
+    "title": "Game Vault AI Assistant",
+    "placeholder": "",
+    "send": "Send"
+  },
+  "admin": {
+    "dashboard": "Dashboard",
+    "games": "Manage games",
+    "reviews": "Moderate reviews",
+    "revenue": "Revenue",
+    "upload": "Upload"
+  }
+}

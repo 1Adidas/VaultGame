@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build
+dist/
+/build/
+.next/
+out/
+bin/
+obj/
+*.user
+*.suo
+
+# Env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+coverage/
+TestResults/
+
+# Misc
+*.db
+*.sqlite
+
+# Secrets & Local configurations
+appsettings.Development.json
+appsettings.local.json
+.env.local
+.env.*.local
+
+# Local logs
+backend/src/GameVault.API/logs/
+*.log
+npm-debug.log*
+
+# Documentation
+docs/
+
+# Local run access link
+access_link.txt

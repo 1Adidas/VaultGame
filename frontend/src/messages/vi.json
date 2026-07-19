@@ -1,0 +1,57 @@
+{
+  "nav": {
+    "home": "Trang chủ",
+    "games": "Cửa hàng",
+    "library": "Thư viện",
+    "wishlist": "Yêu thích",
+    "orders": "Đơn hàng",
+    "ai": "Trợ lý AI",
+    "admin": "Quản trị",
+    "login": "Đăng nhập",
+    "register": "Đăng ký",
+    "logout": "Đăng xuất"
+  },
+  "home": {
+    "hero": "Khám phá thế giới game",
+    "subtitle": "Mua, chơi thử và tải game kỹ thuật số",
+    "featured": "Game nổi bật",
+    "comingSoon": "Game sắp ra mắt",
+    "freeGames": "Game miễn phí",
+    "discountedGames": "Game giảm giá",
+    "browse": "Xem tất cả"
+  },
+  "game": {
+    "buy": "Mua ngay",
+    "wishlist": "Yêu thích",
+    "demo": "Chơi thử",
+    "reviews": "Đánh giá",
+    "requirements": "Cấu hình",
+    "owned": "Đã sở hữu"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Mật khẩu",
+    "fullName": "Họ tên",
+    "loginTitle": "Đăng nhập",
+    "registerTitle": "Đăng ký"
+  },
+  "payment": {
+    "scanQr": "Quét mã QR để thanh toán",
+    "waiting": "Đang chờ thanh toán...",
+    "success": "Thanh toán thành công!",
+    "loading": "Đang khởi tạo mã QR thanh toán...",
+    "error": "Không thể khởi tạo mã QR thanh toán. Vui lòng thử lại."
+  },
+  "ai": {
+    "title": "Trợ lý AI Game Vault",
+    "placeholder": "",
+    "send": "Gửi"
+  },
+  "admin": {
+    "dashboard": "Bảng điều khiển",
+    "games": "Quản lý game",
+    "reviews": "Kiểm duyệt đánh giá",
+    "revenue": "Doanh thu",
+    "upload": "Tải lên"
+  }
+}
