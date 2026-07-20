@@ -3,7 +3,7 @@
 import { useOrders, useLibrary } from "@/hooks/useGames";
 import { formatPrice, formatDateTimeShort, resolveImageUrl } from "@/lib/utils";
 import { useLocale } from "next-intl";
-import { Gamepad2, ShoppingBag, Mail, AlertOctagon } from "lucide-react";
+import { Gamepad2, ShoppingBag, Mail, AlertOctagon, XCircle, Clock, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth/store";
 import { useRouter } from "next/navigation";
@@ -209,23 +209,86 @@ export default function OrdersPage() {
                   </div>
                 </div>
                 
-                {o.cancelReason && (o.status === "CancellationPending" || o.status === "CancellationApproved" || o.status === "Cancelled") && (
-                  <div className={`mx-6 mt-4 p-3.5 rounded-xl border text-xs leading-relaxed ${
-                    o.status === "CancellationPending" ? "bg-amber-500/5 border-amber-500/10 text-amber-400/90" :
-                    o.status === "CancellationApproved" ? "bg-teal-500/5 border-teal-500/10 text-teal-400/90" :
-                    "bg-red-500/5 border-red-500/10 text-red-400/90"
-                  }`}>
-                    <span className="font-bold">{locale === "vi" ? "Lý do hủy đơn: " : "Reason for cancellation: "}</span>
-                    {o.cancelReason}
-                  </div>
-                )}
+                {/* Cancellation Request & Admin Feedback Section */}
+                {(() => {
+                  const isRejected = o.cancelReason && o.adminNote && (o.status === "Paid" || o.status === "Pending");
+                  const isPendingCancel = o.status === "CancellationPending";
+                  const isApprovedCancel = o.status === "CancellationApproved" || o.status === "Cancelled";
 
-                {o.adminNote && (
-                  <div className="mx-6 mt-2 p-3.5 rounded-xl bg-green-500/5 border border-green-500/10 text-xs text-green-400/90 leading-relaxed">
-                    <span className="font-bold">{locale === "vi" ? "Phản hồi từ Admin: " : "Admin response: "}</span>
-                    {o.adminNote}
-                  </div>
-                )}
+                  if (!o.cancelReason && !o.adminNote && !isPendingCancel && !isApprovedCancel) return null;
+
+                  if (isRejected) {
+                    return (
+                      <div className="mx-6 mt-4 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs leading-relaxed space-y-2">
+                        <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
+                          <XCircle className="size-4 flex-shrink-0" />
+                          <span>{locale === "vi" ? "Yêu cầu hủy đơn đã bị từ chối" : "Cancellation Request Rejected"}</span>
+                        </div>
+                        {o.cancelReason && (
+                          <div className="text-zinc-300">
+                            <span className="font-semibold text-zinc-400">{locale === "vi" ? "Lý do xin hủy: " : "Requested reason: "}</span>
+                            {o.cancelReason}
+                          </div>
+                        )}
+                        <div className="text-rose-300/90 pt-1.5 border-t border-rose-500/10">
+                          <span className="font-bold text-rose-400">{locale === "vi" ? "Phản hồi từ Admin: " : "Admin response: "}</span>
+                          {o.adminNote}
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (isPendingCancel) {
+                    return (
+                      <div className="mx-6 mt-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs leading-relaxed space-y-1.5">
+                        <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                          <Clock className="size-4 flex-shrink-0 animate-pulse" />
+                          <span>{locale === "vi" ? "Yêu cầu hủy đơn đang được xem xét" : "Cancellation Request Pending Review"}</span>
+                        </div>
+                        {o.cancelReason && (
+                          <div className="text-amber-200/90">
+                            <span className="font-semibold text-amber-400">{locale === "vi" ? "Lý do xin hủy: " : "Requested reason: "}</span>
+                            {o.cancelReason}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  if (isApprovedCancel) {
+                    return (
+                      <div className="mx-6 mt-4 p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-xs leading-relaxed space-y-2">
+                        <div className="flex items-center gap-2 text-teal-400 font-bold text-sm">
+                          <CheckCircle2 className="size-4 flex-shrink-0" />
+                          <span>{locale === "vi" ? "Yêu cầu hủy đơn đã được chấp nhận" : "Cancellation Request Approved"}</span>
+                        </div>
+                        {o.cancelReason && (
+                          <div className="text-zinc-300">
+                            <span className="font-semibold text-zinc-400">{locale === "vi" ? "Lý do hủy đơn: " : "Cancellation reason: "}</span>
+                            {o.cancelReason}
+                          </div>
+                        )}
+                        {o.adminNote && (
+                          <div className="text-teal-300/90 pt-1.5 border-t border-teal-500/10">
+                            <span className="font-bold text-teal-400">{locale === "vi" ? "Phản hồi từ Admin: " : "Admin response: "}</span>
+                            {o.adminNote}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  if (o.adminNote) {
+                    return (
+                      <div className="mx-6 mt-4 p-3.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-xs text-violet-300 leading-relaxed">
+                        <span className="font-bold text-violet-400">{locale === "vi" ? "Ghi chú từ Admin: " : "Admin note: "}</span>
+                        {o.adminNote}
+                      </div>
+                    );
+                  }
+
+                  return null;
+                })()}
 
                 {/* Items List */}
                 <div className="divide-y divide-white/5 px-6">
@@ -238,7 +301,18 @@ export default function OrdersPage() {
                         <div className="flex items-center gap-4 flex-1 min-w-[240px]">
                           <div className="h-16 w-28 overflow-hidden rounded-xl bg-zinc-800 border border-white/5 flex-shrink-0 shadow">
                             {coverUrl ? (
-                              <img src={coverUrl} alt={g.gameTitle} className="size-full object-cover" />
+                              <img 
+                                src={coverUrl} 
+                                alt={g.gameTitle} 
+                                className="size-full object-cover" 
+                                referrerPolicy="no-referrer"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                  if (e.currentTarget.parentElement) {
+                                    e.currentTarget.parentElement.innerHTML = `<div class="flex size-full items-center justify-center text-zinc-700"><svg class="size-7" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="12" y2="12"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="15" x2="15.01" y1="13" y2="13"/><line x1="18" x2="18.01" y1="11" y2="11"/><rect width="20" height="12" x="2" y="6" rx="6"/></svg></div>`;
+                                  }
+                                }}
+                              />
                             ) : (
                               <div className="flex size-full items-center justify-center text-zinc-700">
                                 <Gamepad2 className="size-7" />

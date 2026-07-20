@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslations, useLocale } from "next-intl";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Script from "next/script";
 import { useAuthStore } from "@/lib/auth/store";
+import { useToastStore } from "@/lib/toast/store";
 import { Button, Card, Input } from "@/components/ui/button";
 import { api } from "@/lib/api/client";
 
@@ -12,6 +13,8 @@ export default function LoginPage() {
   const t = useTranslations("auth");
   const locale = useLocale();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectUrl = searchParams.get("redirect");
   const login = useAuthStore((s) => s.login);
   const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
 
@@ -147,7 +150,17 @@ export default function LoginPage() {
   const handleGoogleResponse = useCallback(async (response: any) => {
     try {
       await loginWithGoogle(response.credential, rememberMeRef.current);
-      router.push(`/${locale}`);
+      const user = useAuthStore.getState().user;
+      if (user) {
+        const isAdmin = user.roles.includes("Admin");
+        const msg = isAdmin
+          ? (locale === "vi" ? `Đăng nhập quyền Quản trị thành công! Chào mừng trở lại, Admin ${user.fullName}! 🛠️` : `Admin login successful! Welcome back, Admin ${user.fullName}! 🛠️`)
+          : (locale === "vi" ? `Đăng nhập thành công! Chào mừng bạn quay trở lại, ${user.fullName}! 🎉` : `Login successful! Welcome back, ${user.fullName}! 🎉`);
+        useToastStore.getState().success(msg);
+      }
+      const destination = redirectUrl ? decodeURIComponent(redirectUrl) : `/${locale}`;
+      const safeDestination = destination.startsWith("/") && !destination.startsWith("//") ? destination : `/${locale}`;
+      router.push(safeDestination);
     } catch (err: any) {
       setError(err.response?.data?.error?.message || "Google sign in failed");
     }
@@ -181,7 +194,17 @@ export default function LoginPage() {
     e.preventDefault();
     try {
       await login(email, password, rememberMe);
-      router.push(`/${locale}`);
+      const user = useAuthStore.getState().user;
+      if (user) {
+        const isAdmin = user.roles.includes("Admin");
+        const msg = isAdmin
+          ? (locale === "vi" ? `Đăng nhập quyền Quản trị thành công! Chào mừng trở lại, Admin ${user.fullName}! 🛠️` : `Admin login successful! Welcome back, Admin ${user.fullName}! 🛠️`)
+          : (locale === "vi" ? `Đăng nhập thành công! Chào mừng bạn quay trở lại, ${user.fullName}! 🎉` : `Login successful! Welcome back, ${user.fullName}! 🎉`);
+        useToastStore.getState().success(msg);
+      }
+      const destination = redirectUrl ? decodeURIComponent(redirectUrl) : `/${locale}`;
+      const safeDestination = destination.startsWith("/") && !destination.startsWith("//") ? destination : `/${locale}`;
+      router.push(safeDestination);
     } catch {
       setError("Invalid credentials");
     }

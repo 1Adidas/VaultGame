@@ -25,6 +25,9 @@ export default async function LocaleLayout({
   const messages = await getMessages();
   return (
     <html lang={locale} className="dark">
+      <head>
+        <meta name="referrer" content="no-referrer" />
+      </head>
       <body className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
         <NextIntlClientProvider messages={messages}>
           <Providers>

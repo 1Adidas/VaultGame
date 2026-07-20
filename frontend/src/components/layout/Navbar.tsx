@@ -6,7 +6,7 @@ import { useTranslations, useLocale } from "next-intl";
 import { useAuthStore } from "@/lib/auth/store";
 import { Button } from "@/components/ui/button";
 import { UserCircle, Bell, Menu, X } from "lucide-react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { api, type ApiResponse } from "@/lib/api/client";
 import { formatDateTimeShort, resolveImageUrl } from "@/lib/utils";
 
@@ -16,6 +16,7 @@ export function Navbar() {
   const { user, logout } = useAuthStore();
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const prefix = `/${locale}`;
 
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -90,10 +91,11 @@ export function Navbar() {
   };
 
   const switchedLocale = locale === "vi" ? "en" : "vi";
-  const switchedPath = pathname.replace(
+  const search = searchParams.toString() ? `?${searchParams.toString()}` : "";
+  const switchedPath = `${pathname.replace(
     new RegExp(`^/${locale}(/|$)`),
     `/${switchedLocale}$1`
-  );
+  )}${search}`;
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 

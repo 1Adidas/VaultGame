@@ -297,7 +297,7 @@ public class PaymentService(AppDbContext db, SePaySimulatorService sepay, INotif
         if (order.Payment is not null && order.Payment.Status == PaymentStatus.Pending && order.Payment.ExpiresAt > DateTime.UtcNow)
             return MapPayment(order.Payment, order.OrderCode);
 
-        var expiryMin = int.Parse(config["SePay:PaymentExpiryMinutes"] ?? "15");
+        var expiryMin = int.Parse(config["SePay:PaymentExpiryMinutes"] ?? "3");
         var qrContent = sepay.BuildQrContent(order.OrderCode, order.TotalAmount);
         var qrImageUrl = sepay.BuildQrImageUrl(order.OrderCode, order.TotalAmount);
         var payment = new Payment
@@ -332,7 +332,7 @@ public class PaymentService(AppDbContext db, SePaySimulatorService sepay, INotif
             return;
         }
 
-        var order = await db.Orders.Include(o => o.Payment).Include(o => o.Items)
+        var order = await db.Orders.Include(o => o.Payment).Include(o => o.Items).ThenInclude(i => i.Game)
             .FirstOrDefaultAsync(o => o.OrderCode == payload.OrderCode, ct)
             ?? throw new AppException("ORDER_NOT_FOUND", "Order not found", 404);
         var payment = order.Payment ?? throw new AppException("PAYMENT_NOT_FOUND", "Payment not found", 404);
@@ -354,7 +354,7 @@ public class PaymentService(AppDbContext db, SePaySimulatorService sepay, INotif
 
     public async Task SimulatePaymentAsync(Guid paymentId, CancellationToken ct = default)
     {
-        var payment = await db.Payments.Include(p => p.Order).ThenInclude(o => o.Items)
+        var payment = await db.Payments.Include(p => p.Order).ThenInclude(o => o.Items).ThenInclude(i => i.Game)
             .FirstOrDefaultAsync(p => p.Id == paymentId, ct)
             ?? throw new AppException("PAYMENT_NOT_FOUND", "Payment not found", 404);
         if (payment.Status != PaymentStatus.Pending) throw new AppException("PAYMENT_INVALID", "Payment not pending", 400);
@@ -397,10 +397,17 @@ public class PaymentService(AppDbContext db, SePaySimulatorService sepay, INotif
             var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == order.UserId, ct);
             if (user != null)
             {
-                var gameNames = string.Join(", ", order.Items.Select(i => i.Game?.Title ?? "Game"));
+                var itemGameIds = order.Items.Select(i => i.GameId).ToList();
+                var gamesDict = await db.Games.AsNoTracking()
+                    .Where(g => itemGameIds.Contains(g.Id))
+                    .ToDictionaryAsync(g => g.Id, g => g.Title, ct);
+
+                var gameNames = string.Join(", ", order.Items.Select(i => i.Game?.Title ?? (gamesDict.TryGetValue(i.GameId, out var t) ? t : "Game")));
                 var gameListHtml = string.Join("", order.Items.Select(i =>
-                    $"<tr><td style='padding:8px 12px;border-bottom:1px solid #333;'>{i.Game?.Title ?? "Game"}</td><td style='padding:8px 12px;border-bottom:1px solid #333;text-align:right;'>{i.LineTotal:N0} VND</td></tr>"
-                ));
+                {
+                    var title = i.Game?.Title ?? (gamesDict.TryGetValue(i.GameId, out var t) ? t : "Game");
+                    return $"<tr><td style='padding:8px 12px;border-bottom:1px solid #333;'>{title}</td><td style='padding:8px 12px;border-bottom:1px solid #333;text-align:right;'>{i.LineTotal:N0} VND</td></tr>";
+                }));
 
                 _ = email.SendAsync(user.Email, $"Xác nhận đơn hàng {order.OrderCode} / Order Confirmation", $"""
                     <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; background: #1a1a2e; color: #e0e0e0; border-radius: 12px; overflow: hidden;">

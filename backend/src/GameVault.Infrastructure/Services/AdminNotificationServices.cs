@@ -831,18 +831,18 @@ public class AdminService(AppDbContext db, IEmailService email) : IAdminService
             var demoPlaysCount = await db.DemoPlayHistories
                 .CountAsync(d => d.UserId == u.Id && d.PlayedAt >= start && d.PlayedAt <= end, ct);
 
-            string segment = "New / Mới";
+            string segment = "New";
             if (spent > 500000 || purchasedCount >= 3)
             {
                 segment = "VIP";
             }
             else if (purchasedCount > 0)
             {
-                segment = "Active / Đang mua";
+                segment = "Active";
             }
             else if (demoPlaysCount > 0)
             {
-                segment = "Trial / Chơi thử";
+                segment = "Trial";
             }
 
             userStatsList.Add(new DetailedUserStatDto(u.Id, u.Email, u.FullName, u.CreatedAt, purchasedCount, spent, demoPlaysCount, segment));

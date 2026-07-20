@@ -62,13 +62,16 @@ export function formatDateTimeShort(dateInput: string | Date | null | undefined)
 export function resolveImageUrl(url?: string | null): string {
   if (!url) return "";
   if (url.startsWith("http")) {
-    const match = url.match(/[?&]id=([^&]+)/);
-    if (match && match[1]) {
-      return `https://lh3.googleusercontent.com/d/${match[1]}`;
+    if (url.includes("drive.google.com")) {
+      const match = url.match(/[?&]id=([^&]+)/) || url.match(/\/d\/([^/]+)/);
+      if (match && match[1]) {
+        return `https://lh3.googleusercontent.com/d/${match[1]}`;
+      }
     }
     return url;
   }
-  return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${url}`;
+  const base = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000");
+  return `${base}${url}`;
 }
 
 export function resolveVideoUrl(url?: string | null): string {
@@ -76,5 +79,6 @@ export function resolveVideoUrl(url?: string | null): string {
   if (url.startsWith("http")) {
     return url;
   }
-  return `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${url}`;
+  const base = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000");
+  return `${base}${url}`;
 }

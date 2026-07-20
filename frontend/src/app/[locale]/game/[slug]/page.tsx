@@ -282,6 +282,11 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
   const images = (g.images as { url: string; isPrimary: boolean }[]) ?? [];
 
   const buy = async () => {
+    if (!user) {
+      alert(locale === "vi" ? "Vui lòng đăng nhập để mua game!" : "Please log in to purchase the game!");
+      router.push(`/${locale}/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
     try {
       const { data } = await api.post<ApiResponse<{ id: string; status: string }>>("/orders", { gameIds: [g.id] });
       if (data.data.status === "Paid") {
@@ -658,6 +663,20 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
                       <CheckCircle className="size-4 mr-2" />
                       {t("owned") || "Owned"}
                     </Button>
+                  ) : !user ? (
+                    <div className="space-y-2">
+                      <Button 
+                        className="w-full bg-zinc-800 text-zinc-500 cursor-not-allowed h-11 text-base font-semibold" 
+                        disabled
+                      >
+                        {locale === "vi" ? "Đăng nhập để mua" : "Log in to Purchase"}
+                      </Button>
+                      <p className="text-xs text-center text-zinc-500">
+                        {locale === "vi" 
+                          ? "* Vui lòng đăng nhập tài khoản để mua tựa game này." 
+                          : "* Please log in to purchase this game."}
+                      </p>
+                    </div>
                   ) : (
                     <Button 
                       className="w-full bg-violet-600 hover:bg-violet-500 text-white font-bold h-11 text-base shadow-lg shadow-violet-900/40 transition" 

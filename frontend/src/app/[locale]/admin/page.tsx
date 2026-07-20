@@ -17,12 +17,13 @@ import {
 } from "lucide-react";
 
 
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 
 export default function AdminPage() {
   const t = useTranslations("admin");
   const locale = useLocale();
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
@@ -31,6 +32,11 @@ export default function AdminPage() {
       setActiveTab(tab);
     }
   }, [searchParams]);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    router.replace(`/${locale}/admin?tab=${tabId}`, { scroll: false });
+  };
 
   // Nav Tabs list
   const tabs = [
@@ -58,7 +64,7 @@ export default function AdminPage() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition ${isActive
                   ? "bg-violet-600 text-white shadow-lg shadow-violet-900/20"
                   : "text-zinc-400 hover:text-white hover:bg-white/5"
@@ -185,8 +191,12 @@ function OverviewTab() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-white">Dashboard Overview</h1>
-        <p className="text-sm text-zinc-500 mt-1">Real-time statistics of GameVault store.</p>
+        <h1 className="text-3xl font-bold text-white">
+          {locale === "vi" ? "Tổng Quan Bảng Điều Khiển" : "Dashboard Overview"}
+        </h1>
+        <p className="text-sm text-zinc-500 mt-1">
+          {locale === "vi" ? "Thống kê thời gian thực của cửa hàng GameVault." : "Real-time statistics of GameVault store."}
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -206,8 +216,8 @@ function OverviewTab() {
             <table className="w-full text-left text-sm text-zinc-400">
               <thead>
                 <tr className="border-b border-white/5 text-zinc-500 font-semibold">
-                  <th className="py-2">Game Title</th>
-                  <th className="py-2 text-right">Downloads</th>
+                  <th className="py-2">{locale === "vi" ? "Tên Trò Chơi" : "Game Title"}</th>
+                  <th className="py-2 text-right">{locale === "vi" ? "Lượt Tải" : "Downloads"}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -2370,9 +2380,21 @@ function AnalyticsTab() {
                 a.userStats.map((u: any, index: number) => {
                   const segmentColors = 
                     u.customerSegment === "VIP" ? "bg-violet-600/10 text-violet-400 border-violet-500/20" :
-                    u.customerSegment.includes("Active") || u.customerSegment.includes("Mua Hàng") ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
-                    u.customerSegment.includes("Trial") || u.customerSegment.includes("Chơi Thử") ? "bg-pink-500/10 text-pink-400 border-pink-500/20" :
+                    u.customerSegment.includes("Active") || u.customerSegment.includes("Mua Hàng") || u.customerSegment.includes("Đang mua") ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                    u.customerSegment.includes("Trial") || u.customerSegment.includes("Chơi Thử") || u.customerSegment.includes("Chơi thử") ? "bg-pink-500/10 text-pink-400 border-pink-500/20" :
                     "bg-zinc-850 text-zinc-400 border-zinc-700";
+
+                  const formatSegmentLabel = (seg: string) => {
+                    if (!seg) return "";
+                    if (seg === "VIP") return "VIP";
+                    if (seg.includes("Active") || seg.includes("Mua Hàng") || seg.includes("Đang mua")) {
+                      return locale === "vi" ? "ĐANG MUA" : "ACTIVE";
+                    }
+                    if (seg.includes("Trial") || seg.includes("Chơi Thử") || seg.includes("Chơi thử")) {
+                      return locale === "vi" ? "CHƠI THỬ" : "TRIAL";
+                    }
+                    return locale === "vi" ? "MỚI" : "NEW";
+                  };
 
                   return (
                     <tr key={u.id || index} className="hover:bg-white/2 hover:text-white transition">
@@ -2381,7 +2403,7 @@ function AnalyticsTab() {
                       <td className="py-3 px-2 text-zinc-400">{formatDate(u.createdAt)}</td>
                       <td className="py-3 px-2 text-center">
                         <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${segmentColors}`}>
-                          {u.customerSegment}
+                          {formatSegmentLabel(u.customerSegment)}
                         </span>
                       </td>
                       <td className="py-3 px-2 text-right font-mono text-zinc-300">{u.gamesPurchased}</td>
@@ -2408,8 +2430,14 @@ function HelpTab() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-white">Help & Onboarding</h1>
-        <p className="text-sm text-zinc-500 mt-1">Learn how to upload and manage game content step-by-step.</p>
+        <h1 className="text-3xl font-bold text-white">
+          {locale === "vi" ? "Hướng Dẫn & Hỗ Trợ" : "Help & Onboarding"}
+        </h1>
+        <p className="text-sm text-zinc-500 mt-1">
+          {locale === "vi"
+            ? "Tìm hiểu quy trình đăng tải và quản lý nội dung trò chơi từng bước."
+            : "Learn how to upload and manage game content step-by-step."}
+        </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -2419,16 +2447,39 @@ function HelpTab() {
           </h3>
           <ol className="space-y-3 text-sm text-zinc-300 list-decimal pl-4 leading-relaxed">
             <li>
-              <span className="font-semibold text-white">Tạo entry game:</span> Bấm vào nút <span className="text-violet-400">"Thêm game mới"</span> ở tab Trò chơi. Nhập đầy đủ thông tin mô tả chi tiết, giá tiền, nhà phát triển bằng cả 2 ngôn ngữ (Việt và Anh). Game mới tạo sẽ có trạng thái <span className="bg-yellow-500/10 text-yellow-400 px-1 border border-yellow-500/10 text-xs rounded">Draft</span>.
+              <span className="font-semibold text-white">
+                {locale === "vi" ? "Tạo entry game:" : "Create Game Entry:"}
+              </span>{" "}
+              {locale === "vi"
+                ? "Bấm vào nút \"Thêm game mới\" ở tab Trò chơi. Nhập đầy đủ thông tin mô tả chi tiết, giá tiền, nhà phát triển bằng cả 2 ngôn ngữ (Việt và Anh). Game mới tạo sẽ có trạng thái "
+                : "Click \"Add New Game\" in the Games tab. Enter detailed description, price, and developer info in both languages (VI & EN). New games start in "}
+              <span className="bg-yellow-500/10 text-yellow-400 px-1 border border-yellow-500/10 text-xs rounded">
+                Draft
+              </span>.
             </li>
             <li>
-              <span className="font-semibold text-white">Tải ảnh bìa:</span> Tìm game vừa tạo ở danh sách, bấm vào biểu tượng <span className="text-violet-400">Upload (hình đám mây có mũi tên đi lên)</span>. Chọn loại file là <span className="italic">Cover Image</span> để upload hình ảnh đại diện.
+              <span className="font-semibold text-white">
+                {locale === "vi" ? "Tải ảnh bìa:" : "Upload Cover Art:"}
+              </span>{" "}
+              {locale === "vi"
+                ? "Tìm game vừa tạo ở danh sách, bấm vào biểu tượng Upload (hình đám mây có mũi tên đi lên). Chọn loại file là Cover Image để upload hình ảnh đại diện."
+                : "Locate the created game in the list, click the Upload icon (cloud arrow). Select Cover Image file type to upload the main banner."}
             </li>
             <li>
-              <span className="font-semibold text-white">Tải file cài đặt & chơi thử:</span> Tương tự bước 2, bạn chọn loại file là <span className="italic">Installer</span> (.zip, .exe) hoặc <span className="italic">WebGL Demo</span> (.zip) để upload mã nguồn game. <span className="text-zinc-500 font-light">(Có thể upload sau bất cứ lúc nào, game chưa có file sẽ có nhãn "Sắp ra mắt" ở cửa hàng).</span>
+              <span className="font-semibold text-white">
+                {locale === "vi" ? "Tải file cài đặt & chơi thử:" : "Upload Installer & WebGL Demo:"}
+              </span>{" "}
+              {locale === "vi"
+                ? "Tương tự bước 2, bạn chọn loại file là Installer (.zip, .exe) hoặc WebGL Demo (.zip) để upload mã nguồn game. (Có thể upload sau bất cứ lúc nào, game chưa có file sẽ có nhãn \"Sắp ra mắt\" ở cửa hàng)."
+                : "Select Installer (.zip, .exe) or WebGL Demo (.zip) file type to upload game builds. (Can be uploaded later anytime; unbuilt games will display a \"Coming Soon\" badge in store)."}
             </li>
             <li>
-              <span className="font-semibold text-white">Công khai game:</span> Khi đã hoàn tất nội dung, chỉnh trạng thái game từ <span className="text-yellow-400">Draft</span> sang <span className="text-green-400">Published</span> trong bảng chỉnh sửa game. Game sẽ chính thức hiển thị ngoài cửa hàng cho người dùng mua.
+              <span className="font-semibold text-white">
+                {locale === "vi" ? "Công khai game:" : "Publish Game:"}
+              </span>{" "}
+              {locale === "vi"
+                ? "Khi đã hoàn tất nội dung, chỉnh trạng thái game từ Draft sang Published trong bảng chỉnh sửa game. Game sẽ chính thức hiển thị ngoài cửa hàng cho người dùng mua."
+                : "Once content is ready, switch the game status from Draft to Published. The game will officially appear in the store for customers to purchase."}
             </li>
           </ol>
         </Card>
@@ -2439,13 +2490,28 @@ function HelpTab() {
           </h3>
           <ul className="space-y-3 text-sm text-zinc-300 list-disc pl-4 leading-relaxed">
             <li>
-              <span className="font-semibold text-white">Khóa người dùng:</span> Trong tab <span className="text-violet-400">Người dùng</span>, admin có thể xem toàn bộ danh sách khách hàng. Bấm nút <span className="text-red-400">"Block"</span> để khóa tài khoản vi phạm. Người dùng bị khóa sẽ bị đăng xuất ngay lập tức và không thể đăng nhập lại.
+              <span className="font-semibold text-white">
+                {locale === "vi" ? "Khóa người dùng:" : "User Moderation:"}
+              </span>{" "}
+              {locale === "vi"
+                ? "Trong tab Người dùng, admin có thể xem toàn bộ danh sách khách hàng. Bấm nút \"Block\" để khóa tài khoản vi phạm. Người dùng bị khóa sẽ bị đăng xuất ngay lập tức và không thể đăng nhập lại."
+                : "In the Users tab, admins can view all customers. Click \"Block\" to suspend violating accounts. Suspended users are logged out immediately and cannot log in."}
             </li>
             <li>
-              <span className="font-semibold text-white">Dữ liệu thống kê thực:</span> Toàn bộ doanh số, đơn hàng, lượt chơi thử demo, và số lượt tải file trong dashboard đều liên kết trực tiếp với database thực.
+              <span className="font-semibold text-white">
+                {locale === "vi" ? "Dữ liệu thống kê thực:" : "Real-time Analytics:"}
+              </span>{" "}
+              {locale === "vi"
+                ? "Toàn bộ doanh số, đơn hàng, lượt chơi thử demo, và số lượt tải file trong dashboard đều liên kết trực tiếp với database thực."
+                : "All revenue, order totals, demo plays, and download counts in the dashboard link directly to live database records."}
             </li>
             <li>
-              <span className="font-semibold text-white">Mô tả song ngữ (VI - EN):</span> Hệ thống hỗ trợ đa ngôn ngữ. Khi chỉnh sửa thông tin game, hãy điền đầy đủ cả 2 cột ngôn ngữ để hiển thị chuẩn xác nhất theo ngôn ngữ trình duyệt của khách hàng.
+              <span className="font-semibold text-white">
+                {locale === "vi" ? "Mô tả song ngữ (VI - EN):" : "Bilingual Support (VI - EN):"}
+              </span>{" "}
+              {locale === "vi"
+                ? "Hệ thống hỗ trợ đa ngôn ngữ. Khi chỉnh sửa thông tin game, hãy điền đầy đủ cả 2 cột ngôn ngữ để hiển thị chuẩn xác nhất theo ngôn ngữ trình duyệt của khách hàng."
+                : "The platform supports full bilingual switching. When editing games, fill both Vietnamese and English columns for accurate localized rendering."}
             </li>
           </ul>
         </Card>

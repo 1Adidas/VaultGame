@@ -33,6 +33,21 @@ export const useAuthStore = create<AuthState>((set) => ({
       try {
         const { data } = await api.get<ApiResponse<User>>("/users/profile");
         set({ user: data.data });
+        
+        // Show welcome back toast (only once per browser session, not on F5 refresh!)
+        if (typeof window !== "undefined" && !sessionStorage.getItem("gv_welcomed")) {
+          sessionStorage.setItem("gv_welcomed", "true");
+          const user = data.data;
+          const isAdmin = user.roles.includes("Admin");
+          const { useToastStore } = await import("@/lib/toast/store");
+          const isEn = window.location.pathname.startsWith("/en") || window.location.pathname === "/en";
+          
+          const msg = isAdmin
+            ? (isEn ? `Welcome back, Admin ${user.fullName}! 🛠️` : `Chào mừng trở lại, Admin ${user.fullName}! 🛠️`)
+            : (isEn ? `Welcome back, ${user.fullName}! 👋` : `Chào mừng trở lại, ${user.fullName}! 👋`);
+            
+          useToastStore.getState().success(msg);
+        }
       } catch {
         setTokens(null, null);
         set({ user: null });
@@ -44,6 +59,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const { data } = await api.post<ApiResponse<{ accessToken: string; refreshToken: string; user: User }>>("/auth/login", { email, password });
       setTokens(data.data.accessToken, data.data.refreshToken, rememberMe);
+      if (typeof window !== "undefined") sessionStorage.setItem("gv_welcomed", "true");
       set({ user: data.data.user });
     } finally {
       set({ isLoading: false });
@@ -54,6 +70,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const { data } = await api.post<ApiResponse<{ accessToken: string; refreshToken: string; user: User }>>("/auth/google", { idToken });
       setTokens(data.data.accessToken, data.data.refreshToken, rememberMe);
+      if (typeof window !== "undefined") sessionStorage.setItem("gv_welcomed", "true");
       set({ user: data.data.user });
     } finally {
       set({ isLoading: false });
@@ -72,6 +89,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: async () => {
     try { await api.post("/auth/logout"); } catch { /* ignore */ }
     setTokens(null, null);
+    if (typeof window !== "undefined") sessionStorage.removeItem("gv_welcomed");
     set({ user: null });
   },
 }));

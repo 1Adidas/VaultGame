@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth/store";
+import { useToastStore } from "@/lib/toast/store";
 import { Button, Card, Input } from "@/components/ui/button";
 
 export default function RegisterPage() {
@@ -15,10 +16,27 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const { success: toastSuccess, error: toastError } = useToastStore();
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await register(email, password, fullName);
-    router.push(`/${locale}`);
+    try {
+      await register(email, password, fullName);
+      toastSuccess(
+        locale === "vi"
+          ? "Đăng ký tài khoản thành công! Chào mừng bạn đến với GameVault! 🚀"
+          : "Account registered successfully! Welcome to GameVault! 🚀"
+      );
+      router.push(`/${locale}`);
+    } catch (err: any) {
+      console.error(err);
+      toastError(
+        err.response?.data?.error?.message ||
+          (locale === "vi"
+            ? "Đăng ký thất bại! Vui lòng kiểm tra lại thông tin."
+            : "Registration failed! Please verify your information.")
+      );
+    }
   };
 
   return (
