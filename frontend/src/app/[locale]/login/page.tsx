@@ -400,7 +400,7 @@ export default function LoginPage() {
                 <span className="w-full border-t border-white/[0.08]" />
               </div>
               <span className="relative bg-[#0E131E] px-3 text-[10px] uppercase font-bold tracking-wider text-zinc-500 select-none">
-                {isVi ? "Hoặc đăng nhập bằng" : isZh ? "或通过以下方式登录" : "Or continue with"}
+                {isVi ? "Hoặc" : isZh ? "或者" : "Or"}
               </span>
             </div>
 

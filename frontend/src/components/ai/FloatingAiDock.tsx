@@ -93,7 +93,41 @@ export function FloatingAiDock() {
   }, [isOpen]);
 
   // Hide dock if we are inside admin section or if user is an Admin
-  if (pathname?.includes("/admin") || user?.roles?.includes("Admin")) {
+  // Dynamic UI overlays detection (WebGL demo playing, QR payment modal, Fullscreen)
+  const [isOverlayActive, setIsOverlayActive] = useState(false);
+
+  useEffect(() => {
+    const checkOverlays = () => {
+      const isFullscreen = Boolean(typeof document !== "undefined" && document.fullscreenElement);
+      const isDemoPlaying = Boolean(typeof document !== "undefined" && document.querySelector('iframe[title="Game Demo"]'));
+      const isQrOpen = Boolean(typeof document !== "undefined" && document.querySelector('[data-qr-modal="true"]'));
+      setIsOverlayActive(isFullscreen || isDemoPlaying || isQrOpen);
+    };
+
+    checkOverlays();
+
+    if (typeof document !== "undefined") {
+      document.addEventListener("fullscreenchange", checkOverlays);
+      const observer = new MutationObserver(checkOverlays);
+      observer.observe(document.body, { childList: true, subtree: true });
+
+      return () => {
+        document.removeEventListener("fullscreenchange", checkOverlays);
+        observer.disconnect();
+      };
+    }
+  }, []);
+
+  // Hide dock if we are inside admin section, auth pages, orders page, user is Admin, or overlay is active
+  const isHiddenRoute = Boolean(
+    pathname?.includes("/admin") ||
+    pathname?.includes("/login") ||
+    pathname?.includes("/register") ||
+    pathname?.includes("/orders") ||
+    user?.roles?.includes("Admin")
+  );
+
+  if (isHiddenRoute || isOverlayActive) {
     return null;
   }
 

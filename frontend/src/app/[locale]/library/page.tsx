@@ -21,7 +21,9 @@ export default function LibraryPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    if (user?.roles.includes("Admin")) {
+    if (!user) {
+      router.replace(`/${locale}/login`);
+    } else if (user?.roles.includes("Admin")) {
       router.replace(`/${locale}/admin`);
     }
   }, [user, locale, router]);

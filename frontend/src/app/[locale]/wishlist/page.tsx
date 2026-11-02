@@ -5,6 +5,9 @@ import { formatPrice, resolveImageUrl } from "@/lib/utils";
 import { Trash2, Gamepad2, ArrowRight, Heart, Star } from "lucide-react";
 import Link from "next/link";
 import { useLocale } from "next-intl";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/lib/auth/store";
 import { api } from "@/lib/api/client";
 
 export default function WishlistPage() {
@@ -12,6 +15,14 @@ export default function WishlistPage() {
   const isVi = locale === "vi";
   const isZh = locale === "zh";
   const { data, isLoading, refetch } = useWishlist();
+  const router = useRouter();
+  const { user } = useAuthStore();
+
+  useEffect(() => {
+    if (!user) {
+      router.replace(`/${locale}/login`);
+    }
+  }, [user, locale, router]);
 
   const removeFromWishlist = async (gameId: string) => {
     try {

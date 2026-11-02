@@ -129,7 +129,7 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+    <div data-qr-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
       <div className="max-w-md w-full rounded-3xl border border-white/[0.1] bg-[#0E131E] p-6 sm:p-7 shadow-2xl space-y-6">
         
         {/* Top Header */}

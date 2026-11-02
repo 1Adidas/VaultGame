@@ -173,6 +173,13 @@ export default function AdminPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
+  const { user, isLoading } = useAuthStore();
+
+  useEffect(() => {
+    if (!isLoading && (!user || !user.roles?.includes("Admin"))) {
+      router.replace(`/${locale}`);
+    }
+  }, [user, isLoading, locale, router]);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -196,6 +203,14 @@ export default function AdminPage() {
     { id: "revenue", label: "Doanh thu", icon: DollarSign },
     { id: "help", label: "Hướng dẫn & Hỗ trợ", icon: HelpCircle },
   ];
+
+  if (isLoading || !user || !user.roles?.includes("Admin")) {
+    return (
+      <div className="flex h-[70vh] items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-violet-500" />
+      </div>
+    );
+  }
 
   return (
     <div className="w-full flex flex-col md:flex-row gap-8">

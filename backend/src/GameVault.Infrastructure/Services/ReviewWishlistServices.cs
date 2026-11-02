@@ -184,7 +184,7 @@ public class ReviewService(AppDbContext db, INotificationService notifications) 
 
         var ratedReviews = ratings.Where(r => r.HasValue).Select(r => (int)r!.Value).ToList();
         game.AvgRating = ratedReviews.Any() ? (decimal)ratedReviews.Average() : 0;
-        game.ReviewCount = ratings.Count;
+        game.ReviewCount = ratedReviews.Count;
         await db.SaveChangesAsync(ct);
     }
 }

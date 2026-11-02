@@ -520,6 +520,8 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
     count: reviewItems.filter((r: any) => r.rating === s && !r.parentId).length
   }));
   const maxRatingCount = Math.max(...ratingDist.map((r) => r.count), 1);
+  const totalRatingsCount = reviewItems.filter((r: any) => Boolean(r.rating) && !r.parentId).length;
+  const totalCommentsCount = reviewItems.filter((r: any) => !r.parentId).length;
 
   const activeImage = images[selectedImageIndex] ?? images[0];
 
@@ -630,7 +632,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
                     <Star className="size-4 fill-amber-400 text-amber-400" />
                   </div>
                   <p className="text-[10px] text-zinc-400">
-                    {g.reviewCount} {isVi ? "đánh giá cộng đồng" : "user reviews"}
+                    {totalRatingsCount > 0 ? totalRatingsCount : g.reviewCount} {isVi ? "lượt đánh giá" : isZh ? "条玩家评分" : "ratings"}
                   </p>
                 </div>
               </div>
@@ -893,9 +895,9 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
             <div className="rounded-2xl border border-white/[0.08] bg-[#0E131E] p-6 sm:p-8 space-y-6 shadow-xl">
               <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
                 <h2 className="text-base font-semibold text-white tracking-tight">
-                  {isVi ? "Đánh giá từ cộng đồng" : isZh ? "玩家社区评价" : "Community Reviews"}{" "}
+                  {isVi ? "Đánh giá & Thảo luận từ cộng đồng" : isZh ? "玩家评价与社区讨论" : "Community Reviews & Discussions"}{" "}
                   <span className="text-xs text-zinc-500 font-normal">
-                    ({reviewItems.filter((r: any) => !r.parentId).length})
+                    ({totalCommentsCount})
                   </span>
                 </h2>
               </div>
@@ -916,7 +918,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] font-mono text-zinc-400 bg-white/[0.04] border border-white/10 px-2 py-0.5 rounded">
-                          {reviewItems.filter((r: any) => !r.parentId).length} {isVi ? "đánh giá" : "reviews"}
+                          {totalCommentsCount} {isVi ? "bài thảo luận" : "threads"}
                         </span>
                       </div>
                     </div>

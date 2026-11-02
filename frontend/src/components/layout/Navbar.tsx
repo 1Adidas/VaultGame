@@ -99,6 +99,19 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
     router.push(`${prefix}/games?q=${encodeURIComponent(searchQuery.trim())}`);
   };
 
+  const handleLogout = async () => {
+    await logout();
+    const { useToastStore } = await import("@/lib/toast/store");
+    useToastStore.getState().success(
+      isVi ? "Đã đăng xuất thành công!" : isZh ? "已成功退出登录！" : "Logged out successfully!"
+    );
+
+    const protectedPaths = ["/admin", "/profile", "/library", "/orders", "/wishlist"];
+    if (protectedPaths.some((p) => pathname.includes(p))) {
+      router.replace(prefix);
+    }
+  };
+
   const parseNotificationText = (text: string | null | undefined, currentLocale: string): string => {
     if (!text) return "";
     if (!text.includes(" / ")) return text;
@@ -469,7 +482,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
               </Link>
               <button
                 type="button"
-                onClick={() => logout()}
+                onClick={handleLogout}
                 className="text-[11px] font-medium text-zinc-400 hover:text-white px-2.5 py-1 rounded-full hover:bg-white/[0.06] transition cursor-pointer"
               >
                 {t("logout")}

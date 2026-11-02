@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth/store";
 import { useToastStore } from "@/lib/toast/store";
@@ -15,6 +16,7 @@ export default function RegisterPage() {
   const isZh = locale === "zh";
   const router = useRouter();
   const register = useAuthStore((s) => s.register);
+  const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -23,6 +25,59 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
 
   const { success: toastSuccess, error: toastError } = useToastStore();
+
+  const handleGoogleResponse = useCallback(async (response: any) => {
+    try {
+      await loginWithGoogle(response.credential, true);
+      const user = useAuthStore.getState().user;
+      if (user) {
+        const isAdmin = user.roles.includes("Admin");
+        const msg = isAdmin
+          ? (isVi
+              ? `Đăng nhập quyền Quản trị thành công! Chào mừng trở lại, Admin ${user.fullName}! 🛠️`
+              : isZh
+                ? `管理员登录成功！欢迎回来，Admin ${user.fullName}！🛠️`
+                : `Admin login successful! Welcome back, Admin ${user.fullName}! 🛠️`)
+          : (isVi
+              ? `Chào mừng bạn gia nhập Game Vault, ${user.fullName}! 🎉`
+              : isZh
+                ? `欢迎加入 Game Vault，${user.fullName}！🎉`
+                : `Welcome to Game Vault, ${user.fullName}! 🎉`);
+        toastSuccess(msg);
+      }
+      router.push(`/${locale}`);
+    } catch (err: any) {
+      console.error(err);
+      toastError(err.response?.data?.error?.message || "Google registration failed");
+    }
+  }, [loginWithGoogle, locale, router, isVi, isZh, toastSuccess, toastError]);
+
+  const isGoogleInitialized = useRef(false);
+
+  const initGoogle = useCallback(() => {
+    const google = (window as any).google;
+    if (google && !isGoogleInitialized.current) {
+      const buttonWidth = typeof window !== "undefined" ? Math.min(360, window.innerWidth - 64).toString() : "360";
+      google.accounts.id.initialize({
+        client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "395896003561-qamgn8n2ja2ijrfndj6947629fsaqacc.apps.googleusercontent.com",
+        callback: handleGoogleResponse,
+      });
+      const btnContainer = document.getElementById("google-signup-btn");
+      if (btnContainer) {
+        google.accounts.id.renderButton(
+          btnContainer,
+          { theme: "outline", size: "large", width: buttonWidth, text: "signup_with" }
+        );
+      }
+      isGoogleInitialized.current = true;
+    }
+  }, [handleGoogleResponse]);
+
+  useEffect(() => {
+    if ((window as any).google) {
+      initGoogle();
+    }
+  }, [initGoogle]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +109,13 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center py-12 px-4">
+      {/* Google OAuth SDK Script */}
+      <Script
+        src="https://accounts.google.com/gsi/client"
+        strategy="afterInteractive"
+        onLoad={initGoogle}
+      />
+
       <div className="w-full max-w-md space-y-8">
         
         {/* Brand header */}
@@ -146,13 +208,28 @@ export default function RegisterPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="btn-primary w-full flex items-center justify-center gap-2 py-2.5 text-sm"
+                className="btn-primary w-full flex items-center justify-center gap-2 py-2.5 text-sm cursor-pointer"
               >
                 <span>{loading ? (isVi ? "Đang xử lý..." : isZh ? "正在注册..." : "Creating...") : (isVi ? "Đăng Ký Tài Khoản" : isZh ? "立即注册" : "Register")}</span>
                 <ArrowRight className="size-4" />
               </button>
             </div>
           </form>
+
+          {/* Divider */}
+          <div className="relative my-4 flex items-center justify-center">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t border-white/[0.08]" />
+            </div>
+            <span className="relative bg-[#0E131E] px-3 text-[10px] uppercase font-bold tracking-wider text-zinc-500 select-none">
+              {isVi ? "Hoặc" : isZh ? "或者" : "Or"}
+            </span>
+          </div>
+
+          {/* Google OAuth container */}
+          <div className="flex justify-center w-full min-h-[44px]">
+            <div id="google-signup-btn" />
+          </div>
 
           {/* Bottom Switch Link */}
           <div className="border-t border-white/[0.06] pt-5 text-center text-xs text-zinc-400">
