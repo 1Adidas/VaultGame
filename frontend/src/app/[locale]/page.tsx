@@ -682,23 +682,41 @@ export default function HomePage() {
       ========================================================================= */}
       <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4">
         <div className="p-5 rounded-2xl bg-[#0A0D15] border border-white/[0.06] space-y-2">
-          <span className="text-xs font-bold text-white block">Bản Quyền 100% Chính Hãng</span>
+          <span className="text-xs font-bold text-white block">
+            {isVi ? "Bản Quyền 100% Chính Hãng" : isZh ? "100% 正版官方授权" : "100% Genuine Digital License"}
+          </span>
           <p className="text-[11px] text-zinc-400 leading-relaxed">
-            Phân phối bản quyền kỹ thuật số trực tiếp từ nhà phát triển và đối tác được ủy quyền.
+            {isVi
+              ? "Phân phối bản quyền kỹ thuật số trực tiếp từ nhà phát triển và đối tác được ủy quyền."
+              : isZh
+              ? "直接由游戏开发商及官方授权合作伙伴分发正版数字版权。"
+              : "Direct digital distribution authorized by developers and verified publishers."}
           </p>
         </div>
 
         <div className="p-5 rounded-2xl bg-[#0A0D15] border border-white/[0.06] space-y-2">
-          <span className="text-xs font-bold text-white block">Thanh Toán VietQR Tự Động</span>
+          <span className="text-xs font-bold text-white block">
+            {isVi ? "Thanh Toán VietQR Tự Động" : isZh ? "VietQR 自动极速支付" : "Automated VietQR Payment"}
+          </span>
           <p className="text-[11px] text-zinc-400 leading-relaxed">
-            Quét mã QR chuyển khoản ngân hàng 24/7, kích hoạt trò chơi tức thì vào kho cá nhân.
+            {isVi
+              ? "Quét mã QR chuyển khoản ngân hàng 24/7, kích hoạt trò chơi tức thì vào kho cá nhân."
+              : isZh
+              ? "24/7 全天候银行二维码极速转账，游戏即时秒级激活入库。"
+              : "Instant 24/7 banking QR transfer, activating games to your library immediately."}
           </p>
         </div>
 
         <div className="p-5 rounded-2xl bg-[#0A0D15] border border-white/[0.06] space-y-2">
-          <span className="text-xs font-bold text-white block">Chơi Thử WebGL Không Cài Đặt</span>
+          <span className="text-xs font-bold text-white block">
+            {isVi ? "Chơi Thử WebGL Không Cài Đặt" : isZh ? "WebGL 免安装即时试玩" : "No-Install WebGL Demo Play"}
+          </span>
           <p className="text-[11px] text-zinc-400 leading-relaxed">
-            Trải nghiệm gameplay thời gian thực trực tiếp trên trình duyệt web chỉ bằng 1 cú nhấp chuột.
+            {isVi
+              ? "Trải nghiệm gameplay thời gian thực trực tiếp trên trình duyệt web chỉ bằng 1 cú nhấp chuột."
+              : isZh
+              ? "只需一键点击，即可在网页浏览器中直接体验实时游戏玩法。"
+              : "Experience real-time gameplay directly in your web browser with a single click."}
           </p>
         </div>
 

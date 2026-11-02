@@ -39,7 +39,7 @@ export default async function LocaleLayout({
   if (!locales.includes(locale as typeof locales[number])) notFound();
 
   return (
-    <html lang={locale} className="dark">
+    <html lang={locale} className="dark" suppressHydrationWarning>
       <head>
         <meta name="referrer" content="no-referrer" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -49,7 +49,7 @@ export default async function LocaleLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-screen bg-[#070A10] text-zinc-100 antialiased selection:bg-cyan-500/30 selection:text-white">
+      <body className="min-h-screen bg-[#070A10] text-zinc-100 antialiased selection:bg-cyan-500/30 selection:text-white" suppressHydrationWarning>
         {/* Global Providers with seamless in-place locale switching */}
         <AppLocaleProvider initialLocale={locale as "vi" | "en" | "zh"}>
           <Providers>
