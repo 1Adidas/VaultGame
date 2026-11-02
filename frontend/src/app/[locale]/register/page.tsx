@@ -120,16 +120,9 @@ export default function RegisterPage() {
         
         {/* Brand header */}
         <div className="text-center flex flex-col items-center space-y-3">
-          <Link href={`/${locale}`} className="group flex flex-col items-center gap-2.5">
-            <div className="size-16 rounded-2xl bg-gradient-to-br from-violet-600 via-indigo-600 to-cyan-400 p-[1.5px] shadow-xl shadow-violet-500/20 group-hover:scale-105 transition-transform duration-300">
-              <div className="size-full rounded-[14.5px] bg-[#090D16] flex items-center justify-center p-3">
-                <img src="/logo.png" alt="Game Vault Logo" className="size-full object-contain drop-shadow" />
-              </div>
-            </div>
-            <span className="text-2xl font-black text-white tracking-tight group-hover:text-cyan-400 transition-colors">Game Vault</span>
-          </Link>
-          <h1 className="text-xl font-bold text-white tracking-tight">
-            {isVi ? "Tạo tài khoản Game Vault" : isZh ? "注册 Game Vault 账号" : "Create your account"}
+          <img src="/logo.png" alt="Game Vault Logo" className="size-20 object-contain drop-shadow-xl select-none" />
+          <h1 className="text-2xl font-bold text-white tracking-tight">
+            {isVi ? "Tạo tài khoản" : isZh ? "注册账户" : "Create an account"}
           </h1>
         </div>
 
