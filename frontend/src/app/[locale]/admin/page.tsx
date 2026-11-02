@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import Link from "next/link";
 import { useTranslations, useLocale } from "next-intl";
 import { useAdminStats, useCategories } from "@/hooks/useGames";
@@ -13,11 +13,159 @@ import {
   LayoutDashboard, Gamepad2, ShoppingBag, Users as UsersIcon,
   DollarSign, HelpCircle, Upload, Trash2, Edit, CheckCircle2,
   XCircle, ToggleLeft, ToggleRight, Info, PlusCircle, Save, ExternalLink,
-  Bot, AlertTriangle, BarChart3, TrendingUp, Clock, ArrowUpRight, Download, Settings, ArrowLeft
+  Bot, AlertTriangle, BarChart3, TrendingUp, Clock, ArrowUpRight, Download, Settings,
+  Sparkles, Globe, Loader2, Languages, Image as ImageIcon, Film, HardDrive,
+  Package, CreditCard, Shield
 } from "lucide-react";
 
 
 import { useSearchParams, useRouter } from "next/navigation";
+
+// Hàm tự động chuẩn hóa chuỗi tiếng Việt thành Game Slug thân thiện với URL (SEO)
+function generateSlug(text: string): string {
+  if (!text) return "";
+  return text
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Xóa toàn bộ dấu thanh tiếng Việt
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "d")
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "") // Bỏ ký tự đặc biệt
+    .replace(/[\s_]+/g, "-") // Thay khoảng trắng hoặc gạch dưới bằng gạch ngang
+    .replace(/-+/g, "-") // Bỏ nhiều gạch ngang liên tiếp
+    .replace(/^-+|-+$/g, ""); // Xóa gạch ngang thừa ở đầu và cuối
+}
+
+// Custom Dropzone File Input - Thay thế Choose File mặc định của trình duyệt
+function DropzoneFileInput({
+  accept,
+  multiple = false,
+  files,
+  onSelect,
+  onClear,
+  label = "Nhấp để chọn tệp hoặc kéo thả vào đây",
+  formatHint = "",
+  disabled = false,
+}: {
+  accept: string;
+  multiple?: boolean;
+  files: File | File[] | null;
+  onSelect: (f: FileList | null) => void;
+  onClear?: () => void;
+  label?: string;
+  formatHint?: string;
+  disabled?: boolean;
+}) {
+  const [isDragOver, setIsDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (disabled) return;
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      onSelect(e.dataTransfer.files);
+    }
+  };
+
+  const hasFiles = Boolean(
+    Array.isArray(files) ? files.length > 0 : files
+  );
+
+  return (
+    <div className="space-y-1.5">
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        multiple={multiple}
+        disabled={disabled}
+        className="hidden"
+        onChange={(e) => onSelect(e.target.files)}
+      />
+
+      {!hasFiles ? (
+        <div
+          onClick={() => !disabled && inputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); if (!disabled) setIsDragOver(true); }}
+          onDragLeave={() => setIsDragOver(false)}
+          onDrop={handleDrop}
+          className={`group rounded-xl border border-dashed transition p-3 text-center flex flex-col items-center justify-center cursor-pointer select-none ${
+            isDragOver
+              ? "border-cyan-400 bg-cyan-500/[0.08]"
+              : "border-white/15 bg-white/[0.015] hover:border-cyan-400/50 hover:bg-white/[0.03]"
+          } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          <span className="text-xs font-medium text-zinc-300 group-hover:text-cyan-300 transition">
+            {label}
+          </span>
+          {formatHint && (
+            <span className="text-[10px] text-zinc-500 font-mono mt-0.5">
+              {formatHint}
+            </span>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-1.5">
+          {Array.isArray(files) ? (
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] text-zinc-300 font-medium px-1">
+                <span>Đã chọn {files.length} ảnh gameplay mới:</span>
+                {onClear && (
+                  <button
+                    type="button"
+                    onClick={onClear}
+                    className="text-[10px] text-zinc-400 hover:text-red-400 transition cursor-pointer font-medium"
+                  >
+                    Hủy tất cả
+                  </button>
+                )}
+              </div>
+              <div className="max-h-28 overflow-y-auto space-y-1 pr-1 scrollbar-thin">
+                {files.map((f, idx) => (
+                  <div
+                    key={idx}
+                    className="flex items-center justify-between text-[10px] text-cyan-300 font-mono bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1 rounded-md"
+                  >
+                    <span className="truncate max-w-[200px]">{f.name}</span>
+                    <span className="text-zinc-500 ml-2">{(f.size / (1024 * 1024)).toFixed(2)} MB</span>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => inputRef.current?.click()}
+                className="text-[10px] text-zinc-400 hover:text-cyan-300 transition cursor-pointer"
+              >
+                + Chọn thêm ảnh khác
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between text-[11px] text-cyan-300 font-mono bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1.5 rounded-lg">
+              <div className="flex items-center gap-1.5 truncate">
+                <span className="truncate max-w-[170px]">{files?.name}</span>
+                <span className="text-zinc-500 text-[10px] font-sans">
+                  {files?.size ? `(${(files.size / (1024 * 1024)).toFixed(2)} MB)` : ""}
+                </span>
+              </div>
+              {onClear && (
+                <button
+                  type="button"
+                  onClick={onClear}
+                  className="text-zinc-400 hover:text-red-400 ml-1.5 transition cursor-pointer text-xs font-semibold"
+                >
+                  Hủy
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminPage() {
   const t = useTranslations("admin");
@@ -25,6 +173,13 @@ export default function AdminPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
+  const { user, isLoading } = useAuthStore();
+
+  useEffect(() => {
+    if (!isLoading && (!user || !user.roles?.includes("Admin"))) {
+      router.replace(`/${locale}`);
+    }
+  }, [user, isLoading, locale, router]);
 
   useEffect(() => {
     const tab = searchParams.get("tab");
@@ -38,25 +193,32 @@ export default function AdminPage() {
     router.replace(`/${locale}/admin?tab=${tabId}`, { scroll: false });
   };
 
-  // Nav Tabs list
+  // Danh sách các tab điều hướng trang quản trị (100% Tiếng Việt)
   const tabs = [
-    { id: "overview", label: locale === "vi" ? "Tổng quan" : "Overview", icon: LayoutDashboard },
-    { id: "analytics", label: locale === "vi" ? "Thống kê chi tiết" : "Detailed Analytics", icon: BarChart3 },
-    { id: "games", label: locale === "vi" ? "Trò chơi" : "Games", icon: Gamepad2 },
-    { id: "orders", label: locale === "vi" ? "Đơn hàng" : "Orders", icon: ShoppingBag },
-    { id: "users", label: locale === "vi" ? "Người dùng" : "Users", icon: UsersIcon },
-    { id: "revenue", label: locale === "vi" ? "Doanh thu" : "Revenue", icon: DollarSign },
-    { id: "ai", label: locale === "vi" ? "Cài đặt AI" : "AI Settings", icon: Bot },
-    { id: "help", label: locale === "vi" ? "Hướng dẫn" : "Help Guide", icon: HelpCircle },
+    { id: "overview", label: "Tổng quan", icon: LayoutDashboard },
+    { id: "analytics", label: "Thống kê chi tiết", icon: BarChart3 },
+    { id: "games", label: "Trò chơi", icon: Gamepad2 },
+    { id: "orders", label: "Đơn hàng", icon: ShoppingBag },
+    { id: "users", label: "Người dùng", icon: UsersIcon },
+    { id: "revenue", label: "Doanh thu", icon: DollarSign },
+    { id: "help", label: "Hướng dẫn & Hỗ trợ", icon: HelpCircle },
   ];
 
+  if (isLoading || !user || !user.roles?.includes("Admin")) {
+    return (
+      <div className="flex h-[70vh] items-center justify-center">
+        <Loader2 className="size-8 animate-spin text-violet-500" />
+      </div>
+    );
+  }
+
   return (
-    <div className="w-[100vw] max-w-[1600px] relative left-1/2 -translate-x-1/2 px-4 md:px-8 py-8 flex flex-col md:flex-row gap-8">
+    <div className="w-full flex flex-col md:flex-row gap-8">
       {/* Sidebar Nav */}
       <aside className="w-full md:w-64 shrink-0">
         <div className="sticky top-24 rounded-2xl border border-white/5 bg-zinc-900/50 p-4 backdrop-blur shadow-xl space-y-2">
-          <h2 className="px-3 py-2 text-xs font-semibold text-zinc-500 tracking-wider uppercase">
-            Admin Panel
+          <h2 className="px-3 py-2 text-xs font-semibold text-zinc-400 tracking-wider uppercase">
+            BẢNG QUẢN TRỊ GAMEVAULT
           </h2>
           {tabs.map((tab) => {
             const Icon = tab.icon;
@@ -82,11 +244,10 @@ export default function AdminPage() {
       <main className="flex-1 min-w-0">
         {activeTab === "overview" && <OverviewTab />}
         {activeTab === "analytics" && <AnalyticsTab />}
-        {activeTab === "games" && <GamesTab onNavigate={handleTabChange} />}
+        {activeTab === "games" && <GamesTab />}
         {activeTab === "orders" && <OrdersTab />}
         {activeTab === "users" && <UsersTab />}
         {activeTab === "revenue" && <RevenueTab />}
-        {activeTab === "ai" && <AiTab />}
         {activeTab === "help" && <HelpTab />}
       </main>
     </div>
@@ -108,15 +269,25 @@ function OverviewTab() {
       const { data } = await api.post("/admin/migrate-uploads-to-drive");
       if (data.success) {
         const m = data.data.migrated;
-        alert(
-          locale === "vi"
-            ? `Đồng bộ thành công!\n- Ảnh: ${m.images} tệp\n- Video: ${m.videos} tệp\n- Tệp cài đặt: ${m.files} tệp\n- WebGL Demo: ${m.demos} tệp\n- Avatar: ${m.avatars} tệp\n- AI Avatar: ${m.aiAvatars} tệp`
-            : `Sync successful!\n- Images: ${m.images}\n- Videos: ${m.videos}\n- Installers: ${m.files}\n- WebGL Demos: ${m.demos}\n- Avatars: ${m.avatars}\n- AI Avatars: ${m.aiAvatars}`
-        );
+        const total = (m.images || 0) + (m.videos || 0) + (m.files || 0) + (m.demos || 0) + (m.avatars || 0) + (m.aiAvatars || 0);
+        if (total === 0) {
+          alert(
+            locale === "vi"
+              ? "Không có tệp cục bộ nào cần đồng bộ lên Drive (hoặc tất cả đã ở trên Drive)."
+              : "No local files needed migration to Drive."
+          );
+        } else {
+          alert(
+            locale === "vi"
+              ? `Đồng bộ thành công ${total} tệp lên Drive!\n- Ảnh: ${m.images} tệp\n- Video: ${m.videos} tệp\n- Tệp cài đặt: ${m.files} tệp\n- WebGL Demo: ${m.demos} tệp\n- Avatar: ${m.avatars} tệp`
+              : `Sync successful! ${total} files migrated.\n- Images: ${m.images}\n- Videos: ${m.videos}\n- Installers: ${m.files}\n- WebGL Demos: ${m.demos}\n- Avatars: ${m.avatars}`
+          );
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert(locale === "vi" ? "Đồng bộ thất bại hoặc xảy ra lỗi kết nối." : "Sync failed or connection error.");
+      const msg = error.response?.data?.message || (locale === "vi" ? "Đồng bộ thất bại hoặc xảy ra lỗi kết nối." : "Sync failed or connection error.");
+      alert(msg);
     } finally {
       setIsMigrating(false);
     }
@@ -176,26 +347,26 @@ function OverviewTab() {
     }
   };
 
-  if (isLoading) return <p className="text-zinc-500">Loading Stats...</p>;
+  if (isLoading) return <p className="text-zinc-500">Đang tải dữ liệu thống kê...</p>;
 
   const s = stats as any;
   const cards = [
-    { label: locale === "vi" ? "Tổng Doanh Thu" : "Total Revenue", value: formatPrice(s.totalRevenue ?? 0), color: "text-violet-400" },
-    { label: locale === "vi" ? "Tổng Đơn Hàng" : "Orders Completed", value: s.totalOrders ?? 0, color: "text-green-400" },
-    { label: locale === "vi" ? "Người Dùng" : "Users Registered", value: s.totalUsers ?? 0, color: "text-blue-400" },
-    { label: locale === "vi" ? "Trò Chơi" : "Published Games", value: s.totalGames ?? 0, color: "text-amber-400" },
-    { label: locale === "vi" ? "Lượt Tải Game" : "Total Downloads", value: s.totalDownloads ?? 0, color: "text-emerald-400" },
-    { label: locale === "vi" ? "Lượt Chơi Thử" : "Total Demo Plays", value: s.totalDemoPlays ?? 0, color: "text-pink-400" },
+    { label: "Tổng Doanh Thu", value: formatPrice(s.totalRevenue ?? 0), color: "text-violet-400" },
+    { label: "Đơn Hàng Hoàn Tất", value: s.totalOrders ?? 0, color: "text-green-400" },
+    { label: "Người Dùng Đăng Ký", value: s.totalUsers ?? 0, color: "text-blue-400" },
+    { label: "Trò Chơi Đã Đăng", value: s.totalGames ?? 0, color: "text-amber-400" },
+    { label: "Lượt Tải Game", value: s.totalDownloads ?? 0, color: "text-emerald-400" },
+    { label: "Lượt Chơi Thử WebGL", value: s.totalDemoPlays ?? 0, color: "text-pink-400" },
   ];
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-white">
-          {locale === "vi" ? "Tổng Quan Bảng Điều Khiển" : "Dashboard Overview"}
+          Tổng Quan Bảng Điều Khiển
         </h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          {locale === "vi" ? "Thống kê thời gian thực của cửa hàng GameVault." : "Real-time statistics of GameVault store."}
+        <p className="text-sm text-zinc-400 mt-1">
+          Thống kê thời gian thực toàn bộ hoạt động của cửa hàng GameVault.
         </p>
       </div>
 
@@ -211,13 +382,13 @@ function OverviewTab() {
       {/* Top Games & Actions */}
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2 p-6 bg-zinc-900/40 border-white/5 backdrop-blur">
-          <h3 className="text-lg font-bold text-white mb-4">{locale === "vi" ? "Top Trò Chơi Tải Nhiều" : "Top Downloaded Games"}</h3>
+          <h3 className="text-lg font-bold text-white mb-4">Top Trò Chơi Tải Nhiều Nhất</h3>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm text-zinc-400">
               <thead>
                 <tr className="border-b border-white/5 text-zinc-500 font-semibold">
-                  <th className="py-2">{locale === "vi" ? "Tên Trò Chơi" : "Game Title"}</th>
-                  <th className="py-2 text-right">{locale === "vi" ? "Lượt Tải" : "Downloads"}</th>
+                  <th className="py-2">Tên Trò Chơi</th>
+                  <th className="py-2 text-right">Lượt Tải Về</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -235,85 +406,72 @@ function OverviewTab() {
         {/* Dangerous & System Operations */}
         <Card className="p-6 bg-zinc-900/40 border-white/5 backdrop-blur flex flex-col justify-between">
           <div>
-            <h3 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
-              <Settings className="size-5 text-violet-400" />
-              {locale === "vi" ? "Thao Tác & Đồng Bộ" : "System & Migration"}
+            <h3 className="text-base font-semibold text-white tracking-tight">
+              Thao tác hệ thống & đồng bộ
             </h3>
-            <p className="text-sm text-zinc-400 leading-relaxed">
-              {locale === "vi"
-                ? "Thực hiện đồng bộ các tệp từ máy chủ local lên Google Drive hoặc khôi phục dữ liệu hệ thống."
-                : "Synchronize local server uploads to Google Drive or perform database resets."}
+            <p className="text-xs text-zinc-400 leading-relaxed mt-1">
+              Đồng bộ hóa các tệp media giữa máy chủ cục bộ và Google Drive, hoặc khôi phục dữ liệu ban đầu.
             </p>
           </div>
-          <div className="space-y-3 mt-6">
-            <Button
+          <div className="space-y-2.5 mt-5">
+            <button
               onClick={handleMigrateToDrive}
               disabled={isMigrating}
-              className="w-full bg-violet-600 hover:bg-violet-500 disabled:bg-violet-800 text-white border-none gap-2 font-medium"
+              className="w-full py-2.5 px-4 rounded-xl text-xs font-medium text-white bg-white/[0.1] hover:bg-white/[0.16] disabled:opacity-40 border border-white/[0.08] transition active:scale-[0.98] cursor-pointer"
             >
-              <Upload className="size-4" />
-              {isMigrating 
-                ? (locale === "vi" ? "Đang đồng bộ..." : "Syncing...") 
-                : (locale === "vi" ? "Đồng bộ wwwroot lên Drive" : "Sync wwwroot to Drive")}
-            </Button>
-            <Button
+              {isMigrating ? "Đang đồng bộ..." : "Đồng bộ wwwroot lên Google Drive"}
+            </button>
+            <button
               onClick={handleSyncDriveToLocal}
               disabled={isSyncingFromDrive}
-              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white border-none gap-2 font-medium"
+              className="w-full py-2.5 px-4 rounded-xl text-xs font-medium text-white bg-white/[0.06] hover:bg-white/[0.1] disabled:opacity-40 border border-white/[0.08] transition active:scale-[0.98] cursor-pointer"
             >
-              <Download className="size-4" />
-              {isSyncingFromDrive
-                ? (locale === "vi" ? "Đang tải xuống..." : "Downloading...")
-                : (locale === "vi" ? "Đồng bộ Drive xuống Local" : "Sync Drive to Local")}
-            </Button>
-            <Button
+              {isSyncingFromDrive ? "Đang tải xuống..." : "Đồng bộ Google Drive về máy chủ"}
+            </button>
+            <button
               onClick={handleResetDemoPlays}
-              className="w-full bg-orange-600/20 hover:bg-orange-600 text-orange-300 hover:text-white border border-orange-500/20 hover:border-transparent gap-2 font-medium"
+              className="w-full py-2.5 px-4 rounded-xl text-xs font-medium text-zinc-400 hover:text-orange-300 hover:bg-orange-500/10 border border-white/[0.04] hover:border-orange-500/20 transition active:scale-[0.98] cursor-pointer"
             >
-              <Trash2 className="size-4" />
-              {locale === "vi" ? "Xóa Hết Lượt Chơi Thử" : "Reset Demo Plays"}
-            </Button>
-            <Button
+              Xóa lịch sử chơi thử WebGL
+            </button>
+            <button
               onClick={handleResetData}
-              className="w-full bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white border border-red-500/20 hover:border-transparent gap-2 font-medium"
+              className="w-full py-2.5 px-4 rounded-xl text-xs font-medium text-zinc-400 hover:text-red-300 hover:bg-red-500/10 border border-white/[0.04] hover:border-red-500/20 transition active:scale-[0.98] cursor-pointer"
             >
-              <Trash2 className="size-4" />
-              {locale === "vi" ? "Khôi Phục Dữ Liệu Game" : "Reset Game Database"}
-            </Button>
+              Khôi phục dữ liệu trò chơi ban đầu
+            </button>
           </div>
         </Card>
       </div>
 
       {/* Recent Demo Plays */}
       <Card className="p-6 bg-zinc-900/40 border-white/5 backdrop-blur">
-        <h3 className="text-lg font-bold text-white mb-4">{locale === "vi" ? "Lượt Chơi Thử Gần Đây" : "Recent Demo Plays"}</h3>
+        <h3 className="text-lg font-bold text-white mb-4">Lượt Chơi Thử WebGL Gần Đây</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm text-zinc-400">
             <thead>
               <tr className="border-b border-white/5 text-zinc-500 font-semibold">
-                <th className="py-2 px-3">{locale === "vi" ? "Tên Trò Chơi" : "Game Title"}</th>
-                <th className="py-2 px-3">{locale === "vi" ? "Người Chơi" : "Player"}</th>
-                <th className="py-2 px-3">{locale === "vi" ? "Thời Lượng" : "Duration"}</th>
-                <th className="py-2 px-3 text-right">{locale === "vi" ? "Thời Gian" : "Played At"}</th>
+                <th className="py-2 px-3">Tên Trò Chơi</th>
+                <th className="py-2 px-3">Người Chơi</th>
+                <th className="py-2 px-3">Thời Lượng Chơi</th>
+                <th className="py-2 px-3 text-right">Thời Gian</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
               {(s.recentDemoPlays ?? []).map((log: any) => {
                 const formatDuration = (sec: number | null) => {
                   if (sec === null || sec === undefined) return "—";
-                  if (sec < 60) return locale === "vi" ? `${sec} giây` : `${sec}s`;
+                  if (sec < 60) return `${sec} giây`;
                   const mins = Math.floor(sec / 60);
                   const secs = sec % 60;
-                  return locale === "vi" 
-                    ? `${mins} phút ${secs} giây` 
-                    : `${mins}m ${secs}s`;
+                  return `${mins} phút ${secs} giây`;
                 };
 
                 return (
                   <tr key={log.id} className="hover:text-white transition">
                     <td className="py-3 px-3 font-medium text-zinc-200">{log.gameTitle}</td>
                     <td className="py-3 px-3 text-zinc-300">
-                      {log.userFullName ? `${log.userFullName} (${log.userEmail})` : (locale === "vi" ? "Khách vãng lai" : "Guest")}
+                      {log.userFullName ? `${log.userFullName} (${log.userEmail})` : "Khách vãng lai"}
                     </td>
                     <td className="py-3 px-3 text-zinc-300">
                       {formatDuration(log.playDurationSeconds)}
@@ -327,7 +485,7 @@ function OverviewTab() {
               {(s.recentDemoPlays ?? []).length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-6 text-center text-zinc-500">
-                    {locale === "vi" ? "Chưa có lượt chơi thử nào." : "No demo plays recorded yet."}
+                    Chưa có lượt chơi thử nào.
                   </td>
                 </tr>
               )}
@@ -342,7 +500,7 @@ function OverviewTab() {
 /* ============================================================================
    GAMES TAB (CRUD + Uploads)
    ============================================================================ */
-function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
+function GamesTab() {
   const locale = useLocale();
   const { data: categories } = useCategories();
 
@@ -371,11 +529,18 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   // Form fields
   const [title, setTitle] = useState("");
   const [titleEn, setTitleEn] = useState("");
+  const [titleZh, setTitleZh] = useState("");
   const [slug, setSlug] = useState("");
   const [description, setDescription] = useState("");
   const [descriptionEn, setDescriptionEn] = useState("");
+  const [descriptionZh, setDescriptionZh] = useState("");
   const [shortDescription, setShortDescription] = useState("");
   const [shortDescriptionEn, setShortDescriptionEn] = useState("");
+  const [shortDescriptionZh, setShortDescriptionZh] = useState("");
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [activeLangTab, setActiveLangTab] = useState<"vi" | "en" | "zh">("vi");
+  const [autoTranslateEnabled, setAutoTranslateEnabled] = useState(true);
+  const [multilangViewMode, setMultilangViewMode] = useState<"columns" | "tabs">("columns");
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
   const [developer, setDeveloper] = useState("");
   const [publisher, setPublisher] = useState("");
@@ -396,25 +561,56 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   // Selected Tags
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
-  // Upload fields
-  const [fileType, setFileType] = useState("installer");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
+  // Upload fields - separate per asset type
+  const [uploadingType, setUploadingType] = useState<string | null>(null);
+  const [assetFiles, setAssetFiles] = useState<{
+    image: File | null;
+    trailer: File | null;
+    demo: File | null;
+    installer: File | null;
+  }>({ image: null, trailer: null, demo: null, installer: null });
+
+  // Direct asset upload state during Create/Edit
+  const [isSubmittingGame, setIsSubmittingGame] = useState(false);
+  const [submittingProgress, setSubmittingProgress] = useState("");
+  const [newGameAssets, setNewGameAssets] = useState<{
+    cover: File | null;
+    screenshots: File[];
+    trailer: File | null;
+    demo: File | null;
+    installer: File | null;
+  }>({ cover: null, screenshots: [], trailer: null, demo: null, installer: null });
 
   const startEdit = (g: any) => {
     // Load full details via admin endpoint (works for any status)
     api.get(`/admin/games/${g.id}`).then((res) => {
       const fullGame = res.data.data;
-      setEditingGame(fullGame);
+      const primaryImage = fullGame.images?.find((i: any) => i.isPrimary) || fullGame.images?.[0];
+      const screenshots = fullGame.images?.filter((i: any) => !i.isPrimary && i.id !== primaryImage?.id) || [];
+      setEditingGame({
+        ...fullGame,
+        hasCover: !!primaryImage?.url,
+        hasTrailer: g.hasTrailer ?? (fullGame.videos && fullGame.videos.length > 0),
+        hasDemo: g.hasDemo ?? (fullGame.demo != null),
+        hasFile: fullGame.hasFile ?? g.hasFile,
+        coverUrl: primaryImage?.url,
+        screenshots: screenshots,
+        trailerUrl: fullGame.videos?.[0]?.url,
+        demoUrl: fullGame.demo?.buildUrl,
+      });
       setIsCreating(false);
+      setNewGameAssets({ cover: null, screenshots: [], trailer: null, demo: null, installer: null });
 
       setTitle(fullGame.title || "");
       setTitleEn(fullGame.titleEn || "");
+      setTitleZh(fullGame.titleZh || "");
       setSlug(fullGame.slug || "");
       setDescription(fullGame.description || "");
       setDescriptionEn(fullGame.descriptionEn || "");
+      setDescriptionZh(fullGame.descriptionZh || "");
       setShortDescription(fullGame.shortDescription || "");
       setShortDescriptionEn(fullGame.shortDescriptionEn || "");
+      setShortDescriptionZh(fullGame.shortDescriptionZh || "");
 
       // Find Category IDs by names
       const categoryNames = fullGame.categoryName
@@ -459,10 +655,11 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const startCreate = () => {
     setEditingGame(null);
     setIsCreating(true);
+    setNewGameAssets({ cover: null, screenshots: [], trailer: null, demo: null, installer: null });
 
-    setTitle(""); setTitleEn(""); setSlug("");
-    setDescription(""); setDescriptionEn("");
-    setShortDescription(""); setShortDescriptionEn("");
+    setTitle(""); setTitleEn(""); setTitleZh(""); setSlug("");
+    setDescription(""); setDescriptionEn(""); setDescriptionZh("");
+    setShortDescription(""); setShortDescriptionEn(""); setShortDescriptionZh("");
     setSelectedCategoryIds([]);
     setDeveloper(""); setPublisher(""); setReleaseDate("");
     setPrice(0); setDiscountPrice(undefined); setMinAge(0);
@@ -480,109 +677,286 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
     const payload = {
       title, slug, description, shortDescription,
       titleEn: titleEn || null, descriptionEn: descriptionEn || null, shortDescriptionEn: shortDescriptionEn || null,
+      titleZh: titleZh || null, descriptionZh: descriptionZh || null, shortDescriptionZh: shortDescriptionZh || null,
       categoryIds: selectedCategoryIds, developer, publisher: publisher || null,
       releaseDate: releaseDate || null, price, discountPrice: discountPrice || null,
-      minAge, isFeatured, status, systemRequirements: reqJson, tagIds: selectedTagIds
+      minAge, isFeatured, status: status || "Draft", systemRequirements: reqJson, tagIds: selectedTagIds
     };
 
+    setIsSubmittingGame(true);
+    setSubmittingProgress("Đang lưu thông tin trò chơi...");
+
     try {
+      let savedGameId: string | null = null;
       if (isCreating) {
-        await api.post("/admin/games", payload);
-        alert("Game created successfully!");
+        const res = await api.post<ApiResponse<any>>("/admin/games", payload);
+        savedGameId = res?.data?.data?.id;
       } else {
         await api.put(`/admin/games/${editingGame.id}`, payload);
-        alert("Game details saved successfully!");
+        savedGameId = editingGame.id;
       }
+
+      // Upload selected game assets directly to Drive
+      if (savedGameId) {
+        if (newGameAssets.cover) {
+          setSubmittingProgress("Đang tải ảnh bìa lên Google Drive...");
+          const form = new FormData();
+          form.append("file", newGameAssets.cover);
+          form.append("type", "cover");
+          await api.post(`/admin/games/${savedGameId}/upload`, form);
+        }
+        if (newGameAssets.screenshots && newGameAssets.screenshots.length > 0) {
+          for (let s = 0; s < newGameAssets.screenshots.length; s++) {
+            setSubmittingProgress(`Đang tải ảnh gameplay ${s + 1}/${newGameAssets.screenshots.length} lên Google Drive...`);
+            const form = new FormData();
+            form.append("file", newGameAssets.screenshots[s]);
+            form.append("type", "screenshot");
+            await api.post(`/admin/games/${savedGameId}/upload`, form);
+          }
+        }
+        if (newGameAssets.trailer) {
+          setSubmittingProgress("Đang tải video trailer lên Google Drive...");
+          const form = new FormData();
+          form.append("file", newGameAssets.trailer);
+          form.append("type", "trailer");
+          await api.post(`/admin/games/${savedGameId}/upload`, form);
+        }
+        if (newGameAssets.demo) {
+          setSubmittingProgress("Đang xử lý & tải demo WebGL lên Google Drive...");
+          const form = new FormData();
+          form.append("file", newGameAssets.demo);
+          form.append("type", "demo");
+          await api.post(`/admin/games/${savedGameId}/upload`, form);
+        }
+        if (newGameAssets.installer) {
+          setSubmittingProgress("Đang tải tệp cài đặt lên Google Drive...");
+          const form = new FormData();
+          form.append("file", newGameAssets.installer);
+          form.append("type", "installer");
+          await api.post(`/admin/games/${savedGameId}/upload`, form);
+        }
+      }
+
+      alert(isCreating ? "Đã tạo trò chơi và tải lên tài nguyên thành công!" : "Đã lưu thông tin trò chơi và tài nguyên thành công!");
       setIsCreating(false);
       setEditingGame(null);
-      refetchGames();
-    } catch (error) {
-      console.error(error);
-      alert("Error saving game. Ensure slug is unique and fields are correct.");
-    }
-  };
-
-  const handleDeleteGame = async (id: string) => {
-    if (!window.confirm("Are you sure you want to archive/delete this game?")) return;
-    try {
-      await api.delete(`/admin/games/${id}`);
-      refetchGames();
-      alert("Game archived successfully.");
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  const onFileSelected = (file: File | null) => {
-    setSelectedFile(file);
-    if (!file) return;
-    const name = file.name.toLowerCase();
-    if (name.endsWith(".zip") || name.endsWith(".exe") || name.endsWith(".rar") || name.endsWith(".7z")) {
-      if (fileType === "image" || fileType === "trailer") {
-        setFileType("installer");
-      }
-    } else if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp")) {
-      setFileType("image");
-    } else if (name.endsWith(".mp4") || name.endsWith(".webm") || name.endsWith(".mkv")) {
-      setFileType("trailer");
-    }
-  };
-
-  const handleAssetUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedFile || !selectedGameForUpload) return;
-    setUploading(true);
-
-    const form = new FormData();
-    form.append("file", selectedFile);
-    form.append("type", fileType);
-
-    // Direct upload to ASP.NET Core backend to bypass Next.js proxy payload limits and IPv6 hang
-    const backendBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000";
-
-    try {
-      await api.post(`${backendBase}/api/v1/admin/games/${selectedGameForUpload.id}/upload`, form, {
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-      });
-      alert(locale === "vi" ? "Tải lên tệp và liên kết thành công!" : "File uploaded and linked successfully!");
-      setSelectedFile(null);
-      setSelectedGameForUpload(null);
+      setNewGameAssets({ cover: null, screenshots: [], trailer: null, demo: null, installer: null });
       refetchGames();
     } catch (error: any) {
       console.error(error);
-      const serverMsg = error?.response?.data?.error?.message 
-        || error?.response?.data?.message 
-        || error?.response?.data?.title 
-        || error?.message 
-        || "Lỗi tải tệp lên máy chủ.";
-      alert(locale === "vi" ? `Lỗi tải tệp: ${serverMsg}` : `Error uploading asset: ${serverMsg}`);
+      const msg = error?.response?.data?.message || error?.message || "Lỗi khi lưu trò chơi. Vui lòng đảm bảo Game Slug là duy nhất.";
+      alert(`Lỗi: ${msg}`);
     } finally {
-      setUploading(false);
+      setIsSubmittingGame(false);
+      setSubmittingProgress("");
     }
   };
 
-  const handleRemoveAsset = async (gameId: string, assetType: string) => {
-    const assetNames: Record<string, string> = {
-      cover: locale === "vi" ? "ảnh bìa" : "cover image",
-      trailer: locale === "vi" ? "trailer video" : "trailer video",
-      demo: locale === "vi" ? "bản chơi thử WebGL" : "WebGL demo build",
-      installer: locale === "vi" ? "tệp cài đặt game" : "installer files"
-    };
+  const handleAutoTranslate = async (sourceLang: "vi" | "en" | "zh", silent = false) => {
+    let srcTitle = "";
+    let srcDesc = "";
+    let srcShort = "";
 
+    if (sourceLang === "vi") {
+      srcTitle = title;
+      srcDesc = description;
+      srcShort = shortDescription;
+    } else if (sourceLang === "en") {
+      srcTitle = titleEn;
+      srcDesc = descriptionEn;
+      srcShort = shortDescriptionEn;
+    } else if (sourceLang === "zh") {
+      srcTitle = titleZh;
+      srcDesc = descriptionZh;
+      srcShort = shortDescriptionZh;
+    }
+
+    if (!srcDesc.trim() && !srcShort.trim()) {
+      if (!silent) {
+        alert("Vui lòng nhập mô tả ngắn hoặc mô tả chi tiết trước khi dịch tự động!");
+      }
+      return;
+    }
+
+    // Giữ nguyên tên game gốc không dịch thương hiệu
+    if (srcTitle) {
+      if (!title) setTitle(srcTitle);
+      if (!titleEn) setTitleEn(srcTitle);
+      if (!titleZh) setTitleZh(srcTitle);
+    }
+
+    if (sourceLang === "vi" && srcTitle && !slug) {
+      setSlug(generateSlug(srcTitle));
+    }
+
+    setIsTranslating(true);
+    try {
+      const { data } = await api.post<ApiResponse<{
+        vi: { title: string; description: string; shortDescription: string };
+        en: { title: string; description: string; shortDescription: string };
+        zh: { title: string; description: string; shortDescription: string };
+      }>>("/admin/games/translate", {
+        sourceLocale: sourceLang,
+        title: srcTitle,
+        description: srcDesc,
+        shortDescription: srcShort
+      });
+
+      if (data?.data) {
+        const t = data.data;
+        // Điền chính xác vào từng khung ngôn ngữ tương ứng
+        if (sourceLang !== "vi" && t.vi) {
+          if (t.vi.description) setDescription(t.vi.description);
+          if (t.vi.shortDescription) setShortDescription(t.vi.shortDescription);
+        }
+        if (sourceLang !== "en" && t.en) {
+          if (t.en.description) setDescriptionEn(t.en.description);
+          if (t.en.shortDescription) setShortDescriptionEn(t.en.shortDescription);
+        }
+        if (sourceLang !== "zh" && t.zh) {
+          if (t.zh.description) setDescriptionZh(t.zh.description);
+          if (t.zh.shortDescription) setShortDescriptionZh(t.zh.shortDescription);
+        }
+
+        if (!silent) {
+          alert("Đã dịch tự động mô tả game thành công sang các ngôn ngữ còn lại!");
+        }
+      }
+    } catch (err: any) {
+      console.error("Auto-translate error:", err);
+      if (!silent) {
+        alert(`Lỗi dịch tự động: ${err?.response?.data?.message || err?.message || "Không thể kết nối dịch vụ AI"}`);
+      }
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
+  const handleDeleteGame = async (id: string, gameTitle?: string) => {
     const confirmMsg = locale === "vi"
-      ? `Bạn có chắc chắn muốn gỡ bỏ hoàn toàn ${assetNames[assetType]} của trò chơi này?`
-      : `Are you sure you want to completely remove the ${assetNames[assetType]} of this game?`;
+      ? `Bạn có chắc chắn muốn xóa vĩnh viễn tựa game "${gameTitle || id}" khỏi hệ thống không? Toàn bộ dữ liệu liên quan sẽ bị xóa sạch.`
+      : locale === "zh"
+      ? `您确定要从系统中彻底删除游戏 "${gameTitle || id}" 吗？所有关联数据将被永久删除。`
+      : `Are you sure you want to permanently delete "${gameTitle || id}" from the system? All associated data will be removed.`;
 
     if (!window.confirm(confirmMsg)) return;
 
     try {
-      await api.delete(`/admin/games/${gameId}/${assetType}`);
-      alert(locale === "vi" ? "Gỡ bỏ thành công!" : "Asset removed successfully!");
+      await api.delete(`/admin/games/${id}`);
+      refetchGames();
+      alert(
+        locale === "vi"
+          ? "Đã xóa trò chơi thành công!"
+          : locale === "zh"
+          ? "游戏删除成功！"
+          : "Game deleted successfully."
+      );
+    } catch (error: any) {
+      console.error("Delete game error:", error);
+      const errMsg = error?.response?.data?.message || error?.message || "Unknown error";
+      alert(
+        locale === "vi"
+          ? `Lỗi khi xóa trò chơi: ${errMsg}`
+          : locale === "zh"
+          ? `删除游戏失败: ${errMsg}`
+          : `Failed to delete game: ${errMsg}`
+      );
+    }
+  };
+
+  const handleUploadSingleAsset = async (type: "image" | "trailer" | "demo" | "installer") => {
+    const file = assetFiles[type];
+    if (!file || !selectedGameForUpload) {
+      alert(locale === "vi" ? "Vui lòng chọn tệp trước khi bấm Tải lên!" : "Please select a file to upload first!");
+      return;
+    }
+
+    setUploadingType(type);
+    const form = new FormData();
+    form.append("file", file);
+    form.append("type", type);
+
+    try {
+      const res = await api.post(`/admin/games/${selectedGameForUpload.id}/upload`, form);
+      alert(locale === "vi" ? "Tải lên tài nguyên thành công!" : "Asset uploaded successfully!");
       
-      // Update local drawer state so checklist and actions sync immediately
+      // Clear file for this type
+      setAssetFiles(prev => ({ ...prev, [type]: null }));
+
+      // Sync local drawer state immediately
       setSelectedGameForUpload((prev: any) => {
         if (!prev) return prev;
+        const updated = { ...prev };
+        if (type === "image") {
+          updated.hasCover = true;
+          if (res?.data?.data?.url) updated.coverUrl = res.data.data.url;
+        } else if (type === "trailer") {
+          updated.hasTrailer = true;
+        } else if (type === "demo") {
+          updated.hasDemo = true;
+        } else if (type === "installer") {
+          updated.hasFile = true;
+        }
+        return updated;
+      });
+
+      refetchGames();
+    } catch (error: any) {
+      console.error("Upload asset error:", error);
+      const msg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || "Lỗi tải tệp lên";
+      alert(locale === "vi" ? `Lỗi tải lên tài nguyên: ${msg}` : `Error uploading asset: ${msg}`);
+    } finally {
+      setUploadingType(null);
+    }
+  };
+
+  const handleRemoveAsset = async (gameId: string, assetType: string, extraId?: string) => {
+    const assetNames: Record<string, string> = {
+      cover: locale === "vi" ? "ảnh bìa" : "cover image",
+      trailer: locale === "vi" ? "trailer video" : "trailer video",
+      demo: locale === "vi" ? "bản chơi thử WebGL" : "WebGL demo build",
+      installer: locale === "vi" ? "tệp cài đặt game" : "installer files",
+      screenshot: locale === "vi" ? "ảnh gameplay này" : "this gameplay screenshot"
+    };
+
+    const confirmMsg = locale === "vi"
+      ? `Bạn có chắc chắn muốn gỡ bỏ hoàn toàn ${assetNames[assetType] || assetType} khỏi hệ thống và Google Drive?`
+      : `Are you sure you want to completely remove ${assetNames[assetType] || assetType} from the system and Google Drive?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      if (assetType === "screenshot" && extraId) {
+        await api.delete(`/admin/games/${gameId}/images/${extraId}`);
+      } else {
+        await api.delete(`/admin/games/${gameId}/${assetType}`);
+      }
+      alert(locale === "vi" ? "Gỡ bỏ thành công khỏi máy và Google Drive!" : "Asset removed successfully from server & Drive!");
+      
+      // Update editingGame if open
+      setEditingGame((prev: any) => {
+        if (!prev || prev.id !== gameId) return prev;
+        const updated = { ...prev };
+        if (assetType === "cover") {
+          updated.hasCover = false;
+          updated.coverUrl = null;
+        } else if (assetType === "screenshot" && extraId) {
+          updated.screenshots = (updated.screenshots || []).filter((s: any) => s.id !== extraId);
+        } else if (assetType === "trailer") {
+          updated.hasTrailer = false;
+          updated.trailerUrl = null;
+        } else if (assetType === "demo") {
+          updated.hasDemo = false;
+          updated.demoUrl = null;
+        } else if (assetType === "installer") {
+          updated.hasFile = false;
+        }
+        return updated;
+      });
+
+      // Update local drawer state so checklist and actions sync immediately
+      setSelectedGameForUpload((prev: any) => {
+        if (!prev || prev.id !== gameId) return prev;
         const updated = { ...prev };
         if (assetType === "cover") {
           updated.hasCover = false;
@@ -620,28 +994,15 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
 
   return (
     <div className="space-y-8">
-      {/* Top Header & Breadcrumbs */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Games Catalog</h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            {(isCreating || editingGame || selectedGameForUpload) ? (
-              <span className="text-violet-400 font-medium">
-                {isCreating
-                  ? (locale === "vi" ? "Đang thêm trò chơi mới" : "Adding new game")
-                  : editingGame
-                    ? `${locale === "vi" ? "Đang chỉnh sửa" : "Editing"}: ${editingGame.title}`
-                    : `${locale === "vi" ? "Đang tải tệp cho" : "Uploading files for"}: ${selectedGameForUpload?.title}`}
-              </span>
-            ) : (
-              locale === "vi" ? "Tạo, chỉnh sửa và tải lên tệp cài đặt cho các trò chơi." : "Create, edit, and upload files for games."
-            )}
-          </p>
+          <h1 className="text-3xl font-bold text-white">Danh Mục Trò Chơi</h1>
+          <p className="text-sm text-zinc-400 mt-1">Tạo mới, chỉnh sửa thông tin và quản lý tài nguyên game (ảnh bìa, trailer, bản chơi thử, file cài đặt).</p>
         </div>
-        {!isCreating && !editingGame && !selectedGameForUpload && (
-          <Button onClick={startCreate} className="bg-violet-600 hover:bg-violet-500 text-white gap-2 font-medium shadow-lg shadow-violet-900/20">
+        {!isCreating && !editingGame && (
+          <Button onClick={startCreate} className="bg-violet-600 hover:bg-violet-500 text-white gap-2 font-medium">
             <PlusCircle className="size-4" />
-            {locale === "vi" ? "Thêm game mới" : "Add New Game"}
+            Thêm trò chơi mới
           </Button>
         )}
       </div>
@@ -649,69 +1010,479 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
       {/* Forms Area */}
       {(isCreating || editingGame) && (
         <Card className="p-6 bg-zinc-900/40 border-violet-500/10 backdrop-blur">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-white">
-              {isCreating ? (locale === "vi" ? "Thêm Trò Chơi Mới" : "Add New Game Entry") : `Editing: ${editingGame.title}`}
-            </h2>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => { setIsCreating(false); setEditingGame(null); }}
-              className="border-white/10 hover:bg-white/10 text-zinc-300 gap-1.5"
-            >
-              <ArrowLeft className="size-4" />
-              {locale === "vi" ? "Quay lại danh sách" : "Back to list"}
-            </Button>
-          </div>
+          <h2 className="text-xl font-bold text-white mb-6">
+            {isCreating ? "Thêm Trò Chơi Mới" : `Chỉnh sửa trò chơi: ${editingGame.title}`}
+          </h2>
           <form onSubmit={handleSaveGame} className="space-y-6">
 
-            {/* Translations */}
-            <div className="grid gap-6 md:grid-cols-2 p-4 bg-zinc-950/40 rounded-2xl border border-white/5">
-              <div className="space-y-4">
-                <h3 className="font-semibold text-violet-400 text-sm">Tiếng Việt (Default)</h3>
-                <div className="space-y-2">
-                  <label className="text-xs text-zinc-400">Tên game (Title)</label>
-                  <Input required value={title} onChange={(e) => { setTitle(e.target.value); if (isCreating) setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "")); }} />
+            {/* Multilingual Content */}
+            <div className="space-y-4 p-5 bg-[#0C1019] rounded-2xl border border-white/[0.08]">
+              {/* Header & Action Toolbar */}
+              <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/[0.06]">
+                <div>
+                  <h3 className="text-sm font-semibold text-zinc-100 tracking-tight">
+                    Nội dung đa ngôn ngữ
+                  </h3>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    Nhập tiếng Việt, AI sẽ tự động tạo bản dịch tiếng Anh và tiếng Trung tương ứng.
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-zinc-400">Mô tả chi tiết (Description)</label>
-                  <textarea required className="w-full h-32 rounded-lg border border-white/10 bg-zinc-950 p-3 text-sm text-zinc-300 outline-none focus:border-violet-500" value={description} onChange={(e) => setDescription(e.target.value)} />
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="flex items-center gap-2 text-xs text-zinc-300 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={autoTranslateEnabled}
+                      onChange={(e) => setAutoTranslateEnabled(e.target.checked)}
+                      className="accent-violet-500 rounded size-3.5 cursor-pointer"
+                    />
+                    <span>Tự động dịch khi nhập xong</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => handleAutoTranslate("vi", false)}
+                    disabled={isTranslating}
+                    className="inline-flex items-center justify-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-medium bg-white/[0.08] hover:bg-white/[0.12] text-zinc-100 border border-white/[0.1] transition active:scale-[0.98] disabled:opacity-50 cursor-pointer"
+                  >
+                    {isTranslating ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin text-zinc-400" />
+                        <span>Đang dịch...</span>
+                      </>
+                    ) : (
+                      <span>Dịch sang Tiếng Anh & Tiếng Trung</span>
+                    )}
+                  </button>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <h3 className="font-semibold text-violet-400 text-sm">English Translation (Optional)</h3>
-                <div className="space-y-2">
-                  <label className="text-xs text-zinc-400 font-mono">Title (EN)</label>
-                  <Input value={titleEn} onChange={(e) => setTitleEn(e.target.value)} placeholder="Bilingual title" />
+              {/* Language Selector Segmented Control */}
+              <div className="flex items-center justify-between gap-2 border-b border-white/[0.06] pb-3">
+                <div className="flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={() => setActiveLangTab("vi")}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                      activeLangTab === "vi" ? "bg-white/[0.12] text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    Tiếng Việt
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveLangTab("en")}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                      activeLangTab === "en" ? "bg-white/[0.12] text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    English
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveLangTab("zh")}
+                    className={`px-3.5 py-1.5 rounded-lg text-xs font-medium transition ${
+                      activeLangTab === "zh" ? "bg-white/[0.12] text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    中文
+                  </button>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs text-zinc-400 font-mono">Description (EN)</label>
-                  <textarea className="w-full h-32 rounded-lg border border-white/10 bg-zinc-950 p-3 text-sm text-zinc-300 outline-none focus:border-violet-500" value={descriptionEn} onChange={(e) => setDescriptionEn(e.target.value)} placeholder="Bilingual narrative..." />
+
+                {/* View Mode Toggle */}
+                <div className="hidden lg:flex items-center gap-1 bg-black/40 p-1 rounded-xl border border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={() => setMultilangViewMode("columns")}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                      multilangViewMode === "columns" ? "bg-white/[0.12] text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    3 Cột
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMultilangViewMode("tabs")}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium transition ${
+                      multilangViewMode === "tabs" ? "bg-white/[0.12] text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+                    }`}
+                  >
+                    Từng Tab
+                  </button>
                 </div>
               </div>
+
+              {/* Active Tab View OR 3-Column View */}
+              {multilangViewMode === "columns" ? (
+                <div className="grid gap-4 lg:grid-cols-3">
+                  {/* Column 1: Tiếng Việt */}
+                  <div className="space-y-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.08]">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                      <span className="text-xs font-semibold text-zinc-200">Tiếng Việt</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">Bản gốc</span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-zinc-400 font-medium">Tên game (Title)</label>
+                        <span className="text-[10px] text-zinc-500 italic">Giữ nguyên gốc</span>
+                      </div>
+                      <Input
+                        required
+                        value={title}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTitle(val);
+                          if (!titleEn || titleEn === title) setTitleEn(val);
+                          if (!titleZh || titleZh === title) setTitleZh(val);
+                          if (isCreating) {
+                            setSlug(generateSlug(val));
+                          }
+                        }}
+                        placeholder="Ví dụ: Survival On Earth"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400 font-medium">Mô tả ngắn</label>
+                      <Input
+                        value={shortDescription}
+                        onChange={(e) => setShortDescription(e.target.value)}
+                        onBlur={() => {
+                          if (autoTranslateEnabled && shortDescription.trim() && (!shortDescriptionEn || !shortDescriptionZh)) {
+                            handleAutoTranslate("vi", true);
+                          }
+                        }}
+                        placeholder="Tóm tắt ngắn gọn hiển thị trên thẻ game..."
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400 font-medium">Mô tả chi tiết</label>
+                      <textarea
+                        required
+                        className="w-full h-36 rounded-lg border border-white/10 bg-zinc-950 p-3 text-sm text-zinc-200 outline-none focus:border-white/30"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        onBlur={() => {
+                          if (autoTranslateEnabled && description.trim() && (!descriptionEn || !descriptionZh)) {
+                            handleAutoTranslate("vi", true);
+                          }
+                        }}
+                        placeholder="Giới thiệu chi tiết cốt truyện, gameplay..."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Column 2: English */}
+                  <div className="space-y-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.08]">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                      <span className="text-xs font-semibold text-zinc-200">English</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">EN</span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-zinc-400 font-medium">Title (EN)</label>
+                        <span className="text-[10px] text-zinc-500 italic">Same brand name</span>
+                      </div>
+                      <Input
+                        value={titleEn}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTitleEn(val);
+                          if (!title) setTitle(val);
+                          if (!titleZh) setTitleZh(val);
+                        }}
+                        placeholder="e.g. Survival On Earth"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400 font-medium">Short Description (EN)</label>
+                      <Input
+                        value={shortDescriptionEn}
+                        onChange={(e) => setShortDescriptionEn(e.target.value)}
+                        onBlur={() => {
+                          if (autoTranslateEnabled && shortDescriptionEn.trim() && (!shortDescription || !shortDescriptionZh)) {
+                            handleAutoTranslate("vi", true);
+                          }
+                        }}
+                        placeholder="Brief summary for game cards..."
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400 font-medium">Description (EN)</label>
+                      <textarea
+                        className="w-full h-36 rounded-lg border border-white/10 bg-zinc-950 p-3 text-sm text-zinc-200 outline-none focus:border-white/30"
+                        value={descriptionEn}
+                        onChange={(e) => setDescriptionEn(e.target.value)}
+                        onBlur={() => {
+                          if (autoTranslateEnabled && descriptionEn.trim() && (!description || !descriptionZh)) {
+                            handleAutoTranslate("vi", true);
+                          }
+                        }}
+                        placeholder="English narrative and gameplay details..."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Column 3: Chinese */}
+                  <div className="space-y-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.08]">
+                    <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                      <span className="text-xs font-semibold text-zinc-200">中文</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">ZH</span>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs text-zinc-400 font-medium">游戏名称 (Title ZH)</label>
+                        <span className="text-[10px] text-zinc-500 italic">保持原名称</span>
+                      </div>
+                      <Input
+                        value={titleZh}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setTitleZh(val);
+                          if (!title) setTitle(val);
+                          if (!titleEn) setTitleEn(val);
+                        }}
+                        placeholder="保持游戏原英文名，如：Survival On Earth"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400 font-medium">简短描述 (Short Description ZH)</label>
+                      <Input
+                        value={shortDescriptionZh}
+                        onChange={(e) => setShortDescriptionZh(e.target.value)}
+                        onBlur={() => {
+                          if (autoTranslateEnabled && shortDescriptionZh.trim() && (!shortDescription || !shortDescriptionEn)) {
+                            handleAutoTranslate("vi", true);
+                          }
+                        }}
+                        placeholder="游戏卡片简要概览..."
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-zinc-400 font-medium">详细描述 (Description ZH)</label>
+                      <textarea
+                        className="w-full h-36 rounded-lg border border-white/10 bg-zinc-950 p-3 text-sm text-zinc-200 outline-none focus:border-white/30"
+                        value={descriptionZh}
+                        onChange={(e) => setDescriptionZh(e.target.value)}
+                        onBlur={() => {
+                          if (autoTranslateEnabled && descriptionZh.trim() && (!description || !descriptionEn)) {
+                            handleAutoTranslate("vi", true);
+                          }
+                        }}
+                        placeholder="中文游戏背景故事及玩法介绍..."
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Tabbed View */
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] space-y-4">
+                  {activeLangTab === "vi" && (
+                    <div className="space-y-4 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                        <span className="text-xs font-semibold text-zinc-200">Tiếng Việt (Bản gốc)</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs text-zinc-400 font-medium">Tên game (Title)</label>
+                          <span className="text-[10px] text-zinc-500 italic">Giữ nguyên gốc</span>
+                        </div>
+                        <Input
+                          required
+                          value={title}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTitle(val);
+                            if (!titleEn || titleEn === title) setTitleEn(val);
+                            if (!titleZh || titleZh === title) setTitleZh(val);
+                            if (isCreating) {
+                              setSlug(generateSlug(val));
+                            }
+                          }}
+                          placeholder="Ví dụ: Survival On Earth"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs text-zinc-400 font-medium">Mô tả ngắn</label>
+                        <Input
+                          value={shortDescription}
+                          onChange={(e) => setShortDescription(e.target.value)}
+                          onBlur={() => {
+                            if (autoTranslateEnabled && shortDescription.trim() && (!shortDescriptionEn || !shortDescriptionZh)) {
+                              handleAutoTranslate("vi", true);
+                            }
+                          }}
+                          placeholder="Mô tả tóm tắt hiển thị trên card..."
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs text-zinc-400 font-medium">Mô tả chi tiết</label>
+                        <textarea
+                          required
+                          className="w-full h-36 rounded-lg border border-white/10 bg-zinc-950 p-3 text-sm text-zinc-200 outline-none focus:border-white/30"
+                          value={description}
+                          onChange={(e) => setDescription(e.target.value)}
+                          onBlur={() => {
+                            if (autoTranslateEnabled && description.trim() && (!descriptionEn || !descriptionZh)) {
+                              handleAutoTranslate("vi", true);
+                            }
+                          }}
+                          placeholder="Mô tả chi tiết về thế giới game, cốt truyện..."
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {activeLangTab === "en" && (
+                    <div className="space-y-4 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                        <span className="text-xs font-semibold text-zinc-200">English (EN)</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs text-zinc-400 font-medium">Title (EN)</label>
+                          <span className="text-[10px] text-zinc-500 italic">Same brand name</span>
+                        </div>
+                        <Input
+                          value={titleEn}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTitleEn(val);
+                            if (!title) setTitle(val);
+                            if (!titleZh) setTitleZh(val);
+                          }}
+                          placeholder="English game title..."
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs text-zinc-400 font-medium">Short Description (EN)</label>
+                        <Input
+                          value={shortDescriptionEn}
+                          onChange={(e) => setShortDescriptionEn(e.target.value)}
+                          onBlur={() => {
+                            if (autoTranslateEnabled && shortDescriptionEn.trim() && (!shortDescription || !shortDescriptionZh)) {
+                              handleAutoTranslate("vi", true);
+                            }
+                          }}
+                          placeholder="Summary in English..."
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs text-zinc-400 font-medium">Description (EN)</label>
+                        <textarea
+                          className="w-full h-36 rounded-lg border border-white/10 bg-zinc-950 p-3 text-sm text-zinc-200 outline-none focus:border-white/30"
+                          value={descriptionEn}
+                          onChange={(e) => setDescriptionEn(e.target.value)}
+                          onBlur={() => {
+                            if (autoTranslateEnabled && descriptionEn.trim() && (!description || !descriptionZh)) {
+                              handleAutoTranslate("vi", true);
+                            }
+                          }}
+                          placeholder="Full narrative in English..."
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {activeLangTab === "zh" && (
+                    <div className="space-y-4 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+                        <span className="text-xs font-semibold text-zinc-200">中文 (ZH)</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs text-zinc-400">游戏名称 (Title ZH)</label>
+                          <span className="text-[10px] text-zinc-500 italic">保持原名称</span>
+                        </div>
+                        <Input
+                          value={titleZh}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTitleZh(val);
+                            if (!title) setTitle(val);
+                            if (!titleEn) setTitleEn(val);
+                          }}
+                          placeholder="保持游戏原英文名，如：Survival On Earth"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs text-zinc-400">简短描述 (Short Description ZH)</label>
+                        <Input
+                          value={shortDescriptionZh}
+                          onChange={(e) => setShortDescriptionZh(e.target.value)}
+                          onBlur={() => {
+                            if (autoTranslateEnabled && shortDescriptionZh.trim() && (!shortDescription || !shortDescriptionEn)) {
+                              handleAutoTranslate("zh", true);
+                            }
+                          }}
+                          placeholder="中文简短描述..."
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-xs text-zinc-400">详细描述 (Description ZH)</label>
+                        <textarea
+                          className="w-full h-36 rounded-lg border border-white/10 bg-zinc-950 p-3 text-sm text-zinc-300 outline-none focus:border-emerald-500"
+                          value={descriptionZh}
+                          onChange={(e) => setDescriptionZh(e.target.value)}
+                          onBlur={() => {
+                            if (autoTranslateEnabled && descriptionZh.trim() && (!description || !descriptionEn)) {
+                              handleAutoTranslate("zh", true);
+                            }
+                          }}
+                          placeholder="详细中文游戏介绍..."
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {/* General Metadata */}
-            <div className="grid gap-4 md:grid-cols-2">
+            {/* General Metadata - Game Slug */}
+            <div className="p-5 bg-zinc-950/60 rounded-2xl border border-white/5">
               <div className="space-y-2">
-                <label className="text-xs text-zinc-400">Game Slug (Unique Path)</label>
-                <Input required value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="grand-theft-auto-v" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs text-zinc-400">Trạng thái (Status)</label>
-                <select className="w-full rounded-md border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-300" value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="Draft">Draft</option>
-                  <option value="Published">Published</option>
-                  <option value="Archived">Archived</option>
-                </select>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                    <span>Đường dẫn URL (Game Slug)</span>
+                    <span className="text-zinc-500">*</span>
+                  </label>
+                  <span className="text-[11px] text-zinc-500">Tự động sinh từ tên game, có thể tùy chỉnh</span>
+                </div>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-xs text-zinc-500 font-mono">
+                    /game/
+                  </div>
+                  <Input
+                    required
+                    value={slug}
+                    onChange={(e) => setSlug(generateSlug(e.target.value))}
+                    placeholder="survival-on-earth"
+                    className="pl-16 font-mono text-xs"
+                  />
+                </div>
               </div>
             </div>
 
             {/* Category Selection */}
             <div className="space-y-2">
-              <label className="text-sm text-zinc-400 font-semibold">{locale === "vi" ? "Chọn thể loại (Categories)" : "Select Categories"}</label>
+              <label className="text-sm text-zinc-300 font-semibold">Chọn thể loại trò chơi</label>
               <div className="flex flex-wrap gap-2">
                 {(categories ?? []).map((cat: any) => {
                   const selected = selectedCategoryIds.includes(cat.id);
@@ -720,7 +1491,7 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
                       key={cat.id}
                       type="button"
                       onClick={() => toggleCategory(cat.id)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${selected
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition cursor-pointer ${selected
                         ? "bg-violet-600 border-violet-500 text-white"
                         : "border-white/5 bg-zinc-950 text-zinc-400 hover:text-white"
                         }`}
@@ -735,20 +1506,20 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
             {/* Financials & Developer details */}
             <div className="grid gap-4 md:grid-cols-4">
               <div className="space-y-2">
-                <label className="text-xs text-zinc-400">Giá gốc (Price - VND)</label>
-                <Input type="number" value={price} onChange={(e) => setPrice(parseFloat(e.target.value))} />
+                <label className="text-xs text-zinc-400">Giá bán gốc (VNĐ)</label>
+                <Input type="number" value={price} onChange={(e) => setPrice(parseFloat(e.target.value))} placeholder="0" />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-zinc-400">Giá giảm (Discount Price - VND)</label>
-                <Input type="number" value={discountPrice ?? ""} onChange={(e) => setDiscountPrice(e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="Optional" />
+                <label className="text-xs text-zinc-400">Giá khuyến mãi (VNĐ - Tùy chọn)</label>
+                <Input type="number" value={discountPrice ?? ""} onChange={(e) => setDiscountPrice(e.target.value ? parseFloat(e.target.value) : undefined)} placeholder="Không có" />
               </div>
               <div className="space-y-2">
                 <label className="text-xs text-zinc-400">Nhà phát triển (Developer)</label>
-                <Input required value={developer} onChange={(e) => setDeveloper(e.target.value)} />
+                <Input required value={developer} onChange={(e) => setDeveloper(e.target.value)} placeholder="Tên studio hoặc cá nhân" />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-zinc-400">Nhà phát hành (Publisher)</label>
-                <Input value={publisher} onChange={(e) => setPublisher(e.target.value)} />
+                <label className="text-xs text-zinc-400">Nhà phát hành (Publisher - Tùy chọn)</label>
+                <Input value={publisher} onChange={(e) => setPublisher(e.target.value)} placeholder="Tên nhà phát hành" />
               </div>
             </div>
 
@@ -759,53 +1530,52 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
                 <Input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="[color-scheme:dark]" />
               </div>
               <div className="space-y-2">
-                <label className="text-xs text-zinc-400">Tuổi tối thiểu (Min Age)</label>
-                <Input type="number" value={minAge} onChange={(e) => setMinAge(parseInt(e.target.value))} />
+                <label className="text-xs text-zinc-400">Độ tuổi tối thiểu (Tuổi)</label>
+                <Input type="number" value={minAge} onChange={(e) => setMinAge(parseInt(e.target.value))} placeholder="0" />
               </div>
-              <div className="flex flex-col gap-1 pt-8">
+              <div className="flex flex-col gap-1 pt-6">
                 <div className="flex items-center gap-2">
-                  <input id="isFeatured" type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} className="size-4 rounded text-violet-600 bg-zinc-950 border-white/10" />
-                  <label htmlFor="isFeatured" className="text-sm text-zinc-400 select-none cursor-pointer">Game nổi bật (Featured)</label>
+                  <input id="isFeatured" type="checkbox" checked={isFeatured} onChange={(e) => setIsFeatured(e.target.checked)} className="size-4 rounded text-violet-600 bg-zinc-950 border-white/10 cursor-pointer" />
+                  <label htmlFor="isFeatured" className="text-sm text-zinc-300 select-none cursor-pointer">Đánh dấu là Game Nổi Bật (Featured)</label>
                 </div>
                 {isFeatured && status !== "Published" && (
-                  <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
-                    <Info className="size-3" /> Game phải ở trạng thái <strong>Published</strong> để hiển thị nổi bật.
+                  <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
+                    Trò chơi cần ở trạng thái Đã phát hành (Published) để hiển thị tại mục nổi bật.
                   </p>
                 )}
               </div>
-
             </div>
 
             {/* System Requirements */}
             <div className="p-4 bg-zinc-950/40 rounded-2xl border border-white/5 space-y-4">
-              <h3 className="font-semibold text-violet-400 text-sm">System Requirements</h3>
+              <h3 className="font-semibold text-violet-400 text-sm">Yêu Cầu Cấu Hình Hệ Thống (Khuyến nghị)</h3>
               <div className="grid gap-4 md:grid-cols-5">
                 <div className="space-y-2">
-                  <label className="text-xs text-zinc-400">OS</label>
-                  <Input value={os} onChange={(e) => setOs(e.target.value)} placeholder="Windows 10" />
+                  <label className="text-xs text-zinc-400">Hệ điều hành (OS)</label>
+                  <Input value={os} onChange={(e) => setOs(e.target.value)} placeholder="Windows 10 / 11" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-zinc-400">CPU</label>
-                  <Input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="Intel i5" />
+                  <label className="text-xs text-zinc-400">Vi xử lý (CPU)</label>
+                  <Input value={cpu} onChange={(e) => setCpu(e.target.value)} placeholder="Intel Core i5 / AMD Ryzen 5" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-zinc-400">RAM (GB)</label>
+                  <label className="text-xs text-zinc-400">Bộ nhớ RAM (GB)</label>
                   <Input type="number" value={ram} onChange={(e) => setRam(e.target.value)} placeholder="8" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-zinc-400">GPU</label>
+                  <label className="text-xs text-zinc-400">Card đồ họa (GPU)</label>
                   <Input value={gpu} onChange={(e) => setGpu(e.target.value)} placeholder="NVIDIA GTX 1060" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs text-zinc-400">Storage (GB)</label>
-                  <Input type="number" value={storage} onChange={(e) => setStorage(e.target.value)} placeholder="50" />
+                  <label className="text-xs text-zinc-400">Ổ cứng trống (GB)</label>
+                  <Input type="number" value={storage} onChange={(e) => setStorage(e.target.value)} placeholder="20" />
                 </div>
               </div>
             </div>
 
             {/* Tags Selection */}
             <div className="space-y-2">
-              <label className="text-sm text-zinc-400 font-semibold">Chọn nhãn (Tags)</label>
+              <label className="text-sm text-zinc-300 font-semibold">Chọn nhãn đính kèm (Tags)</label>
               <div className="flex flex-wrap gap-2">
                 {(tagsList ?? []).map((tag: any) => {
                   const selected = selectedTagIds.includes(tag.id);
@@ -814,7 +1584,7 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
                       key={tag.id}
                       type="button"
                       onClick={() => toggleTag(tag.id)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${selected
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition cursor-pointer ${selected
                         ? "bg-violet-600 border-violet-500 text-white"
                         : "border-white/5 bg-zinc-950 text-zinc-400 hover:text-white"
                         }`}
@@ -826,190 +1596,596 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-              <Button type="button" variant="outline" onClick={() => { setIsCreating(false); setEditingGame(null); }}>
-                Cancel
-              </Button>
-              <Button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white gap-2 font-medium">
-                <Save className="size-4" />
-                {locale === "vi" ? "Lưu thông tin" : "Save Game Details"}
-              </Button>
+            {/* Game Assets Section */}
+            <div className="space-y-4 p-5 bg-[#0C1019] rounded-2xl border border-white/[0.08]">
+              <div>
+                <h4 className="text-sm font-semibold text-zinc-100 tracking-tight">
+                  Tệp tài nguyên game
+                </h4>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Đính kèm tệp để tự động tải lên Google Drive ngay khi tạo hoặc lưu trò chơi. Xóa tệp sẽ đồng thời gỡ khỏi máy chủ và đám mây.
+                </p>
+              </div>
+
+              <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+                {/* 1. Cover Image */}
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.08] hover:border-white/[0.14] transition space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-200">Ảnh bìa chính</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">JPG, PNG, WebP</span>
+                    </div>
+
+                    {/* Existing Cover Image Preview */}
+                    {editingGame?.hasCover && editingGame?.coverUrl ? (
+                      <div className="flex items-center justify-between gap-2.5 p-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <img
+                            src={resolveImageUrl(editingGame.coverUrl)}
+                            alt={editingGame.title || "Ảnh bìa"}
+                            className="size-9 rounded-md object-cover border border-white/10 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <span className="text-[11px] font-medium text-emerald-400 block truncate">Đã có ảnh bìa</span>
+                            <span className="text-[10px] text-zinc-500 block truncate">Google Drive</span>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAsset(editingGame.id, "cover")}
+                          className="text-[11px] font-medium text-red-400 hover:text-red-300 hover:underline shrink-0 cursor-pointer"
+                        >
+                          Gỡ bỏ
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="py-1 text-[11px] text-zinc-500">
+                        Chưa có ảnh bìa
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-white/[0.06]">
+                    <span className="text-[10px] text-zinc-400 block mb-1.5">
+                      {editingGame?.hasCover ? "Tải lên ảnh mới để thay thế:" : "Chọn ảnh từ máy tính:"}
+                    </span>
+                    <DropzoneFileInput
+                      accept="image/*"
+                      files={newGameAssets.cover}
+                      formatHint="PNG, JPG, WebP"
+                      onSelect={(files) => setNewGameAssets(prev => ({ ...prev, cover: files?.[0] || null }))}
+                      onClear={() => setNewGameAssets(prev => ({ ...prev, cover: null }))}
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Trailer Video */}
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.08] hover:border-white/[0.14] transition space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-200">Video trailer</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">MP4, WebM</span>
+                    </div>
+
+                    {/* Existing Trailer Video Info */}
+                    {editingGame?.hasTrailer ? (
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-medium text-emerald-400 block truncate">Đã có video trailer</span>
+                          <span className="text-[10px] text-zinc-500 block truncate">Google Drive</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAsset(editingGame.id, "trailer")}
+                          className="text-[11px] font-medium text-red-400 hover:text-red-300 hover:underline shrink-0 cursor-pointer"
+                        >
+                          Gỡ bỏ
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="py-1 text-[11px] text-zinc-500">
+                        Chưa có trailer
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-white/[0.06]">
+                    <span className="text-[10px] text-zinc-400 block mb-1.5">
+                      {editingGame?.hasTrailer ? "Tải lên trailer mới để thay thế:" : "Chọn tệp từ máy tính:"}
+                    </span>
+                    <DropzoneFileInput
+                      accept="video/mp4,video/webm"
+                      files={newGameAssets.trailer}
+                      formatHint="MP4, WebM (H.264)"
+                      onSelect={(files) => setNewGameAssets(prev => ({ ...prev, trailer: files?.[0] || null }))}
+                      onClear={() => setNewGameAssets(prev => ({ ...prev, trailer: null }))}
+                    />
+                  </div>
+                </div>
+
+                {/* 3. WebGL Demo */}
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.08] hover:border-white/[0.14] transition space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-200">Bản chơi thử WebGL</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">ZIP build</span>
+                    </div>
+
+                    {/* Existing Demo Build Info */}
+                    {editingGame?.hasDemo ? (
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-medium text-emerald-400 block truncate">Build WebGL sẵn sàng</span>
+                          <span className="text-[10px] text-zinc-500 block truncate">Chơi thử trên web</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAsset(editingGame.id, "demo")}
+                          className="text-[11px] font-medium text-red-400 hover:text-red-300 hover:underline shrink-0 cursor-pointer"
+                        >
+                          Gỡ bỏ
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="py-1 text-[11px] text-zinc-500">
+                        Chưa có bản demo
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-white/[0.06]">
+                    <span className="text-[10px] text-zinc-400 block mb-1.5">
+                      {editingGame?.hasDemo ? "Tải lên build .zip mới để cập nhật:" : "Chọn tệp .zip từ máy tính:"}
+                    </span>
+                    <DropzoneFileInput
+                      accept=".zip,application/zip"
+                      files={newGameAssets.demo}
+                      formatHint="ZIP build chứa index.html"
+                      onSelect={(files) => setNewGameAssets(prev => ({ ...prev, demo: files?.[0] || null }))}
+                      onClear={() => setNewGameAssets(prev => ({ ...prev, demo: null }))}
+                    />
+                  </div>
+                </div>
+
+                {/* 4. Installer Package */}
+                <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.08] hover:border-white/[0.14] transition space-y-3 flex flex-col justify-between">
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-zinc-200">Gói cài đặt game</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">EXE, ZIP</span>
+                    </div>
+
+                    {/* Existing Installer Info */}
+                    {editingGame?.hasFile ? (
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-white/[0.03] border border-white/[0.06]">
+                        <div className="min-w-0">
+                          <span className="text-[11px] font-medium text-emerald-400 block truncate">Đã có gói cài đặt</span>
+                          <span className="text-[10px] text-zinc-500 block truncate">Google Drive</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAsset(editingGame.id, "installer")}
+                          className="text-[11px] font-medium text-red-400 hover:text-red-300 hover:underline shrink-0 cursor-pointer"
+                        >
+                          Gỡ bỏ
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="py-1 text-[11px] text-zinc-500">
+                        Chưa có gói cài đặt
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="pt-2 border-t border-white/[0.06]">
+                    <span className="text-[10px] text-zinc-400 block mb-1.5">
+                      {editingGame?.hasFile ? "Tải lên bộ cài mới để thay thế:" : "Chọn tệp từ máy tính:"}
+                    </span>
+                    <DropzoneFileInput
+                      accept=".zip,.exe,.rar,.7z"
+                      files={newGameAssets.installer}
+                      formatHint="EXE, ZIP, RAR, 7Z"
+                      onSelect={(files) => setNewGameAssets(prev => ({ ...prev, installer: files?.[0] || null }))}
+                      onClear={() => setNewGameAssets(prev => ({ ...prev, installer: null }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 5. Steam-Style Gameplay Screenshots Gallery */}
+              <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] space-y-3 pt-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/[0.06] pb-2.5">
+                  <div>
+                    <h5 className="text-xs font-semibold text-zinc-200">
+                      Bộ sưu tập ảnh Gameplay (Steam Gallery)
+                    </h5>
+                    <p className="text-[11px] text-zinc-500">
+                      Hiển thị trong thanh trình chiếu ảnh khi người chơi xem chi tiết trò chơi. Bấm xem từng ảnh dạng carousel.
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-400 px-2 py-0.5 rounded bg-white/[0.04] self-start sm:self-auto">
+                    {editingGame?.screenshots?.length || 0} ảnh hiện có
+                  </span>
+                </div>
+
+                {/* Existing Screenshots Grid */}
+                {editingGame?.screenshots && editingGame.screenshots.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5 pt-1">
+                    {editingGame.screenshots.map((s: any, idx: number) => (
+                      <div
+                        key={s.id || idx}
+                        className="group relative aspect-video rounded-lg overflow-hidden border border-white/[0.08] bg-[#0E131E]"
+                      >
+                        <img
+                          src={resolveImageUrl(s.url)}
+                          alt={`Gameplay ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-1">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAsset(editingGame.id, "screenshot", s.id)}
+                            className="px-2 py-1 rounded text-[10px] font-medium bg-red-600/90 hover:bg-red-600 text-white cursor-pointer transition shadow-md"
+                          >
+                            Gỡ ảnh
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add new screenshots dropzone */}
+                <div className="pt-2">
+                  <span className="text-[10px] text-zinc-400 block mb-1.5">
+                    Thêm ảnh chụp màn hình gameplay mới (có thể chọn nhiều ảnh cùng lúc):
+                  </span>
+                  <DropzoneFileInput
+                    accept="image/*"
+                    multiple={true}
+                    files={newGameAssets.screenshots}
+                    label="Nhấp hoặc kéo thả nhiều ảnh gameplay vào đây"
+                    formatHint="PNG, JPG, WebP"
+                    onSelect={(files) => {
+                      if (!files) return;
+                      const arr = Array.from(files);
+                      setNewGameAssets(prev => ({
+                        ...prev,
+                        screenshots: [...prev.screenshots, ...arr],
+                      }));
+                    }}
+                    onClear={() => setNewGameAssets(prev => ({ ...prev, screenshots: [] }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-4 border-t border-white/[0.06]">
+              <button
+                type="button"
+                onClick={() => { setIsCreating(false); setEditingGame(null); }}
+                disabled={isSubmittingGame}
+                className="px-4 py-2 rounded-xl text-xs font-medium text-zinc-300 hover:text-white bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] transition active:scale-[0.98] cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmittingGame}
+                className="px-5 py-2 rounded-xl text-xs font-medium text-white bg-violet-600 hover:bg-violet-500 shadow-sm transition active:scale-[0.98] disabled:opacity-50 flex items-center gap-2 cursor-pointer"
+              >
+                {isSubmittingGame ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin text-white" />
+                    <span>{submittingProgress || "Đang xử lý..."}</span>
+                  </>
+                ) : (
+                  <span>{isCreating ? "Tạo trò chơi & Tải tài nguyên" : "Lưu thông tin trò chơi"}</span>
+                )}
+              </button>
             </div>
 
           </form>
         </Card>
       )}
 
-      {/* Asset Upload Drawer/Modal */}
+      {/* Dedicated Asset Upload Manager - macOS Media Inspector */}
       {selectedGameForUpload && (
-        <Card className="p-6 bg-zinc-900/40 border-violet-500/20 backdrop-blur">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-xl font-bold text-white">Upload Assets</h2>
-            <Button
+        <Card className="p-6 bg-[#0E121B] border border-white/[0.08] backdrop-blur-xl shadow-2xl space-y-6 rounded-2xl">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.06] pb-5">
+            <div>
+              <h2 className="text-lg font-semibold tracking-tight text-white">
+                Quản lý tài nguyên game
+              </h2>
+              <p className="text-xs text-zinc-400 mt-1">
+                Tải lên và đồng bộ từng tệp lưu trữ trên Google Drive cho tựa game:{" "}
+                <span className="font-medium text-white">{selectedGameForUpload.title}</span>
+              </p>
+            </div>
+            <button
               type="button"
-              variant="outline"
-              size="sm"
               onClick={() => setSelectedGameForUpload(null)}
-              className="border-white/10 hover:bg-white/10 text-zinc-300 gap-1.5"
+              className="self-start sm:self-auto px-4 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:text-white bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] transition active:scale-[0.98] cursor-pointer"
             >
-              <ArrowLeft className="size-4" />
-              {locale === "vi" ? "Quay lại danh sách" : "Back to list"}
-            </Button>
+              Hoàn tất
+            </button>
           </div>
-          <p className="text-xs text-zinc-500 mb-6">Linking files to game: <span className="font-semibold text-violet-400">{selectedGameForUpload.title}</span></p>
-          <form onSubmit={handleAssetUpload} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-xs text-zinc-400">
-                  {locale === "vi" ? "Loại tệp đính kèm" : "Asset Type"}
-                </label>
-                <select className="w-full rounded-md border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-300 cursor-pointer" value={fileType} onChange={(e) => setFileType(e.target.value)}>
-                  <option value="installer">{locale === "vi" ? "File cài đặt game (.zip / .exe) (installer)" : "Actual Game Installer (zip/exe)"}</option>
-                  <option value="demo">{locale === "vi" ? "Bản chơi thử Unity WebGL (.zip) (demo)" : "Unity WebGL Demo (zip / index.html)"}</option>
-                  <option value="image">{locale === "vi" ? "Ảnh bìa / Poster Game (.png / .jpg) (image)" : "Cover Image / Artwork"}</option>
-                  <option value="trailer">{locale === "vi" ? "Video Trailer (.mp4) (trailer)" : "Trailer video (.mp4)"}</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs text-zinc-400">Select File</label>
-                <Input type="file" required onChange={(e) => onFileSelected(e.target.files?.[0] ?? null)} />
-              </div>
-            </div>
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setSelectedGameForUpload(null)}>
-                {locale === "vi" ? "Hủy" : "Cancel"}
-              </Button>
-              <Button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white gap-2" disabled={uploading}>
-                <Upload className="size-4" />
-                {uploading ? (locale === "vi" ? "Đang tải lên..." : "Uploading...") : (locale === "vi" ? "Tải lên tệp" : "Upload File")}
-              </Button>
-            </div>
-          </form>
 
-          {/* Current Assets Status & Deletion */}
-          <div className="border-t border-white/5 pt-6 mt-8">
-            <h3 className="text-sm font-semibold text-zinc-300 mb-4">
-              {locale === "vi" ? "Quản lý tệp hiện tại của game" : "Current Assets Management"}
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {/* Cover Image */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/40 border border-white/5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-400 font-medium">{locale === "vi" ? "Ảnh bìa:" : "Cover Image:"}</span>
-                  {selectedGameForUpload.hasCover ? (
-                    <span className="text-xs text-green-400 font-semibold">{locale === "vi" ? "Đã úp" : "Available"}</span>
-                  ) : (
-                    <span className="text-xs text-zinc-500">{locale === "vi" ? "Chưa có" : "Not available"}</span>
-                  )}
+          {/* 4 Separate Asset Upload Cards */}
+          <div className="grid gap-4 md:grid-cols-2">
+            
+            {/* 1. Cover Image */}
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] flex flex-col justify-between space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h4 className="text-xs font-semibold text-zinc-200">Ảnh bìa</h4>
+                    <p className="text-[11px] text-zinc-500 font-mono">JPG, PNG, WebP</p>
+                  </div>
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${
+                    selectedGameForUpload.hasCover
+                      ? "bg-white/[0.08] text-white/90 border border-white/[0.12]"
+                      : "text-zinc-600 bg-white/[0.02] border border-white/[0.04]"
+                  }`}>
+                    {selectedGameForUpload.hasCover ? "Đã có tệp" : "Chưa có"}
+                  </span>
                 </div>
-                {selectedGameForUpload.hasCover && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => handleRemoveAsset(selectedGameForUpload.id, "cover")}
-                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 h-8 w-8 rounded-lg transition"
-                    title="Delete Cover Image"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+
+                {selectedGameForUpload.hasCover && selectedGameForUpload.coverUrl && (
+                  <div className="relative w-full h-28 rounded-lg overflow-hidden border border-white/[0.08] my-2 group">
+                    <img
+                      src={resolveImageUrl(selectedGameForUpload.coverUrl)}
+                      alt="Cover preview"
+                      className="size-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveAsset(selectedGameForUpload.id, "cover")}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium text-red-300 hover:text-white bg-red-500/20 hover:bg-red-500/40 border border-red-500/30 transition cursor-pointer"
+                      >
+                        Gỡ bỏ ảnh bìa
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {/* Trailer */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/40 border border-white/5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-400 font-medium">Trailer Video:</span>
-                  {selectedGameForUpload.hasTrailer ? (
-                    <span className="text-xs text-green-400 font-semibold">{locale === "vi" ? "Đã úp" : "Available"}</span>
+              <div className="space-y-2 pt-3 border-t border-white/[0.06]">
+                <DropzoneFileInput
+                  accept="image/png,image/jpeg,image/webp"
+                  files={assetFiles.image}
+                  formatHint="PNG, JPG, WebP"
+                  onSelect={(files) => setAssetFiles(prev => ({ ...prev, image: files?.[0] ?? null }))}
+                  onClear={() => setAssetFiles(prev => ({ ...prev, image: null }))}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleUploadSingleAsset("image")}
+                  disabled={uploadingType === "image" || !assetFiles.image}
+                  className="w-full py-2 rounded-xl text-xs font-medium text-white bg-white/[0.1] hover:bg-white/[0.15] disabled:opacity-40 disabled:hover:bg-white/[0.1] border border-white/[0.08] transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {uploadingType === "image" ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Đang tải ảnh lên...</span>
+                    </>
                   ) : (
-                    <span className="text-xs text-zinc-500">{locale === "vi" ? "Chưa có" : "Not available"}</span>
+                    <span>Tải lên ảnh bìa</span>
                   )}
+                </button>
+              </div>
+            </div>
+
+            {/* 2. Video Trailer */}
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] flex flex-col justify-between space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h4 className="text-xs font-semibold text-zinc-200">Video trailer</h4>
+                    <p className="text-[11px] text-zinc-500 font-mono">MP4, WebM</p>
+                  </div>
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${
+                    selectedGameForUpload.hasTrailer
+                      ? "bg-white/[0.08] text-white/90 border border-white/[0.12]"
+                      : "text-zinc-600 bg-white/[0.02] border border-white/[0.04]"
+                  }`}>
+                    {selectedGameForUpload.hasTrailer ? "Đã có tệp" : "Chưa có"}
+                  </span>
                 </div>
+
                 {selectedGameForUpload.hasTrailer && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => handleRemoveAsset(selectedGameForUpload.id, "trailer")}
-                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 h-8 w-8 rounded-lg transition"
-                    title="Delete Trailer"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] my-2">
+                    <span className="text-xs text-zinc-300">
+                      Video trailer đã sẵn sàng
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAsset(selectedGameForUpload.id, "trailer")}
+                      className="text-xs font-medium text-red-400 hover:text-red-300 px-2 py-1 rounded transition cursor-pointer"
+                    >
+                      Gỡ bỏ
+                    </button>
+                  </div>
                 )}
               </div>
 
-              {/* WebGL Demo */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/40 border border-white/5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-400 font-medium">WebGL Demo:</span>
-                  {selectedGameForUpload.hasDemo ? (
-                    <span className="text-xs text-green-400 font-semibold">{locale === "vi" ? "Đã úp" : "Available"}</span>
+              <div className="space-y-2 pt-3 border-t border-white/[0.06]">
+                <DropzoneFileInput
+                  accept="video/mp4,video/webm"
+                  files={assetFiles.trailer}
+                  formatHint="MP4, WebM"
+                  onSelect={(files) => setAssetFiles(prev => ({ ...prev, trailer: files?.[0] ?? null }))}
+                  onClear={() => setAssetFiles(prev => ({ ...prev, trailer: null }))}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleUploadSingleAsset("trailer")}
+                  disabled={uploadingType === "trailer" || !assetFiles.trailer}
+                  className="w-full py-2 rounded-xl text-xs font-medium text-white bg-white/[0.1] hover:bg-white/[0.15] disabled:opacity-40 disabled:hover:bg-white/[0.1] border border-white/[0.08] transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {uploadingType === "trailer" ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Đang tải video lên...</span>
+                    </>
                   ) : (
-                    <span className="text-xs text-zinc-500">{locale === "vi" ? "Chưa có" : "Not available"}</span>
+                    <span>Tải lên trailer</span>
                   )}
-                </div>
-                {selectedGameForUpload.hasDemo && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => handleRemoveAsset(selectedGameForUpload.id, "demo")}
-                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 h-8 w-8 rounded-lg transition"
-                    title="Delete WebGL Demo"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                )}
-              </div>
-
-              {/* Game installer file */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-950/40 border border-white/5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-zinc-400 font-medium">{locale === "vi" ? "File cài đặt:" : "Installer File:"}</span>
-                  {selectedGameForUpload.hasFile ? (
-                    <span className="text-xs text-green-400 font-semibold">{locale === "vi" ? "Đã úp" : "Available"}</span>
-                  ) : (
-                    <span className="text-xs text-zinc-500">{locale === "vi" ? "Chưa có" : "Not available"}</span>
-                  )}
-                </div>
-                {selectedGameForUpload.hasFile && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => handleRemoveAsset(selectedGameForUpload.id, "installer")}
-                    className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 h-8 w-8 rounded-lg transition"
-                    title="Delete Game Installer"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                )}
+                </button>
               </div>
             </div>
+
+            {/* 3. Unity WebGL Demo */}
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] flex flex-col justify-between space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h4 className="text-xs font-semibold text-zinc-200">Bản chơi thử WebGL</h4>
+                    <p className="text-[11px] text-zinc-500 font-mono">ZIP (chứa build WebGL có index.html)</p>
+                  </div>
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${
+                    selectedGameForUpload.hasDemo
+                      ? "bg-white/[0.08] text-white/90 border border-white/[0.12]"
+                      : "text-zinc-600 bg-white/[0.02] border border-white/[0.04]"
+                  }`}>
+                    {selectedGameForUpload.hasDemo ? "Đã có tệp" : "Chưa có"}
+                  </span>
+                </div>
+
+                {selectedGameForUpload.hasDemo && (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] my-2">
+                    <span className="text-xs text-zinc-300">
+                      WebGL Demo sẵn sàng để chơi thử
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAsset(selectedGameForUpload.id, "demo")}
+                      className="text-xs font-medium text-red-400 hover:text-red-300 px-2 py-1 rounded transition cursor-pointer"
+                    >
+                      Gỡ bỏ
+                    </button>
+                  </div>
+                )}
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  Hệ thống tự động giải nén file .zip và cấu hình để khách hàng chơi thử ngay trên trình duyệt.
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-3 border-t border-white/[0.06]">
+                <DropzoneFileInput
+                  accept=".zip"
+                  files={assetFiles.demo}
+                  formatHint="ZIP build WebGL"
+                  onSelect={(files) => setAssetFiles(prev => ({ ...prev, demo: files?.[0] ?? null }))}
+                  onClear={() => setAssetFiles(prev => ({ ...prev, demo: null }))}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleUploadSingleAsset("demo")}
+                  disabled={uploadingType === "demo" || !assetFiles.demo}
+                  className="w-full py-2 rounded-xl text-xs font-medium text-white bg-white/[0.1] hover:bg-white/[0.15] disabled:opacity-40 disabled:hover:bg-white/[0.1] border border-white/[0.08] transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {uploadingType === "demo" ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Đang tải và giải nén demo...</span>
+                    </>
+                  ) : (
+                    <span>Tải lên WebGL demo</span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* 4. Game Installer */}
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] flex flex-col justify-between space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <h4 className="text-xs font-semibold text-zinc-200">Gói cài đặt game</h4>
+                    <p className="text-[11px] text-zinc-500 font-mono">ZIP, EXE, RAR, 7Z, MSI</p>
+                  </div>
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${
+                    selectedGameForUpload.hasFile
+                      ? "bg-white/[0.08] text-white/90 border border-white/[0.12]"
+                      : "text-zinc-600 bg-white/[0.02] border border-white/[0.04]"
+                  }`}>
+                    {selectedGameForUpload.hasFile ? "Đã có tệp" : "Chưa có"}
+                  </span>
+                </div>
+
+                {selectedGameForUpload.hasFile && (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.03] border border-white/[0.06] my-2">
+                    <span className="text-xs text-zinc-300">
+                      Gói cài đặt đã sẵn sàng tải về
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveAsset(selectedGameForUpload.id, "installer")}
+                      className="text-xs font-medium text-red-400 hover:text-red-300 px-2 py-1 rounded transition cursor-pointer"
+                    >
+                      Gỡ bỏ
+                    </button>
+                  </div>
+                )}
+                <p className="text-[11px] text-zinc-400 mt-1">
+                  Khách hàng mua game thành công sẽ được mở khóa tải về tệp này trong Thư viện cá nhân.
+                </p>
+              </div>
+
+              <div className="space-y-2 pt-3 border-t border-white/[0.06]">
+                <DropzoneFileInput
+                  accept=".zip,.exe,.rar,.7z,.msi"
+                  files={assetFiles.installer}
+                  formatHint="EXE, ZIP, RAR, 7Z"
+                  onSelect={(files) => setAssetFiles(prev => ({ ...prev, installer: files?.[0] ?? null }))}
+                  onClear={() => setAssetFiles(prev => ({ ...prev, installer: null }))}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleUploadSingleAsset("installer")}
+                  disabled={uploadingType === "installer" || !assetFiles.installer}
+                  className="w-full py-2 rounded-xl text-xs font-medium text-white bg-white/[0.1] hover:bg-white/[0.15] disabled:opacity-40 disabled:hover:bg-white/[0.1] border border-white/[0.08] transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {uploadingType === "installer" ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Đang tải file cài đặt...</span>
+                    </>
+                  ) : (
+                    <span>Tải lên gói cài đặt</span>
+                  )}
+                </button>
+              </div>
+            </div>
+
           </div>
         </Card>
       )}
 
       {/* Games Table List */}
       {!isCreating && !editingGame && !selectedGameForUpload && (
-        <Card className="p-6 bg-zinc-900/40 border-white/5 backdrop-blur overflow-hidden">
-          <div className="w-full">
-            <table className="w-full text-left text-sm text-zinc-400">
+        <Card className="p-4 sm:p-6 bg-zinc-900/40 border-white/5 backdrop-blur">
+          <div className="w-full overflow-x-auto scrollbar-thin pb-2">
+            <table className="w-full min-w-[1020px] text-left text-sm text-zinc-400">
               <thead>
                 <tr className="border-b border-white/5 text-zinc-500 font-semibold">
-                  <th className="py-3 px-4">{locale === "vi" ? "Tên Game" : "Game Title"}</th>
-                  <th className="py-3 px-4 whitespace-nowrap">{locale === "vi" ? "Thể Loại" : "Category"}</th>
-                  <th className="py-3 px-4 whitespace-nowrap">{locale === "vi" ? "Giá" : "Price"}</th>
-                  <th className="py-3 px-4 whitespace-nowrap">{locale === "vi" ? "Lượt Tải" : "Downloads"}</th>
-                  <th className="py-3 px-4 whitespace-nowrap">{locale === "vi" ? "Chơi Thử" : "Demo Plays"}</th>
-                  <th className="py-3 px-4 whitespace-nowrap">{locale === "vi" ? "Theo Dõi" : "Wishlists"}</th>
-                  <th className="py-3 px-4 whitespace-nowrap">{locale === "vi" ? "Trạng Thái" : "Status"}</th>
-                  <th className="py-3 px-4 whitespace-nowrap">{locale === "vi" ? "Tệp Đính Kèm" : "Attached Assets"}</th>
-                  <th className="py-3 px-4 text-right whitespace-nowrap">{locale === "vi" ? "Hành Động" : "Actions"}</th>
+                  <th className="py-3 px-3 min-w-[220px]">Tên Trò Chơi</th>
+                  <th className="py-3 px-3 whitespace-nowrap">Thể Loại</th>
+                  <th className="py-3 px-3 whitespace-nowrap">Giá Bán</th>
+                  <th className="py-3 px-2 text-center whitespace-nowrap">Lượt Tải</th>
+                  <th className="py-3 px-2 text-center whitespace-nowrap">Chơi Thử</th>
+                  <th className="py-3 px-2 text-center whitespace-nowrap">Yêu Thích</th>
+                  <th className="py-3 px-3 whitespace-nowrap">Trạng Thái</th>
+                  <th className="py-3 px-3 whitespace-nowrap">Tài Nguyên</th>
+                  <th className="py-3 px-3 text-right whitespace-nowrap min-w-[140px]">Thao Tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 {games.map((g: any) => (
                   <tr key={g.id} className="hover:text-white transition group">
-                    <td className="py-4 px-4 font-semibold text-zinc-200">
+                    <td className="py-4 px-3 font-semibold text-zinc-200">
                       <div className="flex items-center gap-3">
                         {g.coverUrl ? (
                           <img
@@ -1022,108 +2198,85 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
                             <Gamepad2 className="size-5 text-zinc-600" />
                           </div>
                         )}
-                        <div className="flex flex-col min-w-[150px]">
-                          <span>{g.title}</span>
-                          <span className="text-xs text-zinc-500 font-mono font-light select-all">{g.id}</span>
+                        <div className="min-w-[140px] max-w-[220px]">
+                          <span className="font-semibold text-zinc-100 block truncate" title={g.title}>{g.title}</span>
                         </div>
                       </div>
                     </td>
-                    <td className="py-4 px-4 whitespace-nowrap">{g.categoryName || (locale === "vi" ? "Chưa phân loại" : "Uncategorized")}</td>
-                    <td className="py-4 px-4 font-medium text-violet-300 whitespace-nowrap">{formatPrice(g.price, g.currency)}</td>
-                    <td className="py-4 px-4">{g.downloadCount}</td>
-                    <td className="py-4 px-4">{g.demoPlayCount || 0}</td>
-                    <td className="py-4 px-4">{g.wishlistCount}</td>
-                    <td className="py-4 px-4 whitespace-nowrap">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${g.status === "Published" ? "bg-green-500/10 text-green-400 border-green-500/20" :
-                        g.status === "Draft" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
-                          "bg-zinc-800 text-zinc-400 border-zinc-700"
-                        }`}>
-                        {g.status}
-                      </span>
+                    <td className="py-4 px-3 whitespace-nowrap">{g.categoryName || "Chưa phân loại"}</td>
+                    <td className="py-4 px-3 font-medium text-violet-300 whitespace-nowrap">{formatPrice(g.price, g.currency)}</td>
+                    <td className="py-4 px-2 text-center">{g.downloadCount}</td>
+                    <td className="py-4 px-2 text-center">{g.demoPlayCount || 0}</td>
+                    <td className="py-4 px-2 text-center">{g.wishlistCount}</td>
+                    <td className="py-4 px-3 whitespace-nowrap">
+                      <select
+                        value={g.status || "Draft"}
+                        onChange={async (e) => {
+                          const newStatus = e.target.value;
+                          try {
+                            await api.patch(`/admin/games/${g.id}/status`, { status: newStatus });
+                            refetchGames();
+                          } catch (err: any) {
+                            alert("Lỗi khi cập nhật trạng thái: " + (err?.response?.data?.message || err?.message));
+                          }
+                        }}
+                        className={`text-xs font-medium px-3 py-1 rounded-full border outline-none cursor-pointer transition appearance-none text-center ${
+                          g.status === "Published"
+                            ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25 hover:border-emerald-500/40"
+                            : g.status === "Draft"
+                            ? "bg-amber-500/10 text-amber-400 border-amber-500/25 hover:border-amber-500/40"
+                            : "bg-white/[0.04] text-zinc-400 border-white/[0.08] hover:border-white/20"
+                        }`}
+                      >
+                        <option value="Draft" className="bg-[#18181b] text-amber-300">Bản nháp</option>
+                        <option value="Published" className="bg-[#18181b] text-emerald-300">Đã phát hành</option>
+                        <option value="Archived" className="bg-[#18181b] text-zinc-400">Lưu trữ</option>
+                      </select>
                     </td>
-                    <td className="py-4">
-                      <div className="flex flex-col gap-1.5 text-xs text-zinc-400">
-                        <div className="flex items-center gap-1.5">
-                          {g.hasCover ? (
-                            <span className="inline-flex items-center gap-1 text-green-400 font-medium">
-                              <CheckCircle2 className="size-3 text-green-400" />
-                              {locale === "vi" ? "Ảnh bìa" : "Cover"}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-zinc-500 font-light">
-                              <XCircle className="size-3 text-zinc-600" />
-                              {locale === "vi" ? "Ảnh bìa" : "Cover"}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {g.hasTrailer ? (
-                            <span className="inline-flex items-center gap-1 text-green-400 font-medium">
-                              <CheckCircle2 className="size-3 text-green-400" />
-                              Trailer
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-zinc-500 font-light">
-                              <XCircle className="size-3 text-zinc-600" />
-                              Trailer
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {g.hasDemo ? (
-                            <span className="inline-flex items-center gap-1 text-green-400 font-medium">
-                              <CheckCircle2 className="size-3 text-green-400" />
-                              Demo WebGL
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-zinc-500 font-light">
-                              <XCircle className="size-3 text-zinc-600" />
-                              Demo WebGL
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {g.hasFile ? (
-                            <span className="inline-flex items-center gap-1 text-green-400 font-medium">
-                              <CheckCircle2 className="size-3 text-green-400" />
-                              {locale === "vi" ? "Bản cài đặt" : "Installer"}
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-zinc-500 font-light">
-                              <XCircle className="size-3 text-zinc-600" />
-                              {locale === "vi" ? "Bản cài đặt" : "Installer"}
-                            </span>
-                          )}
-                        </div>
+                    <td className="py-4 px-3 whitespace-nowrap">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {[
+                          { label: "Bìa", active: g.hasCover },
+                          { label: "Trailer", active: g.hasTrailer },
+                          { label: "Demo", active: g.hasDemo },
+                          { label: "Bộ cài", active: g.hasFile },
+                        ].map((res) => (
+                          <span
+                            key={res.label}
+                            className={`text-[11px] font-medium px-2 py-0.5 rounded-md transition-colors ${
+                              res.active
+                                ? "bg-white/[0.08] text-white/90 border border-white/[0.12]"
+                                : "text-zinc-600 bg-white/[0.02] border border-white/[0.04]"
+                            }`}
+                          >
+                            {res.label}
+                          </span>
+                        ))}
                       </div>
                     </td>
-                    <td className="py-4 text-right">
-                      <div className="flex items-center justify-end gap-2 opacity-80 group-hover:opacity-100 transition">
+                    <td className="py-4 px-3 text-right whitespace-nowrap min-w-[150px]">
+                      <div className="flex items-center justify-end gap-1.5 opacity-90 group-hover:opacity-100 transition">
                         {g.status === "Published" ? (
                           <Link href={`/${locale}/game/${g.slug}`} target="_blank">
                             <Button
                               variant="ghost"
                               size="sm"
-                              title="View Game Page"
+                              title="Xem trang game ngoài Store"
                               className="hover:bg-emerald-500/10 hover:text-emerald-400 p-2"
                             >
                               <ExternalLink className="size-4" />
                             </Button>
                           </Link>
                         ) : (
-                          <Button variant="ghost" size="sm" className="p-2 opacity-30 cursor-not-allowed" disabled title="Only visible when Published">
+                          <Button variant="ghost" size="sm" className="p-2 opacity-30 cursor-not-allowed" disabled title="Chỉ xem được khi đã Published">
                             <ExternalLink className="size-4" />
                           </Button>
                         )}
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
-                            setSelectedGameForUpload(g);
-                            setFileType("installer");
-                            setSelectedFile(null);
-                          }}
-                          title="Upload Assets"
+                          onClick={() => setSelectedGameForUpload(g)}
+                          title="Tải lên tài nguyên (Ảnh bìa, Demo, Installer)"
                           className="hover:bg-violet-500/10 hover:text-violet-400 p-2"
                         >
                           <Upload className="size-4" />
@@ -1132,7 +2285,7 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
                           variant="ghost"
                           size="sm"
                           onClick={() => startEdit(g)}
-                          title="Edit Info"
+                          title="Chỉnh sửa thông tin"
                           className="hover:bg-violet-500/10 hover:text-violet-400 p-2"
                         >
                           <Edit className="size-4" />
@@ -1140,14 +2293,13 @@ function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteGame(g.id)}
-                          title="Archive Game"
+                          onClick={() => handleDeleteGame(g.id, g.title)}
+                          title="Xóa trò chơi"
                           className="hover:bg-red-500/10 hover:text-red-400 p-2"
                         >
                           <Trash2 className="size-4" />
                         </Button>
                       </div>
-
                     </td>
                   </tr>
                 ))}
@@ -1261,7 +2413,7 @@ function OrdersTab() {
     }
   };
 
-  if (isLoading) return <p className="text-zinc-500">Loading Orders...</p>;
+  if (isLoading) return <p className="text-zinc-500">Đang tải danh sách đơn hàng...</p>;
 
   const orders = ordersList ?? [];
 
@@ -1276,8 +2428,8 @@ function OrdersTab() {
     <div className="space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Purchase Orders</h1>
-          <p className="text-sm text-zinc-500 mt-1">Audit platform orders and transaction statuses.</p>
+          <h1 className="text-3xl font-bold text-white">Quản Lý Đơn Hàng</h1>
+          <p className="text-sm text-zinc-400 mt-1">Theo dõi toàn bộ đơn hàng, đối soát trạng thái giao dịch và phê duyệt yêu cầu hủy đơn.</p>
         </div>
 
         {/* Filters */}
@@ -1290,7 +2442,7 @@ function OrdersTab() {
                 : "bg-zinc-900/40 border-white/5 text-zinc-400 hover:text-white"
             }`}
           >
-            {locale === "vi" ? "Tất cả đơn" : "All Orders"}
+            Tất cả đơn hàng
           </button>
           <button
             onClick={() => setStatusFilter("normal")}
@@ -1300,7 +2452,7 @@ function OrdersTab() {
                 : "bg-zinc-900/40 border-white/5 text-zinc-400 hover:text-white"
             }`}
           >
-            {locale === "vi" ? "Đơn hàng bình thường" : "Normal Orders"}
+            Đơn hàng thông thường
           </button>
           <button
             onClick={() => setStatusFilter("cancellation")}
@@ -1310,7 +2462,7 @@ function OrdersTab() {
                 : "bg-zinc-900/40 border-white/5 text-zinc-400 hover:text-white"
             }`}
           >
-            {locale === "vi" ? "Đơn hàng cần xử lý hủy" : "Cancellation Requests"}
+            Đơn hàng chờ duyệt hủy
             {orders.some((o: any) => o.status === "CancellationPending") && (
               <span className="px-1.5 py-0.5 text-[10px] bg-amber-500 text-zinc-950 font-bold rounded-full animate-pulse">
                 {orders.filter((o: any) => o.status === "CancellationPending").length}
@@ -1325,13 +2477,13 @@ function OrdersTab() {
           <table className="w-full text-left text-sm text-zinc-400">
             <thead>
               <tr className="border-b border-white/5 text-zinc-500 font-semibold">
-                <th className="py-3">Order Code</th>
-                <th className="py-3">Buyer</th>
-                <th className="py-3">Purchased Items</th>
-                <th className="py-3">Total Paid</th>
-                <th className="py-3">Status</th>
-                <th className="py-3">Purchase Date</th>
-                <th className="py-3 text-right">Actions</th>
+                <th className="py-3 px-2">Mã Đơn Hàng</th>
+                <th className="py-3 px-2">Khách Hàng</th>
+                <th className="py-3 px-2">Trò Chơi Đã Mua</th>
+                <th className="py-3 px-2">Tổng Thanh Toán</th>
+                <th className="py-3 px-2">Trạng Thái</th>
+                <th className="py-3 px-2">Thời Gian Mua</th>
+                <th className="py-3 px-2 text-right">Thao Tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -1391,14 +2543,14 @@ function OrdersTab() {
                           {getStatusLabel(o.status)}
                         </span>
                         {o.status === "CancellationPending" && o.cancelReason && (
-                          <span className="text-[10px] text-amber-500/80 mt-1 max-w-[200px] leading-relaxed break-words font-medium">
-                            ⚠️ {locale === "vi" ? "Lý do: " : "Reason: "}{o.cancelReason}
+                          <span className="text-[10px] text-zinc-400 mt-1 max-w-[200px] leading-relaxed break-words font-medium">
+                            {locale === "vi" ? "Lý do: " : "Reason: "}{o.cancelReason}
                           </span>
                         )}
                         {o.status === "CancellationApproved" && (
-                          <div className="flex flex-col mt-1 max-w-[200px] gap-0.5 text-[10px] leading-relaxed break-words font-medium">
-                            {o.cancelReason && <span className="text-amber-500/85">⚠️ {locale === "vi" ? "Lý do: " : "Reason: "}{o.cancelReason}</span>}
-                            {o.adminNote && <span className="text-teal-500/85">💬 {locale === "vi" ? "Admin: " : "Admin: "}{o.adminNote}</span>}
+                          <div className="flex flex-col mt-1 max-w-[200px] gap-0.5 text-[10px] leading-relaxed break-words font-medium text-zinc-400">
+                            {o.cancelReason && <span>{locale === "vi" ? "Lý do: " : "Reason: "}{o.cancelReason}</span>}
+                            {o.adminNote && <span>Ghi chú: {o.adminNote}</span>}
                           </div>
                         )}
                       </div>
@@ -1700,15 +2852,15 @@ function UsersTab() {
     }
   };
 
-  if (isLoading) return <p className="text-zinc-500">Loading Users...</p>;
+  if (isLoading) return <p className="text-zinc-500">Đang tải danh sách người dùng...</p>;
 
   const users = usersList ?? [];
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-white">Platform Users</h1>
-        <p className="text-sm text-zinc-500 mt-1">Manage user access control and roles.</p>
+        <h1 className="text-3xl font-bold text-white">Quản Lý Người Dùng</h1>
+        <p className="text-sm text-zinc-400 mt-1">Quản lý danh sách thành viên, phân quyền và kiểm soát khóa tài khoản vi phạm.</p>
       </div>
 
       <Card className="p-6 bg-zinc-900/40 border-white/5 backdrop-blur overflow-hidden">
@@ -1716,13 +2868,13 @@ function UsersTab() {
           <table className="w-full text-left text-sm text-zinc-400">
             <thead>
               <tr className="border-b border-white/5 text-zinc-500 font-semibold">
-                <th className="py-3">Name</th>
-                <th className="py-3">Email</th>
-                <th className="py-3">{locale === "vi" ? "Ngày sinh" : "Date of Birth"}</th>
-                <th className="py-3">Roles</th>
-                <th className="py-3">Joined Date</th>
-                <th className="py-3">Status</th>
-                <th className="py-3 text-right">Action</th>
+                <th className="py-3 px-2">Họ và Tên</th>
+                <th className="py-3 px-2">Email</th>
+                <th className="py-3 px-2">Ngày Sinh</th>
+                <th className="py-3 px-2">Vai Trò</th>
+                <th className="py-3 px-2">Ngày Tham Gia</th>
+                <th className="py-3 px-2">Trạng Thái</th>
+                <th className="py-3 px-2 text-right">Thao Tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
@@ -1733,38 +2885,38 @@ function UsersTab() {
 
                 return (
                   <tr key={u.id} className="hover:text-white transition">
-                    <td className="py-4 font-semibold text-zinc-200">{u.fullName}</td>
-                    <td className="py-4">{u.email}</td>
-                    <td className="py-4 text-sm text-zinc-300">
+                    <td className="py-4 px-2 font-semibold text-zinc-200">{u.fullName}</td>
+                    <td className="py-4 px-2 font-mono text-zinc-300 select-all">{u.email}</td>
+                    <td className="py-4 px-2 text-sm text-zinc-300">
                       {u.dateOfBirth ? (() => {
                         const p = u.dateOfBirth.split("T")[0].split("-");
                         return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : u.dateOfBirth;
                       })() : "—"}
                     </td>
-                    <td className="py-4 text-xs font-mono text-zinc-400">{u.roles.join(", ")}</td>
-                    <td className="py-4 text-xs text-zinc-500">{formatDate(u.createdAt)}</td>
-                    <td className="py-4">
+                    <td className="py-4 px-2 text-xs font-mono text-zinc-400">{u.roles.join(", ")}</td>
+                    <td className="py-4 px-2 text-xs text-zinc-500">{formatDate(u.createdAt)}</td>
+                    <td className="py-4 px-2">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${badgeColor}`}>
-                        {u.isActive ? "Active" : "Blocked"}
+                        {u.isActive ? "Hoạt động" : "Đã khóa"}
                       </span>
                     </td>
-                    <td className="py-4 text-right flex items-center justify-end gap-2">
+                    <td className="py-4 px-2 text-right flex items-center justify-end gap-2">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleToggleActive(u.id, u.isActive, u.fullName)}
                         className={`p-2 transition ${u.isActive ? "hover:bg-red-500/10 hover:text-red-400" : "hover:bg-green-500/10 hover:text-green-400"}`}
-                        title={u.isActive ? "Block Account" : "Unblock Account"}
+                        title={u.isActive ? "Khóa tài khoản" : "Mở khóa tài khoản"}
                       >
                         {u.isActive ? (
                           <div className="flex items-center gap-1 text-red-400 text-xs">
                             <ToggleLeft className="size-5" />
-                            Block
+                            Khóa
                           </div>
                         ) : (
                           <div className="flex items-center gap-1 text-green-400 text-xs">
                             <ToggleRight className="size-5" />
-                            Activate
+                            Mở khóa
                           </div>
                         )}
                       </Button>
@@ -1773,11 +2925,11 @@ function UsersTab() {
                         size="sm"
                         onClick={() => handleDeleteUser(u.id, u.fullName)}
                         className="p-2 transition hover:bg-red-500/20 text-red-500 hover:text-red-400"
-                        title={locale === "vi" ? "Xóa người dùng" : "Delete User"}
+                        title="Xóa người dùng"
                       >
                         <div className="flex items-center gap-1 text-xs">
                           <Trash2 className="size-4" />
-                          {locale === "vi" ? "Xóa" : "Delete"}
+                          Xóa
                         </div>
                       </Button>
                     </td>
@@ -1805,32 +2957,32 @@ function RevenueTab() {
     }
   });
 
-  if (isLoading) return <p className="text-zinc-500">Loading Revenue Data...</p>;
+  if (isLoading) return <p className="text-zinc-500">Đang tải dữ liệu doanh thu...</p>;
 
   const r = revenueData ?? { totalRevenue: 0, dailyRevenue: [], monthlyRevenue: [], gameRevenue: [] };
 
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold text-white">Financial Auditing</h1>
-        <p className="text-sm text-zinc-500 mt-1">Review breakdown of sales and earnings.</p>
+        <h1 className="text-3xl font-bold text-white">Kiểm Toán &amp; Doanh Thu</h1>
+        <p className="text-sm text-zinc-400 mt-1">Xem xét chi tiết các nguồn thu, doanh số bán game theo ngày, theo tháng và theo từng tựa game.</p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-3">
         {/* Metric Card */}
         <Card className="p-6 bg-zinc-900/40 border-violet-500/20 backdrop-blur md:col-span-3 flex justify-between items-center h-24">
           <span className="text-zinc-400 text-sm font-semibold uppercase tracking-wider">
-            {locale === "vi" ? "Tổng Doanh Thu Hợp Lệ" : "Validated Gross Income"}
+            Tổng Doanh Thu Hợp Lệ
           </span>
           <span className="text-4xl font-extrabold text-violet-300">{formatPrice(r.totalRevenue)}</span>
         </Card>
 
         {/* Daily Breakdown */}
         <Card className="p-5 bg-zinc-900/40 border-white/5 backdrop-blur">
-          <h3 className="text-md font-bold text-zinc-200 mb-4">{locale === "vi" ? "Doanh thu theo ngày" : "Daily Earning Points"}</h3>
+          <h3 className="text-md font-bold text-zinc-200 mb-4">Doanh thu theo ngày</h3>
           <div className="max-h-80 overflow-y-auto space-y-3 pr-2 scrollbar-thin">
             {r.dailyRevenue.length === 0 ? (
-              <p className="text-zinc-500 text-xs text-center py-4">No daily data</p>
+              <p className="text-zinc-500 text-xs text-center py-4">Chưa có dữ liệu ngày</p>
             ) : (
               r.dailyRevenue.map((pt: any, i: number) => (
                 <div key={i} className="flex justify-between items-center text-xs py-1">
@@ -1844,10 +2996,10 @@ function RevenueTab() {
 
         {/* Monthly Breakdown */}
         <Card className="p-5 bg-zinc-900/40 border-white/5 backdrop-blur">
-          <h3 className="text-md font-bold text-zinc-200 mb-4">{locale === "vi" ? "Doanh thu theo tháng" : "Monthly Revenue Points"}</h3>
+          <h3 className="text-md font-bold text-zinc-200 mb-4">Doanh thu theo tháng</h3>
           <div className="max-h-80 overflow-y-auto space-y-3 pr-2 scrollbar-thin">
             {r.monthlyRevenue.length === 0 ? (
-              <p className="text-zinc-500 text-xs text-center py-4">No monthly data</p>
+              <p className="text-zinc-500 text-xs text-center py-4">Chưa có dữ liệu tháng</p>
             ) : (
               r.monthlyRevenue.map((pt: any, i: number) => (
                 <div key={i} className="flex justify-between items-center text-xs py-1">
@@ -1861,10 +3013,10 @@ function RevenueTab() {
 
         {/* Game Specific Earnings */}
         <Card className="p-5 bg-zinc-900/40 border-white/5 backdrop-blur">
-          <h3 className="text-md font-bold text-zinc-200 mb-4">{locale === "vi" ? "Doanh thu theo từng game" : "Earnings by Game Title"}</h3>
+          <h3 className="text-md font-bold text-zinc-200 mb-4">Doanh thu theo từng game</h3>
           <div className="max-h-80 overflow-y-auto space-y-3 pr-2 scrollbar-thin">
             {r.gameRevenue.length === 0 ? (
-              <p className="text-zinc-500 text-xs text-center py-4">No game data</p>
+              <p className="text-zinc-500 text-xs text-center py-4">Chưa có dữ liệu game</p>
             ) : (
               r.gameRevenue.map((pt: any, i: number) => (
                 <div key={i} className="flex justify-between items-start gap-4 text-xs py-1">
@@ -1966,12 +3118,10 @@ function AnalyticsTab() {
       <div className="flex flex-wrap items-center justify-between gap-6 border-b border-white/5 pb-6">
         <div>
           <h1 className="text-3xl font-black text-white bg-gradient-to-r from-violet-400 to-indigo-300 bg-clip-text text-transparent">
-            {locale === "vi" ? "Thống Kê Chi Tiết" : "Detailed Analytics"}
+            Thống Kê Chi Tiết &amp; Phân Tích
           </h1>
-          <p className="text-sm text-zinc-500 mt-1">
-            {locale === "vi" 
-              ? "Phân tích doanh thu, lượt tải, lượt chơi thử và hành vi người dùng theo khoảng thời gian." 
-              : "Analyze revenue, downloads, demo plays, and customer behavior over selected timeframes."}
+          <p className="text-sm text-zinc-400 mt-1">
+            Phân tích doanh thu, lượt tải, lượt chơi thử WebGL và hành vi khách hàng theo khoảng thời gian.
           </p>
         </div>
 
@@ -1991,11 +3141,11 @@ function AnalyticsTab() {
                   range === r ? "bg-violet-600 text-white shadow" : "text-zinc-400 hover:text-zinc-200"
                 }`}
               >
-                {r === "today" ? (locale === "vi" ? "Hôm nay" : "Today") :
-                 r === "week" ? (locale === "vi" ? "Tuần này" : "This Week") :
-                 r === "month" ? (locale === "vi" ? "Tháng này" : "This Month") :
-                 r === "year" ? (locale === "vi" ? "Năm nay" : "This Year") :
-                 (locale === "vi" ? "Tự chọn" : "Custom")}
+                {r === "today" ? "Hôm nay" :
+                 r === "week" ? "Tuần này" :
+                 r === "month" ? "Tháng này" :
+                 r === "year" ? "Năm nay" :
+                 "Tự chọn"}
               </button>
             ))}
           </div>
@@ -2064,11 +3214,11 @@ function AnalyticsTab() {
         <Card className="p-6 bg-zinc-900/40 border-white/5 backdrop-blur rounded-2xl relative overflow-hidden flex flex-col justify-between h-40 shadow-xl">
           <div className="flex justify-between items-start">
             <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">{locale === "vi" ? "Lượt Tải Game" : "Game Downloads"}</span>
-            <span className="p-2 bg-violet-500/10 text-violet-400 rounded-lg text-xs font-semibold">📁</span>
+            <span className="p-2 bg-white/5 text-zinc-400 rounded-lg"><Download className="size-4" /></span>
           </div>
           <div className="mt-2 space-y-1">
             <div className="flex justify-between items-baseline">
-              <span className="text-[26px] font-black text-violet-400 tracking-tight">{a.selectedPeriod.downloads.toLocaleString()}</span>
+              <span className="text-[26px] font-black text-white tracking-tight">{a.selectedPeriod.downloads.toLocaleString()}</span>
             </div>
             <div className="flex items-center gap-2 text-xs mt-1">
               <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
@@ -2089,11 +3239,11 @@ function AnalyticsTab() {
         <Card className="p-6 bg-zinc-900/40 border-white/5 backdrop-blur rounded-2xl relative overflow-hidden flex flex-col justify-between h-40 shadow-xl">
           <div className="flex justify-between items-start">
             <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">{locale === "vi" ? "Lượt Chơi Thử Demo" : "WebGL Demo Plays"}</span>
-            <span className="p-2 bg-pink-500/10 text-pink-400 rounded-lg text-xs font-semibold">🎮</span>
+            <span className="p-2 bg-white/5 text-zinc-400 rounded-lg"><Gamepad2 className="size-4" /></span>
           </div>
           <div className="mt-2 space-y-1">
             <div className="flex justify-between items-baseline">
-              <span className="text-[26px] font-black text-pink-400 tracking-tight">{a.selectedPeriod.demoPlays.toLocaleString()}</span>
+              <span className="text-[26px] font-black text-white tracking-tight">{a.selectedPeriod.demoPlays.toLocaleString()}</span>
             </div>
             <div className="flex items-center gap-2 text-xs mt-1">
               <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
@@ -2155,7 +3305,9 @@ function AnalyticsTab() {
             <tbody className="divide-y divide-white/5 font-medium">
               {trendData.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="py-8 text-center text-zinc-600 italic">No trend data available for this range</td>
+                  <td colSpan={5} className="py-8 text-center text-zinc-600 italic">
+                    {locale === "vi" ? "Không có dữ liệu xu hướng trong khoảng thời gian này" : "No trend data available for this range"}
+                  </td>
                 </tr>
               ) : (
                 trendData.slice(0, 15).map((pt: any, i: number) => {
@@ -2221,7 +3373,7 @@ function AnalyticsTab() {
                 <tbody className="divide-y divide-white/5 font-medium">
                   {a.topDownloadedGames.length === 0 ? (
                     <tr>
-                      <td colSpan={2} className="py-4 text-center text-zinc-605">No data</td>
+                      <td colSpan={2} className="py-4 text-center text-zinc-500 italic">{locale === "vi" ? "Chưa có dữ liệu" : "No data"}</td>
                     </tr>
                   ) : (
                     a.topDownloadedGames.slice(0, 8).map((g: any, index: number) => (
@@ -2259,7 +3411,7 @@ function AnalyticsTab() {
                 <tbody className="divide-y divide-white/5 font-medium">
                   {a.topDemoPlayedGames.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="py-4 text-center text-zinc-650">No data</td>
+                      <td colSpan={3} className="py-4 text-center text-zinc-500 italic">{locale === "vi" ? "Chưa có dữ liệu" : "No data"}</td>
                     </tr>
                   ) : (
                     a.topDemoPlayedGames.slice(0, 8).map((g: any, index: number) => {
@@ -2308,7 +3460,9 @@ function AnalyticsTab() {
             <tbody className="divide-y divide-white/5 font-medium">
               {a.gameConversions.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="py-6 text-center text-zinc-650 italic">No conversions tracked yet</td>
+                  <td colSpan={3} className="py-6 text-center text-zinc-500 italic">
+                    {locale === "vi" ? "Chưa ghi nhận dữ liệu chuyển đổi" : "No conversions tracked yet"}
+                  </td>
                 </tr>
               ) : (
                 a.gameConversions.slice(0, 10).map((g: any, index: number) => {
@@ -2372,7 +3526,9 @@ function AnalyticsTab() {
             <tbody className="divide-y divide-white/5 font-medium">
               {a.gameStats.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-zinc-650 italic">No game data available</td>
+                  <td colSpan={8} className="py-6 text-center text-zinc-500 italic">
+                    {locale === "vi" ? "Chưa có dữ liệu trò chơi" : "No game data available"}
+                  </td>
                 </tr>
               ) : (
                 a.gameStats.map((g: any, index: number) => {
@@ -2441,7 +3597,9 @@ function AnalyticsTab() {
             <tbody className="divide-y divide-white/5 font-medium">
               {a.userStats.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-6 text-center text-zinc-650 italic">No user data available</td>
+                  <td colSpan={7} className="py-6 text-center text-zinc-500 italic">
+                    {locale === "vi" ? "Chưa có dữ liệu người dùng" : "No user data available"}
+                  </td>
                 </tr>
               ) : (
                 a.userStats.map((u: any, index: number) => {
@@ -2495,432 +3653,160 @@ function HelpTab() {
   const locale = useLocale();
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 pb-10">
       <div>
-        <h1 className="text-3xl font-bold text-white">
-          {locale === "vi" ? "Hướng Dẫn & Hỗ Trợ" : "Help & Onboarding"}
+        <h1 className="text-3xl font-extrabold text-white tracking-tight">
+          {locale === "vi" ? "Trung Tâm Hướng Dẫn & Vận Hành GameVault" : "GameVault Operations & Help Center"}
         </h1>
-        <p className="text-sm text-zinc-500 mt-1">
+        <p className="text-sm text-zinc-400 mt-1 max-w-3xl">
           {locale === "vi"
-            ? "Tìm hiểu quy trình đăng tải và quản lý nội dung trò chơi từng bước."
-            : "Learn how to upload and manage game content step-by-step."}
+            ? "Tài liệu hướng dẫn quản trị chi tiết dành cho Quản trị viên: quy trình phát hành game, cơ chế định danh URL (Slug), quản lý gói tài nguyên, duyệt đơn hàng hoàn tiền và bảo mật hệ thống."
+            : "Complete administrative documentation: game publishing lifecycle, SEO Slug mechanics, asset package management, order refunds, and platform security."}
         </p>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        <Card className="p-6 bg-zinc-900/40 border-white/5 backdrop-blur space-y-4">
-          <h3 className="text-lg font-bold text-violet-400">
-            {locale === "vi" ? "Quy trình đăng tải game mới" : "New Game Publishing Guide"}
-          </h3>
-          <ol className="space-y-3 text-sm text-zinc-300 list-decimal pl-4 leading-relaxed">
+        {/* Card 1: Game Publishing Lifecycle */}
+        <Card className="p-6 bg-zinc-900/60 border border-white/10 rounded-2xl shadow-xl backdrop-blur space-y-4">
+          <div className="flex items-center gap-2.5">
+            <Gamepad2 className="size-5 text-zinc-400" />
+            <h3 className="text-base font-bold text-white">
+              {locale === "vi" ? "1. Quy trình 4 bước đăng tải & phát hành trò chơi" : "1. 4-Step Game Publishing Lifecycle"}
+            </h3>
+          </div>
+          <ol className="space-y-3.5 text-xs text-zinc-300 list-decimal pl-4 leading-relaxed">
             <li>
               <span className="font-semibold text-white">
-                {locale === "vi" ? "Tạo entry game:" : "Create Game Entry:"}
+                {locale === "vi" ? "Tạo bản ghi game & Dịch tự động bằng AI:" : "Create entry & AI Auto-Translate:"}
               </span>{" "}
               {locale === "vi"
-                ? "Bấm vào nút \"Thêm game mới\" ở tab Trò chơi. Nhập đầy đủ thông tin mô tả chi tiết, giá tiền, nhà phát triển bằng cả 2 ngôn ngữ (Việt và Anh). Game mới tạo sẽ có trạng thái "
-                : "Click \"Add New Game\" in the Games tab. Enter detailed description, price, and developer info in both languages (VI & EN). New games start in "}
-              <span className="bg-yellow-500/10 text-yellow-400 px-1 border border-yellow-500/10 text-xs rounded">
-                Draft
-              </span>.
+                ? "Bấm nút \"Thêm game mới\". Nhập tên game, nhà phát triển, giá bán và mô tả chi tiết bằng Tiếng Việt. Sau đó bấm nút \"Dịch tự động sang EN & ZH\", AI sẽ lập tức dịch chính xác sang tiếng Anh và tiếng Trung vào đúng các ô ngôn ngữ tương ứng, đồng thời tự động chuẩn hóa đường dẫn Slug."
+                : "Click \"Add Game\". Fill in Vietnamese title, dev, price and description, then click \"AI Auto-Translate to EN & ZH\" to populate English and Chinese fields accurately and generate the Slug."}
             </li>
             <li>
               <span className="font-semibold text-white">
-                {locale === "vi" ? "Tải ảnh bìa:" : "Upload Cover Art:"}
+                {locale === "vi" ? "Tải lên Ảnh bìa đại diện & Video Trailer:" : "Upload Cover Art & Trailer Video:"}
               </span>{" "}
               {locale === "vi"
-                ? "Tìm game vừa tạo ở danh sách, bấm vào biểu tượng Upload (hình đám mây có mũi tên đi lên). Chọn loại file là Cover Image để upload hình ảnh đại diện."
-                : "Locate the created game in the list, click the Upload icon (cloud arrow). Select Cover Image file type to upload the main banner."}
+                ? "Trong danh sách game, bấm nút biểu tượng Đám mây (Tải tệp lên). Chọn Cover Image để đăng ảnh đại diện chính (tỉ lệ khuyến nghị 16:9), và Trailer Video (.mp4 / .webm) để khách hàng xem video xem trước mượt mà ngoài gian hàng."
+                : "In the game table, click the Upload icon. Choose Cover Image for the store thumbnail and Trailer Video (.mp4/.webm) for storefront video previews."}
             </li>
             <li>
               <span className="font-semibold text-white">
-                {locale === "vi" ? "Tải file cài đặt & chơi thử:" : "Upload Installer & WebGL Demo:"}
+                {locale === "vi" ? "Tải file WebGL Demo & Gói cài đặt Installer:" : "Upload WebGL Demo & Installer:"}
               </span>{" "}
               {locale === "vi"
-                ? "Tương tự bước 2, bạn chọn loại file là Installer (.zip, .exe) hoặc WebGL Demo (.zip) để upload mã nguồn game. (Có thể upload sau bất cứ lúc nào, game chưa có file sẽ có nhãn \"Sắp ra mắt\" ở cửa hàng)."
-                : "Select Installer (.zip, .exe) or WebGL Demo (.zip) file type to upload game builds. (Can be uploaded later anytime; unbuilt games will display a \"Coming Soon\" badge in store)."}
+                ? "Chọn WebGL Demo (.zip) để tải lên bản chơi thử trực tiếp trên web (hệ thống tự động giải nén). Chọn Installer (.zip, .exe) cho bản cài đặt đầy đủ mà khách hàng sẽ nhận được sau khi thanh toán thành công."
+                : "Upload WebGL Demo (.zip) for in-browser instant play. Upload Installer (.zip, .exe) for full downloads after purchase."}
             </li>
             <li>
               <span className="font-semibold text-white">
-                {locale === "vi" ? "Công khai game:" : "Publish Game:"}
+                {locale === "vi" ? "Chuyển trạng thái sang Công khai (Published):" : "Publish to Storefront:"}
               </span>{" "}
               {locale === "vi"
-                ? "Khi đã hoàn tất nội dung, chỉnh trạng thái game từ Draft sang Published trong bảng chỉnh sửa game. Game sẽ chính thức hiển thị ngoài cửa hàng cho người dùng mua."
-                : "Once content is ready, switch the game status from Draft to Published. The game will officially appear in the store for customers to purchase."}
+                ? "Khi đã kiểm tra đầy đủ hình ảnh, video và file tải về, chuyển trạng thái từ \"Draft\" (Bản nháp) sang \"Published\" (Công khai). Game sẽ xuất hiện ngay lập tức trên trang chủ và sẵn sàng để khách thanh toán VietQR."
+                : "Once media and builds are verified, switch status from \"Draft\" to \"Published\". The game will be immediately purchasable via VietQR."}
             </li>
           </ol>
         </Card>
 
-        <Card className="p-6 bg-zinc-900/40 border-white/5 backdrop-blur space-y-4">
-          <h3 className="text-lg font-bold text-violet-400">
-            {locale === "vi" ? "Quản trị & Khóa tài khoản" : "Platform Moderation & Security"}
-          </h3>
-          <ul className="space-y-3 text-sm text-zinc-300 list-disc pl-4 leading-relaxed">
-            <li>
-              <span className="font-semibold text-white">
-                {locale === "vi" ? "Khóa người dùng:" : "User Moderation:"}
-              </span>{" "}
+        {/* Card 2: 4 Media Asset Types */}
+        <Card className="p-6 bg-zinc-900/60 border border-white/10 rounded-2xl shadow-xl backdrop-blur space-y-4">
+          <div className="flex items-center gap-2.5">
+            <Package className="size-5 text-zinc-400" />
+            <h3 className="text-base font-bold text-white">
+              {locale === "vi" ? "2. Quản lý 4 loại tệp tài nguyên (Media Assets)" : "2. Managing the 4 Media Asset Types"}
+            </h3>
+          </div>
+          <div className="space-y-2.5 text-xs text-zinc-300 leading-relaxed">
+            <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-white/5">
+              <span className="font-semibold text-white block mb-0.5">{locale === "vi" ? "1. Ảnh Bìa (Cover Image):" : "1. Cover Image:"}</span>
+              <p className="text-zinc-400">{locale === "vi" ? "Định dạng JPG, PNG, WEBP (tối ưu dưới 5MB). Dùng làm poster chính ngoài trang chủ và banner chi tiết game." : "JPG, PNG, WEBP (under 5MB). Main storefront poster and header banner."}</p>
+            </div>
+            <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-white/5">
+              <span className="font-semibold text-white block mb-0.5">{locale === "vi" ? "2. Video Trailer:" : "2. Video Trailer:"}</span>
+              <p className="text-zinc-400">{locale === "vi" ? "Định dạng MP4, WEBM. Video trailer xem trước tự động kích hoạt khi khách hàng rê chuột vào game card ngoài gian hàng." : "MP4, WEBM. Auto-plays interactive gameplay preview on card hover."}</p>
+            </div>
+            <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-white/5">
+              <span className="font-semibold text-white block mb-0.5">{locale === "vi" ? "3. WebGL Demo (.zip):" : "3. WebGL Demo (.zip):"}</span>
+              <p className="text-zinc-400">{locale === "vi" ? "Tệp nén .zip chứa sản phẩm xuất WebGL (chứa file index.html). Hệ thống tự giải nén để người chơi click 'Chơi thử ngay' trên trình duyệt mà không cần cài đặt." : "ZIP package containing exported WebGL build (index.html). System unzips automatically for instant browser demo plays."}</p>
+            </div>
+            <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-white/5">
+              <span className="font-semibold text-white block mb-0.5">{locale === "vi" ? "4. Gói Cài Đặt Game (Installer):" : "4. Game Installer:"}</span>
+              <p className="text-zinc-400">{locale === "vi" ? "File cài đặt thực tế (.zip, .exe, .dmg). Được lưu trữ bảo mật và chỉ cấp quyền tải về cho khách hàng đã mua game thành công." : "Full game build (.zip, .exe, .dmg). Protected and strictly accessible to paying customers in their Library."}</p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Card 3: Orders & Refund Flow */}
+        <Card className="p-6 bg-zinc-900/60 border border-white/10 rounded-2xl shadow-xl backdrop-blur space-y-4">
+          <div className="flex items-center gap-2.5">
+            <CreditCard className="size-5 text-zinc-400" />
+            <h3 className="text-base font-bold text-white">
+              {locale === "vi" ? "3. Xử lý Đơn hàng & Cơ chế Duyệt Hủy / Hoàn tiền" : "3. Order Management & Refund Approval"}
+            </h3>
+          </div>
+          <div className="space-y-3 text-xs text-zinc-300 leading-relaxed">
+            <p>
               {locale === "vi"
-                ? "Trong tab Người dùng, admin có thể xem toàn bộ danh sách khách hàng. Bấm nút \"Block\" để khóa tài khoản vi phạm. Người dùng bị khóa sẽ bị đăng xuất ngay lập tức và không thể đăng nhập lại."
-                : "In the Users tab, admins can view all customers. Click \"Block\" to suspend violating accounts. Suspended users are logged out immediately and cannot log in."}
-            </li>
-            <li>
-              <span className="font-semibold text-white">
-                {locale === "vi" ? "Dữ liệu thống kê thực:" : "Real-time Analytics:"}
-              </span>{" "}
-              {locale === "vi"
-                ? "Toàn bộ doanh số, đơn hàng, lượt chơi thử demo, và số lượt tải file trong dashboard đều liên kết trực tiếp với database thực."
-                : "All revenue, order totals, demo plays, and download counts in the dashboard link directly to live database records."}
-            </li>
-            <li>
-              <span className="font-semibold text-white">
-                {locale === "vi" ? "Mô tả song ngữ (VI - EN):" : "Bilingual Support (VI - EN):"}
-              </span>{" "}
-              {locale === "vi"
-                ? "Hệ thống hỗ trợ đa ngôn ngữ. Khi chỉnh sửa thông tin game, hãy điền đầy đủ cả 2 cột ngôn ngữ để hiển thị chuẩn xác nhất theo ngôn ngữ trình duyệt của khách hàng."
-                : "The platform supports full bilingual switching. When editing games, fill both Vietnamese and English columns for accurate localized rendering."}
-            </li>
-          </ul>
+                ? "Hệ thống hỗ trợ quy trình xử lý đơn hàng tự động và bảo vệ người tiêu dùng:"
+                : "Automated payment reconciliation and consumer dispute workflow:"}
+            </p>
+            <ul className="space-y-2 list-disc pl-4 text-zinc-400">
+              <li>
+                <strong className="text-zinc-200">{locale === "vi" ? "Thanh toán VietQR:" : "VietQR Auto-Check:"}</strong>{" "}
+                {locale === "vi" ? "Webhook VietQR tự động cập nhật đơn hàng sang Đã Hoàn Tất (Completed) và tự động kích hoạt game vào Thư viện của khách." : "VietQR webhook reconciles payments to Completed and assigns game licenses to user libraries."}
+              </li>
+              <li>
+                <strong className="text-zinc-200">{locale === "vi" ? "Yêu cầu hủy (CancellationPending):" : "Pending Cancellations:"}</strong>{" "}
+                {locale === "vi" ? "Khi người dùng yêu cầu hoàn tiền hoặc hủy giao dịch, đơn hàng sẽ hiển thị trạng thái 'Chờ Duyệt Hủy' tại tab Đơn hàng." : "Customer refund requests trigger a 'CancellationPending' status in the Orders tab."}
+              </li>
+              <li>
+                <strong className="text-zinc-200">{locale === "vi" ? "Duyệt Hủy & Thu hồi giấy phép:" : "Approve & Revoke License:"}</strong>{" "}
+                {locale === "vi" ? "Bấm nút 'Duyệt Hủy' để xác nhận. Hệ thống sẽ tự động thu hồi game trong Thư viện của khách hàng và gửi email thông báo qua Resend API." : "Clicking 'Approve' revokes the game from the user library and sends an email notification via Resend."}
+              </li>
+            </ul>
+            <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-white/5 text-[11px] text-zinc-400">
+              <strong className="text-zinc-300">{locale === "vi" ? "Gợi ý Quản trị:" : "Admin Tip:"}</strong>{" "}
+              {locale === "vi" ? "Luôn đối soát sao kê ngân hàng trước khi bấm Duyệt Hoàn Tiền cho các giao dịch chuyển khoản VietQR lớn." : "Always verify banking ledger receipts before issuing large VietQR refunds."}
+            </div>
+          </div>
+        </Card>
+
+        {/* Card 4: Moderation & Storage Engine */}
+        <Card className="p-6 bg-zinc-900/60 border border-white/10 rounded-2xl shadow-xl backdrop-blur space-y-4 md:col-span-2">
+          <div className="flex items-center gap-2.5">
+            <Shield className="size-5 text-zinc-400" />
+            <h3 className="text-base font-bold text-white">
+              {locale === "vi" ? "4. An ninh người dùng & Cơ chế Lưu trữ Đám mây" : "4. User Moderation & Storage Engine"}
+            </h3>
+          </div>
+          <div className="grid md:grid-cols-2 gap-4 text-xs text-zinc-300 leading-relaxed">
+            <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-white/5 space-y-2">
+              <h4 className="font-bold text-white">
+                {locale === "vi" ? "Khóa tài khoản vi phạm (Ban / Block):" : "Account Suspension (Ban):"}
+              </h4>
+              <p className="text-zinc-400">
+                {locale === "vi"
+                  ? "Tại tab Người Dùng, quản trị viên có thể xem danh sách thành viên và phân khúc (VIP, Đang Mua, Chơi Thử). Khi phát hiện hành vi gian lận hoặc spam, bấm nút Khóa. Hệ thống sẽ thu hồi ngay lập tức JWT Token, buộc người dùng đăng xuất và chặn mọi quyền truy cập hoặc thanh toán tiếp theo."
+                  : "In Users tab, inspect customers and segments (VIP, Active, Trial). Suspending an account instantly invalidates active JWT tokens, forces logout, and blocks future checkout attempts."}
+              </p>
+            </div>
+            <div className="p-3.5 rounded-xl bg-zinc-950/60 border border-white/5 space-y-2">
+              <h4 className="font-bold text-white">
+                {locale === "vi" ? "Cơ chế Lưu trữ Tệp tin (Storage Engine):" : "Storage Engine & Fallback:"}
+              </h4>
+              <p className="text-zinc-400">
+                {locale === "vi"
+                  ? "GameVault hỗ trợ lưu trữ tệp tin trên Google Drive Cloud Storage cho môi trường phân tán. Nếu chưa cấu hình Google Cloud Credentials hoặc trong môi trường máy chủ cục bộ (Local Development), hệ thống tự động kích hoạt cơ chế Local Fallback lưu trữ an toàn tại thư mục wwwroot/uploads của máy chủ để không làm gián đoạn vận hành."
+                  : "Supports Google Drive Cloud Storage for distributed scale. In local environments or when cloud credentials are missing, system seamlessly falls back to wwwroot/uploads to ensure zero operational downtime."}
+              </p>
+            </div>
+          </div>
         </Card>
       </div>
     </div>
   );
 }
 
-function AiTab() {
-  const locale = useLocale();
-  const [avatar, setAvatar] = useState<string>("");
-  const [uploading, setUploading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string>("");
 
-  const [logs, setLogs] = useState<any[]>([]);
-  const [loadingLogs, setLoadingLogs] = useState(false);
-  const [selectedLog, setSelectedLog] = useState<any | null>(null);
-
-  const fetchLogs = async () => {
-    setLoadingLogs(true);
-    try {
-      const { data } = await api.get<ApiResponse<any[]>>("/admin/ai/logs");
-      if (data?.data) {
-        setLogs(data.data);
-      }
-    } catch (err) {
-      console.error("Failed to load AI logs", err);
-    } finally {
-      setLoadingLogs(false);
-    }
-  };
-
-  useEffect(() => {
-    async function loadSettings() {
-      try {
-        const { data } = await api.get<ApiResponse<{ avatarUrl: string }>>("/ai/settings");
-        if (data?.data?.avatarUrl) {
-          setAvatar(data.data.avatarUrl);
-          setPreviewUrl(data.data.avatarUrl);
-        }
-      } catch (err) {
-        console.error("Failed to load AI settings", err);
-      }
-    }
-    loadSettings();
-    fetchLogs();
-  }, []);
-
-  const handleClearLogs = async () => {
-    const confirmMsg = locale === "vi"
-      ? "Bạn có chắc chắn muốn xóa toàn bộ lịch sử log của Groq AI API không?"
-      : "Are you sure you want to clear all Groq AI API call history logs?";
-    if (!window.confirm(confirmMsg)) return;
-
-    try {
-      await api.delete("/admin/ai/logs");
-      setLogs([]);
-      setSelectedLog(null);
-      alert(locale === "vi" ? "Đã xóa toàn bộ log thành công!" : "All logs cleared successfully!");
-    } catch (err) {
-      console.error(err);
-      alert(locale === "vi" ? "Lỗi xóa log" : "Failed to clear logs");
-    }
-  };
-
-  const getAbsoluteUrl = (url: string) => {
-    return resolveImageUrl(url);
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const { data } = await api.post<ApiResponse<{ url: string }>>("/admin/ai/avatar", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-      setAvatar(data.data.url);
-      setPreviewUrl(data.data.url);
-      alert(locale === "vi" ? "Cập nhật avatar AI thành công!" : "AI avatar updated successfully!");
-    } catch (err) {
-      console.error(err);
-      alert(locale === "vi" ? "Lỗi tải ảnh lên" : "Failed to upload image");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-8">
-      {/* Configuration Card */}
-      <Card className="p-6 bg-zinc-900/40 border-white/5 backdrop-blur space-y-6">
-        <div>
-          <h3 className="text-lg font-bold text-violet-400">
-            {locale === "vi" ? "Cấu hình Trợ lý AI" : "AI Assistant Configuration"}
-          </h3>
-          <p className="text-sm text-zinc-400">
-            {locale === "vi"
-              ? "Thay đổi hình ảnh hiển thị cho Trợ lý AI khi trò chuyện với khách hàng."
-              : "Change the profile picture of the AI Assistant when chatting with customers."}
-          </p>
-        </div>
-
-        <div className="space-y-4">
-          <label className="block text-sm font-medium text-zinc-300">
-            {locale === "vi" ? "Avatar hiện tại của AI" : "Current AI Avatar"}
-          </label>
-          <div className="flex flex-col sm:flex-row items-center gap-6 p-4 rounded-2xl bg-zinc-950/40 border border-white/5">
-            <div className="relative size-24 rounded-full overflow-hidden border-2 border-violet-500/50 bg-zinc-800 flex items-center justify-center shrink-0 shadow-lg">
-              {previewUrl ? (
-                <img
-                  src={getAbsoluteUrl(previewUrl)}
-                  alt="AI Chatbot Preview"
-                  className="size-full object-cover"
-                />
-              ) : (
-                <div className="size-full bg-zinc-800 flex items-center justify-center text-zinc-500 text-xs">
-                  No Avatar
-                </div>
-              )}
-            </div>
-            <div className="space-y-3 text-center sm:text-left">
-              <input
-                type="file"
-                id="bot-avatar-upload"
-                accept="image/*"
-                className="hidden"
-                onChange={handleFileChange}
-                disabled={uploading}
-              />
-              <label htmlFor="bot-avatar-upload" className="inline-block">
-                <span className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition cursor-pointer bg-violet-600 hover:bg-violet-700 text-white shadow-lg shadow-violet-900/20">
-                  <Upload className="size-4" />
-                  {uploading
-                    ? (locale === "vi" ? "Đang tải lên..." : "Uploading...")
-                    : (locale === "vi" ? "Tải lên ảnh mới" : "Upload new image")}
-                </span>
-              </label>
-              <p className="text-xs text-zinc-500 max-w-xs leading-relaxed">
-                {locale === "vi"
-                  ? "Khuyên dùng ảnh có định dạng vuông (1:1), định dạng JPG, PNG hoặc WebP."
-                  : "Recommended to use square (1:1) ratio images. Supports JPG, PNG or WebP."}
-              </p>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Logs Card */}
-      <Card className="p-6 bg-zinc-900/40 border-white/5 backdrop-blur space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-bold text-violet-400">
-              {locale === "vi" ? "Lịch sử cuộc gọi Groq AI API" : "Groq AI API Call History"}
-            </h3>
-            <p className="text-sm text-zinc-400">
-              {locale === "vi"
-                ? "Giám sát số lượng yêu cầu, thông tin API key được sử dụng và nội dung prompt thực tế."
-                : "Monitor API requests, key usage, and actual prompt/response data."}
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button onClick={fetchLogs} variant="outline" size="sm" disabled={loadingLogs}>
-              {loadingLogs ? (locale === "vi" ? "Đang tải..." : "Loading...") : (locale === "vi" ? "Tải lại" : "Refresh")}
-            </Button>
-            {logs.length > 0 && (
-              <Button onClick={handleClearLogs} className="bg-red-600 hover:bg-red-500 text-white text-xs" size="sm">
-                <Trash2 className="size-3.5 mr-1" />
-                {locale === "vi" ? "Xóa hết log" : "Clear All Logs"}
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Counter Widget */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <div className="bg-zinc-950/40 p-4 rounded-xl border border-white/5 text-center">
-            <span className="text-zinc-500 text-xs font-semibold block uppercase">Total Calls</span>
-            <span className="text-2xl font-bold text-violet-400 mt-1 block">{logs.length}</span>
-          </div>
-          <div className="bg-zinc-950/40 p-4 rounded-xl border border-white/5 text-center">
-            <span className="text-zinc-500 text-xs font-semibold block uppercase">Success Rate</span>
-            <span className="text-2xl font-bold text-green-400 mt-1 block">
-              {logs.length > 0
-                ? `${Math.round((logs.filter(x => x.isSuccess !== undefined ? x.isSuccess : x.IsSuccess).length / logs.length) * 100)}%`
-                : "0%"}
-            </span>
-          </div>
-          <div className="bg-zinc-950/40 p-4 rounded-xl border border-white/5 text-center">
-            <span className="text-zinc-500 text-xs font-semibold block uppercase">Active Key</span>
-            <span className="text-sm font-semibold text-zinc-300 mt-2 block truncate">
-              {logs[0]?.apiKeyMasked || logs[0]?.ApiKeyMasked || "—"}
-            </span>
-          </div>
-          <div className="bg-zinc-950/40 p-4 rounded-xl border border-white/5 text-center">
-            <span className="text-zinc-500 text-xs font-semibold block uppercase">Last Request</span>
-            <span className="text-xs text-zinc-400 mt-2 block">
-              {logs[0]?.timestamp || logs[0]?.Timestamp ? formatDateTime(logs[0].timestamp || logs[0].Timestamp) : "—"}
-            </span>
-          </div>
-        </div>
-
-        {/* Logs Table / List */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-zinc-400">
-            <thead>
-              <tr className="border-b border-white/5 text-zinc-500 font-semibold">
-                <th className="py-2.5 px-3">#</th>
-                <th className="py-2.5 px-3">{locale === "vi" ? "Thời gian" : "Time"}</th>
-                <th className="py-2.5 px-3">API Key Prefix</th>
-                <th className="py-2.5 px-3">Model</th>
-                <th className="py-2.5 px-3">Status</th>
-                <th className="py-2.5 px-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 text-xs">
-              {logs.map((log: any, idx: number) => {
-                const callNum = logs.length - idx;
-                const isSuccess = log.isSuccess !== undefined ? log.isSuccess : log.IsSuccess;
-                const timestamp = log.timestamp || log.Timestamp;
-                const apiKeyMasked = log.apiKeyMasked || log.ApiKeyMasked;
-                const model = log.model || log.Model;
-
-                const statusColor = isSuccess
-                  ? "bg-green-500/10 text-green-400 border-green-500/20"
-                  : "bg-red-500/10 text-red-400 border-red-500/20";
-
-                return (
-                  <tr key={idx} className="hover:text-white transition">
-                    <td className="py-3 px-3 font-mono text-zinc-500">{callNum}</td>
-                    <td className="py-3 px-3 text-zinc-400">{formatDateTime(timestamp)}</td>
-                    <td className="py-3 px-3 font-mono text-zinc-300">{apiKeyMasked}</td>
-                    <td className="py-3 px-3 text-zinc-400">{model}</td>
-                    <td className="py-3 px-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${statusColor}`}>
-                        {isSuccess ? "Success" : "Failed"}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <button
-                        onClick={() => setSelectedLog(log)}
-                        className="text-xs text-violet-400 hover:text-violet-300 cursor-pointer font-medium underline"
-                      >
-                        {locale === "vi" ? "Xem chi tiết" : "View Details"}
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-              {logs.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="py-6 text-center text-zinc-500 italic">
-                    {locale === "vi" ? "Chưa có log cuộc gọi nào." : "No API call logs recorded yet."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {/* Selected Log Drawer/Modal */}
-      {selectedLog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-          <Card className="w-full max-w-4xl max-h-[85vh] bg-zinc-900 border-zinc-800 p-6 shadow-2xl space-y-4 flex flex-col overflow-hidden">
-            <div className="flex justify-between items-center border-b border-white/5 pb-3">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Bot className="size-5 text-violet-400" />
-                  {locale === "vi" ? "Chi tiết cuộc gọi Groq AI API" : "Groq AI API Request details"}
-                </h3>
-                <span className="text-xs text-zinc-500 block mt-0.5">
-                  {formatDateTime(selectedLog.timestamp || selectedLog.Timestamp)} | Key: {selectedLog.apiKeyMasked || selectedLog.ApiKeyMasked} | Model: {selectedLog.model || selectedLog.Model}
-                </span>
-              </div>
-              <button
-                onClick={() => setSelectedLog(null)}
-                className="text-zinc-400 hover:text-white font-bold text-xl px-2 py-1 cursor-pointer"
-              >
-                &times;
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto space-y-4 pr-1 scrollbar-thin">
-              {/* Status banner */}
-              {!(selectedLog.isSuccess !== undefined ? selectedLog.isSuccess : selectedLog.IsSuccess) && (
-                <div className="p-3 bg-red-950/20 border border-red-500/20 rounded-xl flex items-start gap-2 text-xs text-red-400">
-                  <AlertTriangle className="size-4 mt-0.5 shrink-0" />
-                  <div>
-                    <span className="font-bold">Error Message:</span>
-                    <p className="mt-1 font-mono break-all bg-zinc-950/50 p-2 rounded border border-red-500/10 whitespace-pre-wrap">
-                      {selectedLog.errorMessage || selectedLog.ErrorMessage}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* System Instruction */}
-              <div className="space-y-1.5">
-                <span className="text-xs font-bold text-zinc-500 uppercase tracking-wider block">
-                  System Instruction
-                </span>
-                <pre className="bg-zinc-950 border border-white/5 p-3 rounded-xl text-xs font-mono text-zinc-400 max-h-40 overflow-y-auto whitespace-pre-wrap leading-relaxed select-all">
-                  {selectedLog.systemPrompt || selectedLog.SystemPrompt || "—"}
-                </pre>
-              </div>
-
-              {/* User Prompt */}
-              <div className="space-y-1.5">
-                <span className="text-xs font-bold text-violet-400 uppercase tracking-wider block">
-                  User Prompt
-                </span>
-                <pre className="bg-zinc-950 border border-violet-500/10 p-3 rounded-xl text-xs font-mono text-zinc-300 max-h-56 overflow-y-auto whitespace-pre-wrap leading-relaxed select-all">
-                  {selectedLog.userPrompt || selectedLog.UserPrompt}
-                </pre>
-              </div>
-
-              {/* Groq Response */}
-              {(selectedLog.isSuccess !== undefined ? selectedLog.isSuccess : selectedLog.IsSuccess) && (
-                <div className="space-y-1.5">
-                  <span className="text-xs font-bold text-green-400 uppercase tracking-wider block">
-                    Groq AI Response
-                  </span>
-                  <pre className="bg-zinc-950 border border-green-500/10 p-3 rounded-xl text-xs font-mono text-green-300 max-h-80 overflow-y-auto whitespace-pre-wrap leading-relaxed select-all">
-                    {selectedLog.response || selectedLog.Response}
-                  </pre>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end pt-3 border-t border-white/5">
-              <Button onClick={() => setSelectedLog(null)} className="bg-zinc-800 hover:bg-zinc-700 text-white text-xs">
-                {locale === "vi" ? "Đóng" : "Close"}
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
-    </div>
-  );
-}

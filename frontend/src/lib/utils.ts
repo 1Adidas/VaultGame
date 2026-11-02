@@ -70,7 +70,7 @@ export function resolveImageUrl(url?: string | null): string {
     }
     return url;
   }
-  const base = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000");
+  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
   return `${base}${url}`;
 }
 
@@ -79,6 +79,6 @@ export function resolveVideoUrl(url?: string | null): string {
   if (url.startsWith("http")) {
     return url;
   }
-  const base = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000");
+  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
   return `${base}${url}`;
 }

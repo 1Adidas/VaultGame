@@ -55,6 +55,7 @@ function ProfileContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const locale = useLocale();
+  const isZh = locale === "zh";
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const targetId = searchParams.get("id");
@@ -359,7 +360,7 @@ function ProfileContent() {
               {isOwnProfile && (
                 <label
                   className="absolute -bottom-2 -right-2 rounded-full bg-violet-600 p-2 text-white shadow-lg cursor-pointer hover:bg-violet-500 transition-colors"
-                  title={locale === "vi" ? "Đổi ảnh đại diện" : "Change avatar"}
+                  title={locale === "vi" ? "Đổi ảnh đại diện" : isZh ? "更换头像" : "Change avatar"}
                 >
                   <Camera className="size-5" />
                   <input
@@ -379,13 +380,13 @@ function ProfileContent() {
             <div className="w-full space-y-3 rounded-xl bg-zinc-950/50 p-4 text-left">
               <div className="flex items-center gap-3 text-sm text-zinc-300">
                 <Calendar className="size-4 text-violet-400 shrink-0" />
-                <span>{locale === "vi" ? "Tham gia" : "Joined"} {formatDate(profile.createdAt)}</span>
+                <span>{locale === "vi" ? "Tham gia: " : isZh ? "注册时间：" : "Joined: "} {formatDate(profile.createdAt)}</span>
               </div>
               {profile.dateOfBirth && (
                 <div className="flex items-center gap-3 text-sm text-zinc-300">
                   <Calendar className="size-4 text-violet-400 shrink-0" />
                   <span>
-                    {locale === "vi" ? "Ngày sinh: " : "Date of Birth: "}
+                    {locale === "vi" ? "Ngày sinh: " : isZh ? "出生日期：" : "Date of Birth: "}
                     {formatDate(profile.dateOfBirth)}
                   </span>
                 </div>
@@ -393,7 +394,7 @@ function ProfileContent() {
               {isOwnProfile && (
                 <div className="flex items-center gap-3 text-sm text-zinc-300">
                   <Gamepad2 className="size-4 text-violet-400 shrink-0" />
-                  <span>{games.length} {locale === "vi" ? "game đang sở hữu" : "Games Owned"}</span>
+                  <span>{games.length} {locale === "vi" ? "game đang sở hữu" : isZh ? "款已拥有游戏" : "Games Owned"}</span>
                 </div>
               )}
               <div className="flex items-center gap-3 text-sm text-zinc-300">
@@ -405,7 +406,7 @@ function ProfileContent() {
             {saveSuccess && (
               <div className="mt-4 flex items-center gap-2 text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2 w-full justify-center">
                 <CheckCircle className="size-4" />
-                {locale === "vi" ? "Đã lưu thành công!" : "Saved successfully!"}
+                {locale === "vi" ? "Đã lưu thành công!" : isZh ? "保存成功！" : "Saved successfully!"}
               </div>
             )}
 
@@ -416,8 +417,8 @@ function ProfileContent() {
                 onClick={() => setEditing(!editing)}
               >
                 {editing
-                  ? (locale === "vi" ? "Hủy chỉnh sửa" : "Cancel Editing")
-                  : (locale === "vi" ? "Chỉnh sửa hồ sơ" : "Edit Profile")}
+                  ? (locale === "vi" ? "Hủy chỉnh sửa" : isZh ? "取消编辑" : "Cancel Editing")
+                  : (locale === "vi" ? "Chỉnh sửa hồ sơ" : isZh ? "编辑个人资料" : "Edit Profile")}
               </Button>
             )}
           </div>
@@ -430,7 +431,7 @@ function ProfileContent() {
           {editing && (
             <div className="rounded-2xl border border-violet-500/20 bg-zinc-900/50 p-6 backdrop-blur shadow-xl">
               <h2 className="mb-6 text-xl font-semibold text-white">
-                {locale === "vi" ? "Chỉnh sửa thông tin" : "Profile Details"}
+                {locale === "vi" ? "Chỉnh sửa thông tin" : isZh ? "编辑个人信息" : "Profile Details"}
               </h2>
 
               {/* Avatar upload hint */}
@@ -438,12 +439,14 @@ function ProfileContent() {
                 <Camera className="size-5 text-violet-400 mt-0.5 shrink-0" />
                 <div>
                   <p className="text-sm font-medium text-violet-300">
-                    {locale === "vi" ? "Đổi ảnh đại diện" : "Change Avatar"}
+                    {locale === "vi" ? "Đổi ảnh đại diện" : isZh ? "更换头像" : "Change Avatar"}
                   </p>
                   <p className="text-xs text-zinc-400 mt-0.5">
                     {locale === "vi"
                       ? "Bấm vào biểu tượng 📷 ở ảnh đại diện bên trái để tải ảnh mới lên ngay lập tức."
-                      : "Click the 📷 camera icon on your avatar photo (left panel) to upload a new image instantly."}
+                      : isZh
+                        ? "点击左侧头像上的 📷 相机图标即可立即上传新头像。"
+                        : "Click the 📷 camera icon on your avatar photo (left panel) to upload a new image instantly."}
                   </p>
                 </div>
               </div>
@@ -451,7 +454,7 @@ function ProfileContent() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <label className="text-sm text-zinc-400">
-                    {locale === "vi" ? "Họ và tên" : "Full Name"}
+                    {locale === "vi" ? "Họ và tên" : isZh ? "姓名 / 昵称" : "Full Name"}
                   </label>
                   <input
                     type="text"
@@ -462,7 +465,7 @@ function ProfileContent() {
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm text-zinc-400">
-                    {locale === "vi" ? "Ngày sinh" : "Date of Birth"}
+                    {locale === "vi" ? "Ngày sinh" : isZh ? "出生日期" : "Date of Birth"}
                   </label>
                   <input
                     type="date"
@@ -483,7 +486,7 @@ function ProfileContent() {
                     className="size-4 rounded border-white/10 bg-zinc-950 text-violet-600 focus:ring-violet-500"
                   />
                   <label htmlFor="isLibraryPublic" className="text-sm text-zinc-300 cursor-pointer">
-                    {locale === "vi" ? "Công khai thư viện game" : "Make game library public"}
+                    {locale === "vi" ? "Công khai thư viện game" : isZh ? "公开游戏库" : "Make game library public"}
                   </label>
                 </div>
                 <div className="flex items-center gap-2">
@@ -495,14 +498,14 @@ function ProfileContent() {
                     className="size-4 rounded border-white/10 bg-zinc-950 text-violet-600 focus:ring-violet-500"
                   />
                   <label htmlFor="isPurchaseHistoryPublic" className="text-sm text-zinc-300 cursor-pointer">
-                    {locale === "vi" ? "Công khai lịch sử mua" : "Make purchase history public"}
+                    {locale === "vi" ? "Công khai lịch sử mua" : isZh ? "公开购买记录" : "Make purchase history public"}
                   </label>
                 </div>
               </div>
 
               <div className="mt-6 flex justify-end gap-3">
                 <Button variant="outline" onClick={() => setEditing(false)}>
-                  {locale === "vi" ? "Hủy" : "Cancel"}
+                  {locale === "vi" ? "Hủy" : isZh ? "取消" : "Cancel"}
                 </Button>
                 <Button
                   onClick={handleSave}
@@ -510,7 +513,7 @@ function ProfileContent() {
                   className="bg-violet-600 hover:bg-violet-500 gap-2"
                 >
                   {saving && <Loader2 className="size-4 animate-spin" />}
-                  {locale === "vi" ? "Lưu thay đổi" : "Save Changes"}
+                  {locale === "vi" ? "Lưu thay đổi" : isZh ? "保存修改" : "Save Changes"}
                 </Button>
               </div>
             </div>
@@ -519,24 +522,24 @@ function ProfileContent() {
           {/* Library Section */}
           <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-4 md:p-6 backdrop-blur shadow-xl">
             <h2 className="mb-6 text-xl font-semibold text-white">
-              {locale === "vi" ? "Lịch sử mua & Thư viện game" : "Purchase History & Library"}
+              {locale === "vi" ? "Lịch sử mua & Thư viện game" : isZh ? "购买记录与游戏库" : "Purchase History & Library"}
             </h2>
 
             {!isOwnProfile && !profile.isLibraryPublic ? (
               <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
                 <Gamepad2 className="mb-4 size-12 opacity-20" />
-                <p>{locale === "vi" ? `Thư viện game của ${profile.fullName} đang để chế độ riêng tư.` : `${profile.fullName}'s library is private.`}</p>
+                <p>{locale === "vi" ? `Thư viện game của ${profile.fullName} đang để chế độ riêng tư.` : isZh ? `${profile.fullName} 的游戏库已设为私密。` : `${profile.fullName}'s library is private.`}</p>
               </div>
             ) : games.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
                 <Gamepad2 className="mb-4 size-12 opacity-20" />
-                <p>{locale === "vi" ? "Bạn chưa có game nào trong thư viện." : "No games in your library yet."}</p>
+                <p>{locale === "vi" ? "Bạn chưa có game nào trong thư viện." : isZh ? "您的游戏库中暂无游戏。" : "No games in your library yet."}</p>
                 <Button
                   variant="ghost"
                   className="mt-2 text-violet-400"
                   onClick={() => router.push(`/${locale}/games`)}
                 >
-                  {locale === "vi" ? "Khám phá cửa hàng" : "Browse Store"}
+                  {locale === "vi" ? "Khám phá cửa hàng" : isZh ? "浏览商城" : "Browse Store"}
                 </Button>
               </div>
             ) : (
@@ -564,7 +567,7 @@ function ProfileContent() {
                       <h3 className="truncate font-semibold text-zinc-200">{game.title}</h3>
                       {(isOwnProfile || profile.isPurchaseHistoryPublic) && (
                         <p className="mt-1 text-xs text-zinc-500">
-                          {locale === "vi" ? "Mua lúc: " : "Acquired: "}
+                          {locale === "vi" ? "Mua lúc: " : isZh ? "购买时间：" : "Acquired: "}
                           {formatDate(game.acquiredAt)}
                         </p>
                       )}
@@ -583,12 +586,14 @@ function ProfileContent() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 p-6 shadow-2xl text-center flex flex-col items-center">
             <h3 className="mb-2 text-xl font-bold text-white">
-              {locale === "vi" ? "Chỉnh sửa ảnh đại diện" : "Edit Profile Picture"}
+              {locale === "vi" ? "Chỉnh sửa ảnh đại diện" : isZh ? "调整头像图片" : "Edit Profile Picture"}
             </h3>
             <p className="mb-6 text-xs text-zinc-400">
               {locale === "vi" 
                 ? "Kéo để di chuyển và sử dụng thanh trượt để phóng to/thu nhỏ" 
-                : "Drag to reposition and use the slider to zoom"}
+                : isZh
+                  ? "拖动以移动位置，滑动滑块进行缩放"
+                  : "Drag to reposition and use the slider to zoom"}
             </p>
 
             {/* Viewport Circle Mask */}
@@ -641,13 +646,13 @@ function ProfileContent() {
                 onClick={() => setIsCropperOpen(false)}
                 className="flex-1"
               >
-                {locale === "vi" ? "Hủy" : "Cancel"}
+                {locale === "vi" ? "Hủy" : isZh ? "取消" : "Cancel"}
               </Button>
               <Button 
                 onClick={cropAndUpload}
                 className="flex-1 bg-violet-600 hover:bg-violet-500 text-white font-medium"
               >
-                {locale === "vi" ? "Lưu" : "Save"}
+                {locale === "vi" ? "Lưu" : isZh ? "保存" : "Save"}
               </Button>
             </div>
           </div>

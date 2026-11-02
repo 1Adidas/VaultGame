@@ -3,7 +3,18 @@
 import { useOrders, useLibrary } from "@/hooks/useGames";
 import { formatPrice, formatDateTimeShort, resolveImageUrl } from "@/lib/utils";
 import { useLocale } from "next-intl";
-import { Gamepad2, ShoppingBag, Mail, AlertOctagon, XCircle, Clock, CheckCircle2 } from "lucide-react";
+import {
+  Gamepad2,
+  ShoppingBag,
+  Mail,
+  AlertOctagon,
+  XCircle,
+  Clock,
+  CheckCircle2,
+  ArrowRight,
+  ShieldCheck,
+  Zap
+} from "lucide-react";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth/store";
 import { useRouter } from "next/navigation";
@@ -13,6 +24,8 @@ import { QRPaymentModal } from "@/components/payment/QRPaymentModal";
 
 export default function OrdersPage() {
   const locale = useLocale();
+  const isVi = locale === "vi";
+  const isZh = locale === "zh";
   const router = useRouter();
   const { user } = useAuthStore();
   const { data, isLoading, refetch } = useOrders();
@@ -25,17 +38,17 @@ export default function OrdersPage() {
   const [activePayOrderId, setActivePayOrderId] = useState<string | null>(null);
 
   const handleCancelPending = async (orderId: string) => {
-    if (!window.confirm(locale === "vi" ? "Bạn có chắc chắn muốn hủy đơn hàng này?" : "Are you sure you want to cancel this order?")) {
+    if (!window.confirm(isVi ? "Bạn có chắc chắn muốn hủy đơn hàng này?" : isZh ? "您确定要取消此订单吗？" : "Are you sure you want to cancel this order?")) {
       return;
     }
     setSubmittingCancel(true);
     try {
       await api.post(`/orders/${orderId}/cancel`);
-      alert(locale === "vi" ? "Đã hủy đơn hàng thành công!" : "Order cancelled successfully!");
+      alert(isVi ? "Đã hủy đơn hàng thành công!" : isZh ? "订单已成功取消！" : "Order cancelled successfully!");
       refetch();
     } catch (e) {
       console.error(e);
-      alert(locale === "vi" ? "Hủy đơn hàng thất bại. Vui lòng thử lại!" : "Failed to cancel order. Please try again!");
+      alert(isVi ? "Hủy đơn hàng thất bại. Vui lòng thử lại!" : isZh ? "取消订单失败，请稍后重试！" : "Failed to cancel order. Please try again!");
     } finally {
       setSubmittingCancel(false);
     }
@@ -45,10 +58,10 @@ export default function OrdersPage() {
     setResendingEmailId(orderId);
     try {
       await api.post(`/orders/${orderId}/resend`);
-      alert(locale === "vi" ? "Đã gửi lại email hóa đơn thành công!" : "Receipt email resent successfully!");
+      alert(isVi ? "Đã gửi lại email hóa đơn thành công!" : isZh ? "收据邮件已成功重新发送！" : "Receipt email resent successfully!");
     } catch (e) {
       console.error(e);
-      alert(locale === "vi" ? "Gửi lại hóa đơn thất bại. Vui lòng thử lại!" : "Failed to resend receipt. Please try again!");
+      alert(isVi ? "Gửi lại hóa đơn thất bại. Vui lòng thử lại!" : isZh ? "重新发送收据失败，请稍后重试！" : "Failed to resend receipt. Please try again!");
     } finally {
       setResendingEmailId(null);
     }
@@ -56,60 +69,44 @@ export default function OrdersPage() {
 
   const handleCancelRequest = async (orderId: string) => {
     if (!cancelReason.trim()) {
-      alert(locale === "vi" ? "Vui lòng nhập lý do hủy đơn!" : "Please provide a reason for cancellation!");
+      alert(isVi ? "Vui lòng nhập lý do hủy đơn!" : isZh ? "请输入取消/退款理由！" : "Please provide a reason for cancellation!");
       return;
     }
     setSubmittingCancel(true);
     try {
       await api.post(`/orders/${orderId}/cancel-request`, { reason: cancelReason });
       alert(
-        locale === "vi"
+        isVi
           ? "Đã gửi yêu cầu hủy đơn hàng & hoàn tiền thành công! Admin sẽ kiểm tra và liên hệ hỗ trợ bạn."
+          : isZh
+          ? "已成功提交退款申请！管理员将审核并联系处理。"
           : "Cancellation & refund request submitted successfully! Admin will review and contact you."
       );
       setCancellingOrderId(null);
       setCancelReason("");
     } catch (e) {
       console.error(e);
-      alert(locale === "vi" ? "Gửi yêu cầu thất bại. Vui lòng thử lại!" : "Failed to submit request. Please try again!");
+      alert(isVi ? "Gửi yêu cầu thất bại. Vui lòng thử lại!" : isZh ? "提交申请失败，请稍后重试！" : "Failed to submit request. Please try again!");
     } finally {
       setSubmittingCancel(false);
     }
   };
 
   useEffect(() => {
-    if (user?.roles.includes("Admin")) {
+    if (!user) {
+      router.replace(`/${locale}/login`);
+    } else if (user?.roles.includes("Admin")) {
       router.replace(`/${locale}/admin`);
     }
   }, [user, locale, router]);
 
   if (isLoading || user?.roles.includes("Admin")) {
     return (
-      <div className="mx-auto max-w-4xl px-4 py-8">
-        {/* Title skeleton */}
-        <div className="mb-8 h-9 w-48 rounded bg-zinc-900/50 animate-pulse" />
-        
-        {/* Stack skeleton */}
-        <div className="space-y-6">
-          {[1, 2].map((i) => (
-            <div key={i} className="overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/50 p-6 space-y-4 animate-pulse">
-              <div className="flex justify-between items-center">
-                <div className="space-y-2">
-                  <div className="h-4 w-32 rounded bg-zinc-800" />
-                  <div className="h-3.5 w-24 rounded bg-zinc-800" />
-                </div>
-                <div className="h-7 w-20 rounded-full bg-zinc-800" />
-              </div>
-              <div className="border-t border-white/5 pt-4 flex gap-4">
-                <div className="size-16 rounded-xl bg-zinc-800" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-1/3 rounded bg-zinc-800" />
-                  <div className="h-3.5 w-1/4 rounded bg-zinc-800" />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+      <div className="mx-auto max-w-4xl px-4 py-8 space-y-6 animate-pulse">
+        <div className="h-10 w-64 rounded-xl bg-[#0E131E]" />
+        {[1, 2].map((i) => (
+          <div key={i} className="h-56 rounded-2xl bg-[#0E131E] border border-white/5" />
+        ))}
       </div>
     );
   }
@@ -117,14 +114,51 @@ export default function OrdersPage() {
   const orders = data ?? [];
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-8">
-      <h1 className="mb-8 text-3xl font-bold text-white">{locale === "vi" ? "Lịch sử mua hàng" : "Order History"}</h1>
+    <div className="mx-auto max-w-4xl px-4 py-8 space-y-8">
+      
+      {/* ─── Header ─── */}
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/[0.08] pb-6">
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-0.5 text-xs font-semibold text-zinc-300">
+            <ShoppingBag className="size-3.5" />
+            <span>{isVi ? "Lịch Sử Giao Dịch" : isZh ? "账单与购买记录" : "Billing & Purchases"}</span>
+          </div>
+          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
+            {isVi ? "Lịch Sử Mua Hàng" : isZh ? "订单记录" : "Order History"}
+          </h1>
+          <p className="text-xs sm:text-sm text-zinc-400">
+            {isVi
+              ? `Xem lại tất cả hóa đơn thanh toán và quản lý các tựa game đã kích hoạt.`
+              : isZh
+              ? `查看所有付款账单并管理已激活入库的数字游戏授权。`
+              : `Review all purchase invoices and manage activated digital licenses.`}
+          </p>
+        </div>
+      </div>
+
+      {/* ─── Orders List or Empty ─── */}
       {orders.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-center text-zinc-500 border border-white/5 bg-zinc-900/20 rounded-2xl">
-          <ShoppingBag className="mb-4 size-16 opacity-10" />
-          <p className="text-zinc-400">{locale === "vi" ? "Bạn chưa thực hiện đơn hàng nào." : "You have no orders yet."}</p>
-          <Link href={`/${locale}/games`} className="mt-4 text-sm font-semibold text-violet-400 hover:text-violet-300">
-            {locale === "vi" ? "Khám phá game mới" : "Browse Store"}
+        <div className="rounded-2xl border border-white/[0.08] bg-[#0E131E] p-16 text-center space-y-4 shadow-xl">
+          <div className="size-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-zinc-400">
+            <ShoppingBag className="size-8" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-lg font-bold text-white">
+              {isVi ? "Bạn chưa có đơn hàng nào" : isZh ? "您尚无任何订单" : "You have no orders yet"}
+            </h3>
+            <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+              {isVi
+                ? "Các giao dịch mua game bản quyền của bạn sẽ xuất hiện tại đây cùng hóa đơn chi tiết."
+                : isZh
+                ? "您购买的正版游戏交易与电子发票收据将展示在此处。"
+                : "Your purchased games and payment receipts will appear here."}
+            </p>
+          </div>
+          <Link href={`/${locale}/games`} className="inline-block pt-2">
+            <button className="btn-primary flex items-center gap-2">
+              <span>{isVi ? "Khám Phá Cửa Hàng" : isZh ? "探索游戏商城" : "Browse Games Store"}</span>
+              <ArrowRight className="size-4" />
+            </button>
           </Link>
         </div>
       ) : (
@@ -132,36 +166,38 @@ export default function OrdersPage() {
           {orders.map((item) => {
             const o = item as Record<string, any>;
             const dateStr = formatDateTimeShort(o.createdAt);
-            const statusColors = 
-              o.status === "Paid" ? "bg-green-500/10 text-green-400 border-green-500/20" :
-              o.status === "Pending" ? "bg-yellow-500/10 text-yellow-400 border-yellow-500/20" :
-              o.status === "CancellationPending" ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
-              o.status === "CancellationApproved" ? "bg-teal-500/10 text-teal-400 border-teal-500/20" :
-              "bg-red-500/10 text-red-400 border-red-500/20";
-
-            const getStatusLabel = (status: string) => {
-              if (locale === "vi") {
-                switch (status) {
-                  case "Paid": return "Đã thanh toán";
-                  case "Pending": return "Chờ thanh toán";
-                  case "Cancelled": return "Đã hủy";
-                  case "CancellationPending": return "Đang xử lý yêu cầu hủy";
-                  case "CancellationApproved": return "Đã xử lý yêu cầu hủy";
-                  default: return status;
-                }
-              } else {
-                switch (status) {
-                  case "Paid": return "Paid";
-                  case "Pending": return "Pending";
-                  case "Cancelled": return "Cancelled";
-                  case "CancellationPending": return "Cancellation Pending";
-                  case "CancellationApproved": return "Cancellation Approved";
-                  default: return status;
-                }
+            
+            const statusConfig = (() => {
+              if (o.status === "Paid") {
+                return {
+                  label: isVi ? "Đã Thanh Toán" : isZh ? "已付款" : "Paid",
+                  badge: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                };
               }
-            };
+              if (o.status === "Pending") {
+                return {
+                  label: isVi ? "Chờ Thanh Toán" : isZh ? "待付款" : "Pending",
+                  badge: "bg-amber-500/10 text-amber-400 border-amber-500/20"
+                };
+              }
+              if (o.status === "CancellationPending") {
+                return {
+                  label: isVi ? "Đang Xử Lý Hủy" : isZh ? "退款处理中" : "Cancellation Pending",
+                  badge: "bg-purple-500/10 text-purple-400 border-purple-500/20"
+                };
+              }
+              if (o.status === "CancellationApproved") {
+                return {
+                  label: isVi ? "Đã Hoàn Tiền" : isZh ? "已退款" : "Refunded",
+                  badge: "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
+                };
+              }
+              return {
+                label: isVi ? "Đã Hủy" : isZh ? "已取消" : "Cancelled",
+                badge: "bg-rose-500/10 text-rose-400 border-rose-500/20"
+              };
+            })();
 
-            // Tính toán tổng tiền gốc và mức tiết kiệm
             const totalOriginal = o.items?.reduce((acc: number, g: any) => acc + (g.unitPrice ?? 0), 0) ?? 0;
             const totalPaid = o.totalAmount ?? 0;
             const savings = totalOriginal - totalPaid;
@@ -170,14 +206,12 @@ export default function OrdersPage() {
               if (o.status === "Pending") return true;
               if (o.status !== "Paid") return false;
               
-              // 1. Check if paid within 14 days
               const diffTime = new Date().getTime() - new Date(o.createdAt).getTime();
               const isUnder14Days = diffTime <= 14 * 24 * 60 * 60 * 1000;
               if (!isUnder14Days) return false;
 
-              // 2. Check if any game in this order has been downloaded
-              const hasDownloaded = o.items?.some((item: any) => {
-                const libGame = libraryData?.find((lg: any) => lg.gameId === item.gameId);
+              const hasDownloaded = o.items?.some((it: any) => {
+                const libGame = libraryData?.find((lg: any) => lg.gameId === it.gameId);
                 return libGame && libGame.lastDownloadAt !== null;
               });
               if (hasDownloaded) return false;
@@ -186,152 +220,79 @@ export default function OrdersPage() {
             })();
 
             return (
-              <div key={o.id} className="overflow-hidden rounded-2xl border border-white/5 bg-zinc-900/40 backdrop-blur shadow-2xl transition duration-300 hover:border-white/10">
-                {/* Header */}
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/5 bg-zinc-950/50 px-6 py-4">
+              <div
+                key={o.id}
+                className="rounded-2xl border border-white/[0.08] bg-[#0E131E] overflow-hidden shadow-xl"
+              >
+                {/* Order Top Bar */}
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/[0.06] bg-[#080B11] px-6 py-4">
                   <div className="flex items-center gap-3">
-                    <div className="flex size-9 items-center justify-center rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-400">
-                      <ShoppingBag className="size-4.5" />
+                    <div className="flex size-9 items-center justify-center rounded-xl bg-white/5 border border-white/10 text-zinc-300">
+                      <ShoppingBag className="size-4" />
                     </div>
-                    <div className="space-y-0.5">
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">{locale === "vi" ? "MÃ ĐƠN HÀNG" : "ORDER CODE"}</p>
-                      <span className="font-mono text-sm font-bold text-zinc-200 select-all">{o.orderCode}</span>
+                    <div>
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+                        {isVi ? "MÃ ĐƠN HÀNG" : isZh ? "订单编号" : "ORDER CODE"}
+                      </p>
+                      <span className="font-mono text-xs sm:text-sm font-bold text-white select-all">
+                        {o.orderCode}
+                      </span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-6">
-                    <div className="hidden sm:block space-y-0.5 text-right">
-                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">{locale === "vi" ? "NGÀY GIAO DỊCH" : "ORDER DATE"}</p>
+
+                  <div className="flex items-center gap-4 sm:gap-6">
+                    <div className="hidden sm:block text-right">
+                      <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">
+                        {isVi ? "THỜI GIAN" : isZh ? "交易时间" : "DATE"}
+                      </p>
                       <span className="text-xs text-zinc-400 font-medium">{dateStr}</span>
                     </div>
-                    <span className={`rounded-full border px-3 py-1 text-xs font-bold ${statusColors}`}>
-                      {getStatusLabel(o.status)}
+                    <span className={`rounded-full border px-3 py-1 text-xs font-bold ${statusConfig.badge}`}>
+                      {statusConfig.label}
                     </span>
                   </div>
                 </div>
-                
-                {/* Cancellation Request & Admin Feedback Section */}
-                {(() => {
-                  const isRejected = o.cancelReason && o.adminNote && (o.status === "Paid" || o.status === "Pending");
-                  const isPendingCancel = o.status === "CancellationPending";
-                  const isApprovedCancel = o.status === "CancellationApproved" || o.status === "Cancelled";
 
-                  if (!o.cancelReason && !o.adminNote && !isPendingCancel && !isApprovedCancel) return null;
-
-                  if (isRejected) {
-                    return (
-                      <div className="mx-6 mt-4 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-xs leading-relaxed space-y-2">
-                        <div className="flex items-center gap-2 text-rose-400 font-bold text-sm">
-                          <XCircle className="size-4 flex-shrink-0" />
-                          <span>{locale === "vi" ? "Yêu cầu hủy đơn đã bị từ chối" : "Cancellation Request Rejected"}</span>
-                        </div>
-                        {o.cancelReason && (
-                          <div className="text-zinc-300">
-                            <span className="font-semibold text-zinc-400">{locale === "vi" ? "Lý do xin hủy: " : "Requested reason: "}</span>
-                            {o.cancelReason}
-                          </div>
-                        )}
-                        <div className="text-rose-300/90 pt-1.5 border-t border-rose-500/10">
-                          <span className="font-bold text-rose-400">{locale === "vi" ? "Phản hồi từ Admin: " : "Admin response: "}</span>
-                          {o.adminNote}
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  if (isPendingCancel) {
-                    return (
-                      <div className="mx-6 mt-4 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs leading-relaxed space-y-1.5">
-                        <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
-                          <Clock className="size-4 flex-shrink-0 animate-pulse" />
-                          <span>{locale === "vi" ? "Yêu cầu hủy đơn đang được xem xét" : "Cancellation Request Pending Review"}</span>
-                        </div>
-                        {o.cancelReason && (
-                          <div className="text-amber-200/90">
-                            <span className="font-semibold text-amber-400">{locale === "vi" ? "Lý do xin hủy: " : "Requested reason: "}</span>
-                            {o.cancelReason}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-
-                  if (isApprovedCancel) {
-                    return (
-                      <div className="mx-6 mt-4 p-4 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-xs leading-relaxed space-y-2">
-                        <div className="flex items-center gap-2 text-teal-400 font-bold text-sm">
-                          <CheckCircle2 className="size-4 flex-shrink-0" />
-                          <span>{locale === "vi" ? "Yêu cầu hủy đơn đã được chấp nhận" : "Cancellation Request Approved"}</span>
-                        </div>
-                        {o.cancelReason && (
-                          <div className="text-zinc-300">
-                            <span className="font-semibold text-zinc-400">{locale === "vi" ? "Lý do hủy đơn: " : "Cancellation reason: "}</span>
-                            {o.cancelReason}
-                          </div>
-                        )}
-                        {o.adminNote && (
-                          <div className="text-teal-300/90 pt-1.5 border-t border-teal-500/10">
-                            <span className="font-bold text-teal-400">{locale === "vi" ? "Phản hồi từ Admin: " : "Admin response: "}</span>
-                            {o.adminNote}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-
-                  if (o.adminNote) {
-                    return (
-                      <div className="mx-6 mt-4 p-3.5 rounded-xl bg-violet-500/10 border border-violet-500/20 text-xs text-violet-300 leading-relaxed">
-                        <span className="font-bold text-violet-400">{locale === "vi" ? "Ghi chú từ Admin: " : "Admin note: "}</span>
-                        {o.adminNote}
-                      </div>
-                    );
-                  }
-
-                  return null;
-                })()}
-
-                {/* Items List */}
-                <div className="divide-y divide-white/5 px-6">
+                {/* Items in this order */}
+                <div className="divide-y divide-white/[0.04] px-6">
                   {o.items?.map((g: any, index: number) => {
                     const coverUrl = resolveImageUrl(g.gameCoverUrl);
                     const isDiscounted = g.lineTotal < g.unitPrice;
 
                     return (
-                      <div key={index} className="flex flex-wrap items-center justify-between gap-4 py-5">
+                      <div key={index} className="flex flex-wrap items-center justify-between gap-4 py-4">
                         <div className="flex items-center gap-4 flex-1 min-w-[240px]">
-                          <div className="h-16 w-28 overflow-hidden rounded-xl bg-zinc-800 border border-white/5 flex-shrink-0 shadow">
+                          <div className="h-14 w-24 overflow-hidden rounded-xl bg-[#080B11] border border-white/5 flex-shrink-0">
                             {coverUrl ? (
-                              <img 
-                                src={coverUrl} 
-                                alt={g.gameTitle} 
-                                className="size-full object-cover" 
-                                referrerPolicy="no-referrer"
-                                onError={(e) => {
-                                  e.currentTarget.style.display = "none";
-                                  if (e.currentTarget.parentElement) {
-                                    e.currentTarget.parentElement.innerHTML = `<div class="flex size-full items-center justify-center text-zinc-700"><svg class="size-7" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="12" y2="12"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="15" x2="15.01" y1="13" y2="13"/><line x1="18" x2="18.01" y1="11" y2="11"/><rect width="20" height="12" x="2" y="6" rx="6"/></svg></div>`;
-                                  }
-                                }}
+                              <img
+                                src={coverUrl}
+                                alt={g.gameTitle}
+                                className="size-full object-cover"
                               />
                             ) : (
                               <div className="flex size-full items-center justify-center text-zinc-700">
-                                <Gamepad2 className="size-7" />
+                                <Gamepad2 className="size-6" />
                               </div>
                             )}
                           </div>
-                          <div className="space-y-1 min-w-0">
-                            <Link href={`/${locale}/game/${g.gameSlug}`} className="font-bold text-zinc-100 hover:text-violet-400 transition text-sm sm:text-base truncate block">
+                          <div>
+                            <Link
+                              href={`/${locale}/game/${g.gameSlug}`}
+                              className="font-bold text-white hover:underline text-sm truncate block"
+                            >
                               {g.gameTitle}
                             </Link>
-                            <p className="text-xs text-zinc-500 font-medium">{locale === "vi" ? "Số lượng: 1" : "Qty: 1"}</p>
+                            <span className="text-[11px] text-zinc-500">
+                              {isVi ? "Bản quyền kỹ thuật số • Số lượng: 1" : isZh ? "数字游戏授权 • 数量: 1" : "Digital License • Qty: 1"}
+                            </span>
                           </div>
                         </div>
-                        
-                        {/* Price rendering per game */}
-                        <div className="text-right space-y-1">
+
+                        {/* Price */}
+                        <div className="text-right">
                           {isDiscounted ? (
-                            <div className="flex flex-col items-end gap-0.5">
-                              <span className="text-xs text-zinc-500 line-through">
+                            <div className="flex flex-col items-end">
+                              <span className="text-[11px] text-zinc-500 line-through">
                                 {formatPrice(g.unitPrice, o.currency)}
                               </span>
                               <span className="font-bold text-emerald-400 text-sm">
@@ -339,7 +300,7 @@ export default function OrdersPage() {
                               </span>
                             </div>
                           ) : (
-                            <span className="font-bold text-zinc-200 text-sm">
+                            <span className="font-bold text-white text-sm">
                               {formatPrice(g.unitPrice, o.currency)}
                             </span>
                           )}
@@ -349,12 +310,12 @@ export default function OrdersPage() {
                   })}
                 </div>
 
-                {/* Footer / Summary */}
-                <div className="flex flex-wrap justify-between items-center gap-4 border-t border-white/5 bg-zinc-950/20 px-6 py-4.5">
+                {/* Bottom Total & Actions */}
+                <div className="flex flex-wrap justify-between items-center gap-4 border-t border-white/[0.06] bg-[#080B11]/50 px-6 py-4">
                   <div className="flex flex-wrap gap-2 items-center">
                     {savings > 0 && (
-                      <span className="inline-flex items-center rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-400 select-none mr-2">
-                        🎉 {locale === "vi" ? `Tiết kiệm ${formatPrice(savings, o.currency)}` : `Saved ${formatPrice(savings, o.currency)}`}
+                      <span className="rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-xs font-bold text-emerald-400 mr-2">
+                        {isVi ? `Tiết kiệm ${formatPrice(savings, o.currency)}` : isZh ? `节省 ${formatPrice(savings, o.currency)}` : `Saved ${formatPrice(savings, o.currency)}`}
                       </span>
                     )}
 
@@ -362,12 +323,14 @@ export default function OrdersPage() {
                       <button
                         onClick={() => handleResendReceipt(o.id)}
                         disabled={resendingEmailId === o.id}
-                        className="inline-flex items-center gap-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-650 border border-white/10 px-3 py-1.5 text-xs font-bold text-zinc-300 transition disabled:opacity-50"
+                        className="btn-secondary text-xs flex items-center gap-1.5 py-1 px-3"
                       >
                         <Mail className="size-3.5" />
-                        {resendingEmailId === o.id
-                          ? (locale === "vi" ? "Đang gửi..." : "Sending...")
-                          : (locale === "vi" ? "Gửi lại hóa đơn" : "Resend Receipt")}
+                        <span>
+                          {resendingEmailId === o.id
+                            ? (isVi ? "Đang gửi..." : isZh ? "正在发送..." : "Sending...")
+                            : (isVi ? "Gửi Lại Hóa Đơn" : isZh ? "重发电子收据" : "Resend Receipt")}
+                        </span>
                       </button>
                     )}
 
@@ -377,10 +340,10 @@ export default function OrdersPage() {
                           setCancellingOrderId(cancellingOrderId === o.id ? null : o.id);
                           setCancelReason("");
                         }}
-                        className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/5 hover:bg-red-500/10 active:bg-red-500/15 px-3 py-1.5 text-xs font-bold text-red-400 transition"
+                        className="btn-secondary text-xs flex items-center gap-1.5 py-1 px-3 text-rose-400 border-rose-500/20 hover:bg-rose-500/10"
                       >
                         <AlertOctagon className="size-3.5" />
-                        {locale === "vi" ? "Yêu cầu hủy & hoàn tiền" : "Request Cancel & Refund"}
+                        <span>{isVi ? "Yêu Cầu Hoàn Tiền" : isZh ? "申请退款" : "Request Refund"}</span>
                       </button>
                     )}
 
@@ -388,47 +351,45 @@ export default function OrdersPage() {
                       <>
                         <button
                           onClick={() => setActivePayOrderId(o.id)}
-                          className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 active:bg-violet-750 px-3 py-1.5 text-xs font-bold text-white transition shadow-md shadow-violet-900/10 cursor-pointer"
+                          className="btn-primary text-xs flex items-center gap-1.5 py-1 px-3"
                         >
-                          <ShoppingBag className="size-3.5" />
-                          {locale === "vi" ? "Thanh toán ngay" : "Pay Now"}
+                          <Zap className="size-3.5" />
+                          <span>{isVi ? "Thanh Toán Ngay" : isZh ? "立即支付" : "Pay Now"}</span>
                         </button>
                         <button
                           onClick={() => handleCancelPending(o.id)}
                           disabled={submittingCancel}
-                          className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/5 hover:bg-red-500/10 active:bg-red-500/15 px-3 py-1.5 text-xs font-bold text-red-400 transition disabled:opacity-50 cursor-pointer"
+                          className="btn-secondary text-xs flex items-center gap-1.5 py-1 px-3 text-rose-400 border-rose-500/20 hover:bg-rose-500/10"
                         >
-                          <AlertOctagon className="size-3.5" />
-                          {locale === "vi" ? "Hủy đơn hàng" : "Cancel Order"}
+                          <span>{isVi ? "Hủy Đơn" : isZh ? "取消" : "Cancel"}</span>
                         </button>
                       </>
                     )}
                   </div>
+
                   <div className="flex items-center gap-3">
-                    <span className="text-zinc-400 text-xs font-semibold uppercase tracking-wider">{locale === "vi" ? "Tổng cộng" : "Total amount"}</span>
-                    <span className="text-xl font-black text-violet-400 bg-violet-500/5 border border-violet-500/10 px-3 py-1 rounded-xl shadow-inner">
+                    <span className="text-zinc-400 text-xs font-bold uppercase tracking-wider">
+                      {isVi ? "Tổng tiền:" : isZh ? "总金额:" : "Total:"}
+                    </span>
+                    <span className="text-xl font-black text-white">
                       {formatPrice(o.totalAmount, o.currency)}
                     </span>
                   </div>
                 </div>
 
-                {/* Inline cancellation reason form */}
+                {/* Inline Cancel Reason Box */}
                 {cancellingOrderId === o.id && (
-                  <div className="border-t border-white/5 bg-zinc-950/40 p-6 space-y-4">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-                        {locale === "vi" ? "Lý do hủy đơn & hoàn tiền" : "Reason for Cancellation & Refund"}
+                  <div className="border-t border-white/[0.08] bg-[#080B11] p-6 space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-white">
+                        {isVi ? "Lý do gửi yêu cầu hủy đơn & hoàn tiền:" : isZh ? "申请退款及取消订单理由:" : "Reason for refund request:"}
                       </label>
                       <textarea
                         value={cancelReason}
                         onChange={(e) => setCancelReason(e.target.value)}
-                        placeholder={
-                          locale === "vi"
-                            ? "Vui lòng nhập lý do chi tiết để Admin kiểm tra và hỗ trợ hoàn tiền..."
-                            : "Please enter details for Admin to review and process your refund..."
-                        }
+                        placeholder={isVi ? "Vui lòng nêu rõ lý do..." : isZh ? "请详细说明退款原因..." : "Please specify why..."}
                         rows={3}
-                        className="w-full rounded-xl border border-white/10 bg-zinc-900 p-3 text-sm text-zinc-200 placeholder-zinc-500 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                        className="w-full rounded-xl border border-white/10 bg-[#0E131E] p-3 text-xs sm:text-sm text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-white/30"
                       />
                     </div>
                     <div className="flex justify-end gap-2">
@@ -437,18 +398,18 @@ export default function OrdersPage() {
                           setCancellingOrderId(null);
                           setCancelReason("");
                         }}
-                        className="rounded-xl bg-zinc-800 hover:bg-zinc-700 px-4 py-2 text-xs font-bold text-zinc-300 transition"
+                        className="btn-secondary text-xs py-1.5 px-3"
                       >
-                        {locale === "vi" ? "Hủy bỏ" : "Cancel"}
+                        {isVi ? "Hủy Bỏ" : isZh ? "取消" : "Cancel"}
                       </button>
                       <button
                         onClick={() => handleCancelRequest(o.id)}
                         disabled={submittingCancel}
-                        className="rounded-xl bg-red-600 hover:bg-red-500 active:bg-red-700 px-4 py-2 text-xs font-bold text-white transition shadow-lg shadow-red-900/20 disabled:opacity-50"
+                        className="btn-primary text-xs py-1.5 px-3 bg-rose-600 hover:bg-rose-500 text-white"
                       >
                         {submittingCancel
-                          ? (locale === "vi" ? "Đang gửi..." : "Submitting...")
-                          : (locale === "vi" ? "Gửi yêu cầu hỗ trợ" : "Submit Request")}
+                          ? (isVi ? "Đang gửi..." : isZh ? "正在发送..." : "Submitting...")
+                          : (isVi ? "Gửi Yêu Cầu" : isZh ? "提交申请" : "Submit Request")}
                       </button>
                     </div>
                   </div>
@@ -469,6 +430,7 @@ export default function OrdersPage() {
           }}
         />
       )}
+
     </div>
   );
 }

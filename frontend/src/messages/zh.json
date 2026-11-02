@@ -1,0 +1,57 @@
+{
+  "nav": {
+    "home": "首页",
+    "games": "商店",
+    "library": "游戏库",
+    "wishlist": "愿望单",
+    "orders": "订单",
+    "ai": "Vault Oracle",
+    "admin": "管理后台",
+    "login": "登录",
+    "register": "注册",
+    "logout": "退出登录"
+  },
+  "home": {
+    "hero": "探索你的下一款游戏",
+    "subtitle": "购买、试玩 WebGL 并即时下载正版数字游戏",
+    "featured": "精选游戏",
+    "comingSoon": "即将推出",
+    "freeGames": "免费游戏",
+    "discountedGames": "特惠折扣",
+    "browse": "浏览全部"
+  },
+  "game": {
+    "buy": "立即购买",
+    "wishlist": "添加至愿望单",
+    "demo": "试玩演示",
+    "reviews": "玩家评测",
+    "requirements": "配置要求",
+    "owned": "已拥有"
+  },
+  "auth": {
+    "email": "电子邮箱",
+    "password": "密码",
+    "fullName": "姓名",
+    "loginTitle": "用户登录",
+    "registerTitle": "注册账号"
+  },
+  "payment": {
+    "scanQr": "扫描二维码支付",
+    "waiting": "等待支付中...",
+    "success": "支付成功！",
+    "loading": "正在生成支付二维码...",
+    "error": "生成支付二维码失败，请重试。"
+  },
+  "ai": {
+    "title": "Game Vault AI 智能助手",
+    "placeholder": "向 AI 助手提问...",
+    "send": "发送"
+  },
+  "admin": {
+    "dashboard": "控制面板",
+    "games": "管理游戏",
+    "reviews": "审核评测",
+    "revenue": "营收统计",
+    "upload": "上传"
+  }
+}

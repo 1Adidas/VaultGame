@@ -235,6 +235,9 @@ CREATE TABLE `Games` (
   `TitleEn` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `DescriptionEn` mediumtext CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci,
   `ShortDescriptionEn` varchar(500) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `TitleZh` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `DescriptionZh` mediumtext COLLATE utf8mb4_unicode_ci,
+  `ShortDescriptionZh` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`Id`),
   UNIQUE KEY `UQ_Games_Slug` (`Slug`),
   KEY `IX_Games_CategoryId_Status` (`CategoryId`,`Status`),
@@ -564,4 +567,4 @@ CREATE TABLE `Wishlists` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-07-20  5:03:26
+-- Dump completed on 2026-11-02  7:01:10

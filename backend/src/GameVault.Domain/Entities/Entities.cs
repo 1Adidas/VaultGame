@@ -79,11 +79,14 @@ public class Game
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Title { get; set; } = string.Empty;
     public string? TitleEn { get; set; }
+    public string? TitleZh { get; set; }
     public string Slug { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string? DescriptionEn { get; set; }
+    public string? DescriptionZh { get; set; }
     public string ShortDescription { get; set; } = string.Empty;
     public string? ShortDescriptionEn { get; set; }
+    public string? ShortDescriptionZh { get; set; }
     public string Developer { get; set; } = string.Empty;
     public string? Publisher { get; set; }
     public DateOnly? ReleaseDate { get; set; }

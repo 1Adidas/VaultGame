@@ -50,3 +50,9 @@ docs/
 
 # Local run access link
 access_link.txt
+
+# AI Agent files & artifacts
+.agents/
+AGENTS.md
+CODEBASE.md
+scratch/

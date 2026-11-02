@@ -41,7 +41,7 @@ public class NotificationService(AppDbContext db) : INotificationService
     }
 }
 
-public class AdminService(AppDbContext db, IEmailService email) : IAdminService
+public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveService drive, GroqClient groq) : IAdminService
 {
     public async Task<GameDetailDto> CreateGameAsync(CreateGameRequest request, CancellationToken ct = default)
     {
@@ -50,6 +50,7 @@ public class AdminService(AppDbContext db, IEmailService email) : IAdminService
             Title = request.Title, Slug = request.Slug, Description = request.Description,
             ShortDescription = request.ShortDescription,
             TitleEn = request.TitleEn, DescriptionEn = request.DescriptionEn, ShortDescriptionEn = request.ShortDescriptionEn,
+            TitleZh = request.TitleZh, DescriptionZh = request.DescriptionZh, ShortDescriptionZh = request.ShortDescriptionZh,
             Developer = request.Developer, Publisher = request.Publisher, ReleaseDate = request.ReleaseDate,
             Price = request.Price, DiscountPrice = request.DiscountPrice, MinAge = request.MinAge,
             IsFeatured = request.IsFeatured, SystemRequirements = request.SystemRequirements,
@@ -64,7 +65,7 @@ public class AdminService(AppDbContext db, IEmailService email) : IAdminService
                 game.GameTags.Add(new GameTag { TagId = tagId });
         db.Games.Add(game);
         await db.SaveChangesAsync(ct);
-        var loaded = await db.Games.Include(g => g.GameCategories).ThenInclude(gc => gc.Category).Include(g => g.Images).Include(g => g.Videos)
+        var loaded = await db.Games.Include(g => g.GameCategories).ThenInclude(gc => gc.Category).Include(g => g.Images).Include(g => g.Videos).Include(g => g.Files)
             .Include(g => g.UnityDemo).Include(g => g.GameTags).ThenInclude(gt => gt.Tag)
             .FirstAsync(g => g.Id == game.Id, ct);
         return GameService.MapDetail(loaded, false, false, "vi");
@@ -84,6 +85,8 @@ public class AdminService(AppDbContext db, IEmailService email) : IAdminService
         game.ShortDescription = request.ShortDescription;
         game.TitleEn = request.TitleEn; game.DescriptionEn = request.DescriptionEn;
         game.ShortDescriptionEn = request.ShortDescriptionEn;
+        game.TitleZh = request.TitleZh; game.DescriptionZh = request.DescriptionZh;
+        game.ShortDescriptionZh = request.ShortDescriptionZh;
         game.Developer = request.Developer; game.Publisher = request.Publisher;
         game.ReleaseDate = request.ReleaseDate; game.Price = request.Price;
         game.DiscountPrice = request.DiscountPrice; game.MinAge = request.MinAge;
@@ -126,7 +129,7 @@ public class AdminService(AppDbContext db, IEmailService email) : IAdminService
         }
 
         await db.SaveChangesAsync(ct);
-        var loaded = await db.Games.Include(g => g.GameCategories).ThenInclude(gc => gc.Category).Include(g => g.Images).Include(g => g.Videos)
+        var loaded = await db.Games.Include(g => g.GameCategories).ThenInclude(gc => gc.Category).Include(g => g.Images).Include(g => g.Videos).Include(g => g.Files)
             .Include(g => g.UnityDemo).Include(g => g.GameTags).ThenInclude(gt => gt.Tag)
             .FirstAsync(g => g.Id == id, ct);
         return GameService.MapDetail(loaded, false, false, "vi");
@@ -190,6 +193,41 @@ public class AdminService(AppDbContext db, IEmailService email) : IAdminService
         }
 
         // Xóa tất cả thực thể liên kết trong DB trước
+        // 1. Xóa lịch sử chơi thử WebGL Demo
+        var demoPlayHistories = await db.DemoPlayHistories.Where(d => d.GameId == id).ToListAsync(ct);
+        if (demoPlayHistories.Count > 0)
+        {
+            db.DemoPlayHistories.RemoveRange(demoPlayHistories);
+        }
+
+        // 2. Gỡ bỏ ngữ cảnh game khỏi lịch sử AI Chat
+        var aiChatHistories = await db.AIChatHistories.Where(a => a.GameContextId == id).ToListAsync(ct);
+        foreach (var chat in aiChatHistories)
+        {
+            chat.GameContextId = null;
+        }
+
+        // 3. Xóa đánh giá (xóa reply con trước để tránh lỗi ràng buộc quan hệ cha-con)
+        if (game.Reviews.Count > 0)
+        {
+            var childReviews = game.Reviews.Where(r => r.ParentId != null).ToList();
+            var parentReviews = game.Reviews.Where(r => r.ParentId == null).ToList();
+            db.Reviews.RemoveRange(childReviews);
+            db.Reviews.RemoveRange(parentReviews);
+        }
+
+        // 4. Thu thập danh sách ID tệp Google Drive để dọn dẹp sau khi xóa DB
+        var driveFileIds = new List<string>();
+        foreach (var img in game.Images.Where(i => !string.IsNullOrEmpty(i.GoogleDriveFileId)))
+            driveFileIds.Add(img.GoogleDriveFileId!);
+        foreach (var vid in game.Videos.Where(v => !string.IsNullOrEmpty(v.GoogleDriveFileId)))
+            driveFileIds.Add(vid.GoogleDriveFileId!);
+        foreach (var file in game.Files.Where(f => !string.IsNullOrEmpty(f.GoogleDriveFileId)))
+            driveFileIds.Add(file.GoogleDriveFileId!);
+        if (game.UnityDemo != null && !string.IsNullOrEmpty(game.UnityDemo.GoogleDriveFileId))
+            driveFileIds.Add(game.UnityDemo.GoogleDriveFileId);
+
+        // 5. Xóa các quan hệ bảng còn lại
         db.GameTags.RemoveRange(game.GameTags);
         db.GameCategories.RemoveRange(game.GameCategories);
         db.GameImages.RemoveRange(game.Images);
@@ -199,16 +237,15 @@ public class AdminService(AppDbContext db, IEmailService email) : IAdminService
         {
             db.UnityDemos.Remove(game.UnityDemo);
         }
-        db.Reviews.RemoveRange(game.Reviews);
         db.Wishlists.RemoveRange(game.Wishlists);
         db.OrderItems.RemoveRange(game.OrderItems);
         db.UserGames.RemoveRange(game.UserGames);
 
-        // Xóa game chính
+        // 6. Xóa game chính
         db.Games.Remove(game);
         await db.SaveChangesAsync(ct);
 
-        // Xóa thư mục chứa tệp vật lý của game trong wwwroot
+        // 7. Xóa thư mục chứa tệp vật lý của game trong wwwroot
         var gameFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", id.ToString());
         if (Directory.Exists(gameFolder))
         {
@@ -219,6 +256,19 @@ public class AdminService(AppDbContext db, IEmailService email) : IAdminService
             catch (Exception ex)
             {
                 Console.WriteLine($"Failed to delete physical game folder: {ex.Message}");
+            }
+        }
+
+        // 8. Dọn dẹp tệp trên Google Drive
+        foreach (var fileId in driveFileIds)
+        {
+            try
+            {
+                await drive.DeleteAsync(fileId, ct);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Failed to delete Google Drive file {fileId}: {ex.Message}");
             }
         }
     }
@@ -977,5 +1027,100 @@ public class AdminService(AppDbContext db, IEmailService email) : IAdminService
             .CountAsync(ct);
 
         return new AnalyticsTimeSummaryDto(revenue, orders, downloads, registrations, demoPlays);
+    }
+
+    public async Task<TranslateGameTextResponse> TranslateGameTextAsync(TranslateGameTextRequest request, CancellationToken ct = default)
+    {
+        var srcLocale = string.IsNullOrWhiteSpace(request.SourceLocale) ? "vi" : request.SourceLocale.ToLowerInvariant();
+        var srcTitle = request.Title?.Trim() ?? "";
+        var srcDesc = request.Description?.Trim() ?? "";
+        var srcShortDesc = request.ShortDescription?.Trim() ?? "";
+
+        if (string.IsNullOrEmpty(srcTitle) && string.IsNullOrEmpty(srcDesc) && string.IsNullOrEmpty(srcShortDesc))
+        {
+            return new TranslateGameTextResponse(
+                new LocalizedGameText("", "", ""),
+                new LocalizedGameText("", "", ""),
+                new LocalizedGameText("", "", "")
+            );
+        }
+
+        var systemPrompt = """
+        You are an expert video game localizer and multilingual translator.
+        Translate the provided video game metadata across three languages:
+        1. Vietnamese (vi)
+        2. English (en)
+        3. Simplified Chinese (zh)
+
+        CRITICAL RULES:
+        - NEVER translate the game title! The game title is a proper brand name and MUST remain strictly identical in all languages.
+        - ONLY translate 'shortDescription' and 'description' accurately, maintaining natural gaming terminology and store tone.
+        - Preserve formatting, line breaks, bullet points, and special characters.
+        - You MUST respond ONLY with a valid JSON object matching this exact schema:
+        {
+          "vi": {
+            "description": "string",
+            "shortDescription": "string"
+          },
+          "en": {
+            "description": "string",
+            "shortDescription": "string"
+          },
+          "zh": {
+            "description": "string",
+            "shortDescription": "string"
+          }
+        }
+        Do not include any markdown fences or commentary outside the JSON.
+        """;
+
+        var userPrompt = $"""
+        Source Language: {srcLocale}
+        Game Title (Keep Unchanged): {srcTitle}
+        ShortDescription: {srcShortDesc}
+        Description:
+        {srcDesc}
+        """;
+
+        try
+        {
+            var rawJson = await groq.GenerateAsync(systemPrompt, userPrompt, ct, "application/json");
+            if (!string.IsNullOrWhiteSpace(rawJson))
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(rawJson);
+                var root = doc.RootElement;
+
+                LocalizedGameText ParseLang(string key, string fallbackDesc, string fallbackShort)
+                {
+                    if (root.TryGetProperty(key, out var el))
+                    {
+                        var d = el.TryGetProperty("description", out var dp) ? dp.GetString() : null;
+                        var s = el.TryGetProperty("shortDescription", out var sp) ? sp.GetString() : null;
+                        return new LocalizedGameText(srcTitle, d ?? fallbackDesc, s ?? fallbackShort);
+                    }
+                    return new LocalizedGameText(srcTitle, fallbackDesc, fallbackShort);
+                }
+
+                var vi = ParseLang("vi", srcLocale == "vi" ? srcDesc : "", srcLocale == "vi" ? srcShortDesc : "");
+                var en = ParseLang("en", srcLocale == "en" ? srcDesc : "", srcLocale == "en" ? srcShortDesc : "");
+                var zh = ParseLang("zh", srcLocale == "zh" ? srcDesc : "", srcLocale == "zh" ? srcShortDesc : "");
+
+                if (srcLocale == "vi") vi = new LocalizedGameText(srcTitle, srcDesc, srcShortDesc);
+                if (srcLocale == "en") en = new LocalizedGameText(srcTitle, srcDesc, srcShortDesc);
+                if (srcLocale == "zh") zh = new LocalizedGameText(srcTitle, srcDesc, srcShortDesc);
+
+                return new TranslateGameTextResponse(vi, en, zh);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Translation Error]: {ex.Message}");
+        }
+
+        return new TranslateGameTextResponse(
+            new LocalizedGameText(srcTitle, srcLocale == "vi" ? srcDesc : "", srcLocale == "vi" ? srcShortDesc : ""),
+            new LocalizedGameText(srcTitle, srcLocale == "en" ? srcDesc : "", srcLocale == "en" ? srcShortDesc : ""),
+            new LocalizedGameText(srcTitle, srcLocale == "zh" ? srcDesc : "", srcLocale == "zh" ? srcShortDesc : "")
+        );
     }
 }

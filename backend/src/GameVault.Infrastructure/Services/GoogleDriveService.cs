@@ -37,8 +37,16 @@ public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
     {
         var base64 = config["GoogleDrive:ServiceAccountJsonBase64"];
         var clientId = config["GoogleDrive:OAuth:ClientId"];
+        var clientSecret = config["GoogleDrive:OAuth:ClientSecret"];
+        var refreshToken = config["GoogleDrive:OAuth:RefreshToken"];
         var useFallback = config.GetValue<bool>("GoogleDrive:UseLocalFallback", true);
-        return useFallback || (string.IsNullOrEmpty(base64) && string.IsNullOrEmpty(clientId));
+
+        var hasValidSa = !string.IsNullOrEmpty(base64) && !base64.StartsWith("YOUR_");
+        var hasValidOAuth = !string.IsNullOrEmpty(clientId) && !clientId.StartsWith("YOUR_")
+            && !string.IsNullOrEmpty(clientSecret) && !clientSecret.StartsWith("YOUR_")
+            && !string.IsNullOrEmpty(refreshToken) && !refreshToken.StartsWith("YOUR_");
+
+        return useFallback || (!hasValidSa && !hasValidOAuth);
     }
 
     private DriveService GetDriveService()
@@ -48,7 +56,9 @@ public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
         var clientSecret = config["GoogleDrive:OAuth:ClientSecret"];
         var refreshToken = config["GoogleDrive:OAuth:RefreshToken"];
 
-        if (!string.IsNullOrEmpty(clientId) && !string.IsNullOrEmpty(clientSecret) && !string.IsNullOrEmpty(refreshToken))
+        if (!string.IsNullOrEmpty(clientId) && !clientId.StartsWith("YOUR_") 
+            && !string.IsNullOrEmpty(clientSecret) && !clientSecret.StartsWith("YOUR_") 
+            && !string.IsNullOrEmpty(refreshToken) && !refreshToken.StartsWith("YOUR_"))
         {
             var flow = new Google.Apis.Auth.OAuth2.Flows.GoogleAuthorizationCodeFlow(new Google.Apis.Auth.OAuth2.Flows.GoogleAuthorizationCodeFlow.Initializer
             {
@@ -132,11 +142,7 @@ public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
 
     public async Task<(string FileId, string Url)> UploadAsync(Stream stream, string fileName, string mimeType, string folder, CancellationToken ct = default)
     {
-        if (IsLocalFallback())
-        {
-            return await UploadLocalAsync(stream, fileName, folder, ct);
-        }
-        else
+        if (!IsLocalFallback())
         {
             try
             {
@@ -184,15 +190,20 @@ public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Google Drive upload failed, automatically falling back to local storage: {ex.Message}");
-                if (stream.CanSeek) stream.Position = 0;
-                return await UploadLocalAsync(stream, fileName, folder, ct);
+                try { System.IO.File.WriteAllText(Path.Combine(Directory.GetCurrentDirectory(), "drive_error.log"), ex.ToString()); } catch {}
+                Console.WriteLine($"[GoogleDrive Warning] Drive upload failed: {ex.Message}. Falling back to local storage.");
+                if (!config.GetValue<bool>("GoogleDrive:UseLocalFallback", true))
+                {
+                    throw;
+                }
+                if (stream.CanSeek)
+                {
+                    stream.Position = 0;
+                }
             }
         }
-    }
 
-    private async Task<(string FileId, string Url)> UploadLocalAsync(Stream stream, string fileName, string folder, CancellationToken ct)
-    {
+        // Local storage fallback
         Directory.CreateDirectory(Path.Combine(LocalRoot, folder));
         var fileId = Guid.NewGuid().ToString();
         var safeName = $"{fileId}_{Path.GetFileName(fileName)}";
@@ -201,6 +212,7 @@ public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
         await stream.CopyToAsync(fs, ct);
         return (fileId, $"/uploads/{folder}/{safeName}");
     }
+
 
     public async Task<string> GetDownloadUrlAsync(string fileId, CancellationToken ct = default)
     {

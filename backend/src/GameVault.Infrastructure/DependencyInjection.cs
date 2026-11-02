@@ -54,6 +54,9 @@ public static class DependencyInjection
             await AddColumnIfNotExistsAsync(conn, "Games", "TitleEn", "VARCHAR(255) NULL");
             await AddColumnIfNotExistsAsync(conn, "Games", "DescriptionEn", "MEDIUMTEXT NULL");
             await AddColumnIfNotExistsAsync(conn, "Games", "ShortDescriptionEn", "VARCHAR(500) NULL");
+            await AddColumnIfNotExistsAsync(conn, "Games", "TitleZh", "VARCHAR(255) NULL");
+            await AddColumnIfNotExistsAsync(conn, "Games", "DescriptionZh", "MEDIUMTEXT NULL");
+            await AddColumnIfNotExistsAsync(conn, "Games", "ShortDescriptionZh", "VARCHAR(500) NULL");
             await AddColumnIfNotExistsAsync(conn, "Reviews", "ParentId", "char(36) NULL");
             await AddColumnIfNotExistsAsync(conn, "GameImages", "Locale", "VARCHAR(10) NULL");
             await AddColumnIfNotExistsAsync(conn, "Users", "DateOfBirth", "DATE NULL");
@@ -320,21 +323,6 @@ public static class DependencyInjection
             await db.SaveChangesAsync();
         }
 
-        // Revert nguyenduynghia2111@gmail.com from Admin role (strip Admin, only Customer)
-        var targetUser = await db.Users.Include(u => u.UserRoles).ThenInclude(ur => ur.Role).FirstOrDefaultAsync(u => u.Email == "nguyenduynghia2111@gmail.com");
-        if (targetUser != null)
-        {
-            var adminUserRole = targetUser.UserRoles.FirstOrDefault(ur => ur.Role.Name == RoleNames.Admin);
-            if (adminUserRole != null)
-            {
-                targetUser.UserRoles.Remove(adminUserRole);
-                if (!targetUser.UserRoles.Any(ur => ur.Role.Name == RoleNames.Customer))
-                {
-                    targetUser.UserRoles.Add(new UserRole { Role = customerRole });
-                }
-                await db.SaveChangesAsync();
-            }
-        }
 
         // Seed categories if not present
         if (!await db.Categories.AnyAsync())

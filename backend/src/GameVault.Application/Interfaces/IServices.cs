@@ -93,6 +93,7 @@ public interface IAdminService
     Task<AdminAnalyticsDto> GetAnalyticsAsync(string? range, DateTime? startDate, DateTime? endDate, CancellationToken ct = default);
     Task ApproveCancellationAsync(Guid orderId, string? adminNote, CancellationToken ct = default);
     Task RejectCancellationAsync(Guid orderId, string? adminNote, CancellationToken ct = default);
+    Task<TranslateGameTextResponse> TranslateGameTextAsync(TranslateGameTextRequest request, CancellationToken ct = default);
 }
 
 public interface IGoogleDriveService
