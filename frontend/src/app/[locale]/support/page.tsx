@@ -226,17 +226,17 @@ export default function SupportHubPage() {
       <div className="rounded-2xl border border-white/[0.08] bg-gradient-to-r from-[#0E131E] via-[#141B2B] to-[#0E131E] p-8 flex flex-col md:flex-row items-center justify-between gap-6">
         <div className="space-y-2 text-center md:text-left">
           <h3 className="text-lg font-bold text-white flex items-center justify-center md:justify-start gap-2.5">
-            <span className="font-mono text-xs font-black text-cyan-300 bg-cyan-950/70 border border-cyan-500/30 px-2 py-0.5 rounded">
-              VO
+            <span className="size-6 rounded-md bg-cyan-950/70 border border-cyan-500/30 inline-flex items-center justify-center p-0.5">
+              <img src="/logo.png" alt="THE VOID" className="size-full object-contain" />
             </span>
             <span>{isVi ? "Cần giải đáp ngay lập tức?" : isZh ? "需要立即解答？" : "Need instant answers?"}</span>
           </h3>
           <p className="text-xs sm:text-sm text-zinc-400 max-w-lg">
             {isVi 
-              ? "Bạn có thể hỏi cố vấn Vault Oracle ở góc dưới màn hình hoặc gửi thư điện tử trực tiếp cho đội ngũ kỹ thuật của chúng tôi." 
+              ? "Bạn có thể hỏi trợ lý THE VOID ở góc dưới màn hình hoặc gửi thư điện tử trực tiếp cho đội ngũ kỹ thuật của chúng tôi." 
               : isZh
-                ? "您可以随时咨询右下角的 Vault Oracle，或直接发送电子邮件联系技术团队。"
-                : "Ask Vault Oracle located at the bottom-right corner or send an inquiry directly to our support team."}
+                ? "您可以随时咨询右下角的 THE VOID，或直接发送电子邮件联系技术团队。"
+                : "Ask THE VOID located at the bottom-right corner or send an inquiry directly to our support team."}
           </p>
         </div>
         <div className="flex items-center gap-3">

@@ -45,10 +45,10 @@ export function FloatingAiDock() {
   const initialGreeting: MiniMessage = {
     role: "assistant",
     content: isVi
-      ? "Xin chào! Tôi là Vault Oracle — hệ thống cố vấn & định vị game bản quyền của GameVault. Bạn đang tìm kiếm thể loại game nào? (Ví dụ: Game hành động, kinh dị, game dưới 100.000đ hoặc có WebGL Demo)"
+      ? "Xin chào! Tôi là THE VOID — trợ lý game bản quyền của GameVault. Bạn đang tìm kiếm thể loại game nào? (Ví dụ: Game hành động, kinh dị, game dưới 100.000đ hoặc có WebGL Demo)"
       : isZh
-      ? "你好！我是 Vault Oracle 智能游戏先知。你正在寻找什么类型的正版游戏？（例如：动作大作、特惠折扣或支持 WebGL 网页试玩）"
-      : "Greetings! I am Vault Oracle — your tactical gaming advisor. What genre, budget, or experience are you looking for today?",
+      ? "你好！我是 THE VOID 智能游戏助手。你正在寻找什么类型的正版游戏？（例如：动作大作、特惠折扣或支持 WebGL 网页试玩）"
+      : "Greetings! I am THE VOID — your tactical gaming advisor. What genre, budget, or experience are you looking for today?",
   };
 
   const [messages, setMessages] = useState<MiniMessage[]>([initialGreeting]);
@@ -200,10 +200,10 @@ export function FloatingAiDock() {
         {
           role: "assistant",
           content: isVi
-            ? "Hệ thống Vault Oracle tạm thời bận. Bạn vui lòng thử lại sau giây lát nhé!"
+            ? "Hệ thống THE VOID tạm thời bận. Bạn vui lòng thử lại sau giây lát nhé!"
             : isZh
-            ? "Vault Oracle 连接暂时中断，请稍后重试。"
-            : "Vault Oracle connection interrupted. Please try again in a moment.",
+            ? "THE VOID 连接暂时中断，请稍后重试。"
+            : "THE VOID connection interrupted. Please try again in a moment.",
         },
       ]);
     } finally {
@@ -230,23 +230,23 @@ export function FloatingAiDock() {
         <button
           onClick={() => setIsOpen(true)}
           className="group relative flex items-center gap-3.5 h-14 pl-4 pr-5 rounded-2xl bg-[#090D18]/95 border border-white/20 hover:border-cyan-400/70 backdrop-blur-xl text-white shadow-2xl shadow-black/90 transition-all duration-200 hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
-          title={isVi ? "Mở Cố Vấn Game (Vault Oracle)" : isZh ? "打开游戏先知 (Vault Oracle)" : "Open Vault Oracle"}
+          title="THE VOID"
         >
           {/* Cyan Glow Accent Stripe */}
           <div className="w-1.5 h-7 rounded-full bg-gradient-to-b from-cyan-400 to-blue-500 shadow-[0_0_10px_rgba(0,242,254,0.7)] group-hover:shadow-[0_0_14px_rgba(0,242,254,1)] transition-all" />
 
-          {/* Typographic Monogram */}
-          <span className="font-mono text-xs font-black tracking-widest text-cyan-300 bg-cyan-950/80 border border-cyan-500/40 px-2 py-1 rounded-lg">
-            VO
-          </span>
+          {/* Logo GameVault */}
+          <div className="size-8 rounded-lg bg-[#0C101A] border border-cyan-500/30 flex items-center justify-center p-1 shadow-[0_0_10px_rgba(0,242,254,0.25)]">
+            <img src="/logo.png" alt="THE VOID" className="size-full object-contain" />
+          </div>
 
           {/* Title & Tag Stack */}
           <div className="flex flex-col text-left">
             <span className="text-sm font-extrabold tracking-wider font-mono uppercase text-zinc-100 group-hover:text-cyan-300 transition-colors">
-              Vault Oracle
+              THE VOID
             </span>
             <span className="text-xs font-mono font-medium tracking-wide text-zinc-300 uppercase">
-              {isVi ? "Cố vấn game" : isZh ? "游戏先知" : "Game Advisor"}
+              {isVi ? "Trợ lý AI" : isZh ? "AI 助手" : "AI Assistant"}
             </span>
           </div>
         </button>
@@ -259,21 +259,13 @@ export function FloatingAiDock() {
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/[0.1] bg-[#0E1424]/95 px-4 sm:px-5 py-3.5">
             <div className="flex items-center gap-3">
-              <div className="size-9 rounded-xl bg-gradient-to-br from-cyan-500/25 via-blue-500/15 to-transparent border border-cyan-500/40 flex items-center justify-center font-mono text-xs font-black text-cyan-300 tracking-wider shadow-[0_0_12px_rgba(0,242,254,0.25)]">
-                VO
+              <div className="size-9 rounded-xl bg-[#0C101A] border border-cyan-500/40 flex items-center justify-center p-1.5 shadow-[0_0_12px_rgba(0,242,254,0.25)]">
+                <img src="/logo.png" alt="THE VOID" className="size-full object-contain" />
               </div>
               <div>
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-extrabold tracking-wide text-white uppercase font-mono">
-                    Vault Oracle
-                  </h4>
-                  <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 uppercase tracking-wider">
-                    Online
-                  </span>
-                </div>
-                <p className="text-xs text-zinc-300 font-medium mt-0.5">
-                  {isVi ? "Cố vấn định vị & đề xuất game" : isZh ? "正版游戏智能推荐与咨询" : "Tactical Game Intelligence"}
-                </p>
+                <h4 className="text-sm font-extrabold tracking-wide text-white uppercase font-mono">
+                  THE VOID
+                </h4>
               </div>
             </div>
 
@@ -307,7 +299,7 @@ export function FloatingAiDock() {
                     m.role === "user" ? "text-zinc-300" : "text-cyan-300"
                   }`}
                 >
-                  {m.role === "user" ? (isVi ? "BẠN" : isZh ? "你" : "YOU") : "VAULT ORACLE"}
+                  {m.role === "user" ? (isVi ? "BẠN" : isZh ? "你" : "YOU") : "THE VOID"}
                 </span>
 
                 <div
@@ -484,9 +476,6 @@ export function FloatingAiDock() {
                 {isVi ? "Gửi" : isZh ? "发送" : "Send"}
               </button>
             </div>
-            <span className="text-xs font-mono text-zinc-300 text-center">
-              {isVi ? "Nhấn Enter để gửi • Vault Oracle Engine" : "Press Enter to submit • Vault Oracle Engine"}
-            </span>
           </form>
 
         </div>
