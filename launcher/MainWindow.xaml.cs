@@ -364,17 +364,52 @@ public partial class MainWindow : Window
         await LoadLibraryAsync();
     }
 
+    private string _currentFilter = "all";
+
+    private void BtnFilterAll_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilter = "all";
+        ApplyCurrentFilters();
+    }
+
+    private void BtnFilterInstalled_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilter = "installed";
+        ApplyCurrentFilters();
+    }
+
+    private void BtnFilterNotInstalled_Click(object sender, RoutedEventArgs e)
+    {
+        _currentFilter = "not_installed";
+        ApplyCurrentFilters();
+    }
+
     private void TxtSearchGame_TextChanged(object sender, TextChangedEventArgs e)
     {
-        var filter = txtSearchGame.Text.Trim().ToLowerInvariant();
+        ApplyCurrentFilters();
+    }
+
+    private void ApplyCurrentFilters()
+    {
+        var filter = txtSearchGame?.Text?.Trim().ToLowerInvariant() ?? "";
         _displayedGames.Clear();
 
         foreach (var game in _allGames)
         {
-            if (string.IsNullOrEmpty(filter) || game.Title.ToLowerInvariant().Contains(filter) || game.Slug.ToLowerInvariant().Contains(filter))
+            if (!string.IsNullOrEmpty(filter) && !game.Title.ToLowerInvariant().Contains(filter) && !game.Slug.ToLowerInvariant().Contains(filter))
             {
-                _displayedGames.Add(game);
+                continue;
             }
+
+            if (_currentFilter == "installed" && !game.IsInstalled) continue;
+            if (_currentFilter == "not_installed" && game.IsInstalled) continue;
+
+            _displayedGames.Add(game);
+        }
+
+        if (txtShelfCount != null)
+        {
+            txtShelfCount.Text = $"({_displayedGames.Count} trò chơi)";
         }
     }
 
@@ -688,6 +723,40 @@ public partial class MainWindow : Window
         {
             BtnVisitWebsite_Click(sender, e);
         }
+    }
+
+    #endregion
+
+    #region Custom Window Chrome Controls
+
+    private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton == MouseButton.Left)
+        {
+            if (e.ClickCount == 2)
+            {
+                BtnMaximize_Click(sender, e);
+            }
+            else
+            {
+                DragMove();
+            }
+        }
+    }
+
+    private void BtnMinimize_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState.Minimized;
+    }
+
+    private void BtnMaximize_Click(object sender, RoutedEventArgs e)
+    {
+        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    }
+
+    private void BtnClose_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
     }
 
     #endregion
