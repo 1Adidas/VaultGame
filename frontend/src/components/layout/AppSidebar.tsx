@@ -106,8 +106,8 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
         <div className="h-16 px-5 flex items-center justify-between border-b border-white/[0.06] shrink-0">
           <Link href={prefix} onClick={onClose} className="flex items-center gap-2.5 group">
             <div className="size-9 rounded-xl bg-gradient-to-br from-violet-600 via-indigo-600 to-cyan-400 p-[1px] shadow-lg shadow-violet-500/20 group-hover:scale-105 transition-transform">
-              <div className="size-full rounded-[11px] bg-[#080B11] flex items-center justify-center">
-                <Gamepad2 className="size-4.5 text-white" />
+              <div className="size-full rounded-[11px] bg-[#080B11] flex items-center justify-center p-1.5">
+                <img src="/logo.png" alt="GameVault Logo" className="size-full object-contain" />
               </div>
             </div>
             <div>

@@ -205,6 +205,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
 
           {/* Quick Breadcrumb Indicator */}
           <div className="hidden sm:flex items-center gap-2 text-xs">
+            <img src="/logo.png" alt="GameVault Logo" className="size-5 object-contain drop-shadow" />
             <span className="font-semibold text-white tracking-tight">GameVault</span>
             <span className="text-zinc-600">/</span>
             <span className="text-zinc-400 font-medium">

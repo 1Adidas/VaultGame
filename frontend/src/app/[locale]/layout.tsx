@@ -25,6 +25,14 @@ export async function generateMetadata({
       : isZh
       ? "探索顶级正版数字游戏，免安装即玩网页端 WebGL Demo 演示，并在 Game Vault 享受极速安全交易。"
       : "Discover premium digital games, play instant WebGL browser demos with no installation, and enjoy secure checkout at Game Vault.",
+    icons: {
+      icon: [
+        { url: "/favicon.ico", sizes: "any" },
+        { url: "/logo.png", type: "image/png" },
+      ],
+      shortcut: "/favicon.ico",
+      apple: "/logo.png",
+    },
   };
 }
 
@@ -42,6 +50,9 @@ export default async function LocaleLayout({
     <html lang={locale} className="dark" suppressHydrationWarning>
       <head>
         <meta name="referrer" content="no-referrer" />
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        <link rel="shortcut icon" href="/favicon.ico" />
+        <link rel="apple-touch-icon" href="/logo.png" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
