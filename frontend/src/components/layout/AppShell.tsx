@@ -5,6 +5,7 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
 import { FloatingAiDock } from "@/components/ai/FloatingAiDock";
+import { DemoRoleSwitcher } from "@/components/demo/DemoRoleSwitcher";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -31,6 +32,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* 3. Floating AI Game Copilot */}
       <FloatingAiDock />
+
+      {/* 4. Demo Role Switcher (Chế độ xem trước vai trò cho Designer - xem DEMO_ROLE_SWITCHER.md để xóa) */}
+      <DemoRoleSwitcher />
     </div>
   );
 }
