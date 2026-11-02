@@ -3,8 +3,18 @@
 import { useState, useEffect, useRef } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { api, type ApiResponse } from "@/lib/api/client";
-import { Button, Card } from "@/components/ui/button";
-import { Loader2, RefreshCw, Clock, AlertTriangle } from "lucide-react";
+import { 
+  Loader2, 
+  RefreshCw, 
+  Clock, 
+  AlertTriangle, 
+  Copy, 
+  Check, 
+  ShieldCheck, 
+  Zap, 
+  X,
+  CreditCard
+} from "lucide-react";
 
 interface Props {
   orderId: string;
@@ -15,13 +25,26 @@ interface Props {
 export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
   const t = useTranslations("payment");
   const locale = useLocale();
+  const isVi = locale === "vi";
+  const isZh = locale === "zh";
+
   const [payment, setPayment] = useState<{ id: string; qrImageUrl?: string; expiresAt?: string; orderCode?: string; amount?: number } | null>(null);
   const [status, setStatus] = useState("pending");
   const [loading, setLoading] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(180); // 3 minutes (180 seconds)
+  const [timeLeft, setTimeLeft] = useState(180);
   const [isExpired, setIsExpired] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const copyToClipboard = (text: string, fieldName: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => {
+      setCopiedField(null);
+    }, 2000);
+  };
 
   const startPayment = async () => {
     setLoading(true);
@@ -31,7 +54,6 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
       const { data } = await api.post<ApiResponse<{ id: string; qrImageUrl?: string; expiresAt?: string; orderCode?: string; amount?: number }>>(`/orders/${orderId}/pay`);
       setPayment(data.data);
       
-      // Compute remaining time if server returns expiresAt
       if (data.data.expiresAt) {
         const expiresTime = new Date(data.data.expiresAt).getTime();
         const now = new Date().getTime();
@@ -44,7 +66,6 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
       startPolling(data.data.id);
       startCountdown();
 
-      // Simulated payment for development environment
       if (process.env.NEXT_PUBLIC_SEPAY_SIMULATE === "true") {
         setTimeout(async () => {
           try {
@@ -89,7 +110,7 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
           if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
           onSuccess();
         }
-      } catch { /* keep polling */ }
+      } catch { /* continue polling */ }
     }, 2000);
   };
 
@@ -108,121 +129,188 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <Card className="max-w-md w-full p-6 bg-zinc-900 border-zinc-800 shadow-2xl space-y-5">
-        <h2 className="text-lg font-bold text-center text-white">{t("scanQr")}</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+      <div className="max-w-md w-full rounded-3xl border border-white/[0.1] bg-[#0E131E] p-6 sm:p-7 shadow-2xl space-y-6">
         
+        {/* Top Header */}
+        <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
+          <div className="flex items-center gap-2.5">
+            <div className="size-8 rounded-xl bg-white/10 flex items-center justify-center text-white">
+              <CreditCard className="size-4" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white">
+                {isVi ? "Thanh Toán VietQR Tự Động" : isZh ? "VietQR 自动扫码支付" : "Automated VietQR Payment"}
+              </h3>
+              <p className="text-[10px] text-zinc-400">
+                {isVi ? "Kích hoạt bản quyền game tức thì" : isZh ? "官方数字授权即时自动入库" : "Instant license activation"}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1 text-zinc-400 hover:text-white hover:bg-white/5 transition-colors"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {/* Content Body */}
         {loading ? (
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 py-10">
-            <Loader2 className="h-9 w-9 animate-spin text-violet-500" />
-            <p className="text-sm text-zinc-400">{t("loading")}</p>
+          <div className="py-12 flex flex-col items-center justify-center gap-3">
+            <Loader2 className="size-8 animate-spin text-white" />
+            <p className="text-xs text-zinc-400">
+              {isVi ? "Đang tạo mã thanh toán VietQR..." : isZh ? "正在生成动态 VietQR 支付码..." : "Generating dynamic VietQR..."}
+            </p>
           </div>
         ) : status === "success" ? (
-          <div className="py-8 text-center space-y-3">
-            <div className="text-4xl">🎉</div>
-            <p className="text-green-400 font-bold text-xl">{t("success")}</p>
+          <div className="py-10 text-center space-y-3">
+            <div className="size-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center mx-auto text-emerald-400 text-2xl">
+              ✓
+            </div>
+            <h4 className="text-lg font-bold text-white">
+              {isVi ? "Giao Dịch Thành Công!" : isZh ? "交易支付成功！" : "Payment Confirmed!"}
+            </h4>
+            <p className="text-xs text-zinc-400 max-w-xs mx-auto">
+              {isVi ? "Game đã được tự động thêm vào thư viện của bạn." : isZh ? "游戏已自动添加到您的个人游戏库中。" : "The game has been added to your library."}
+            </p>
           </div>
         ) : payment?.qrImageUrl ? (
-          <div className="flex flex-col items-center gap-4">
-            {/* Live Countdown Timer Banner */}
-            <div className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-mono font-bold border transition ${
+          <div className="flex flex-col items-center gap-5">
+            
+            {/* Countdown Badge */}
+            <div className={`flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-mono font-semibold border transition ${
               isExpired
                 ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
                 : timeLeft <= 30
                 ? "bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse"
-                : "bg-violet-500/10 text-violet-300 border-violet-500/20"
+                : "bg-white/5 text-zinc-300 border-white/10"
             }`}>
               <Clock className="size-3.5" />
               <span>
                 {isExpired
-                  ? (locale === "vi" ? "Mã QR đã hết hạn" : "QR Code Expired")
-                  : `${locale === "vi" ? "Thời gian còn lại: " : "Expires in: "}${formatTimer(timeLeft)}`}
+                  ? (isVi ? "Mã QR đã hết hạn" : isZh ? "支付二维码已过期" : "QR Code Expired")
+                  : `${isVi ? "Thời gian còn lại: " : isZh ? "有效剩余时间: " : "Expires in: "}${formatTimer(timeLeft)}`}
               </span>
             </div>
 
-            {/* QR Code Frame with Zalo-Style Blur & Recreate Overlay */}
-            <div className="relative h-64 w-64 rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-white p-2 flex items-center justify-center group">
+            {/* QR Image Container */}
+            <div className="relative h-60 w-60 rounded-2xl overflow-hidden border border-white/15 shadow-2xl bg-white p-2.5 flex items-center justify-center">
               <img
                 src={payment.qrImageUrl}
-                alt="QR Code"
-                className={`size-full object-contain transition duration-300 ${isExpired ? "blur-md opacity-25" : ""}`}
+                alt="VietQR Code"
+                className={`size-full object-contain transition duration-300 ${isExpired ? "blur-md opacity-20" : ""}`}
               />
 
-              {/* Zalo-Style Expired Overlay */}
               {isExpired && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4 bg-zinc-950/85 backdrop-blur-sm text-center space-y-3 animate-in fade-in duration-200">
-                  <div className="p-2.5 rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400">
-                    <AlertTriangle className="size-6" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs font-bold text-white uppercase tracking-wider">
-                      {locale === "vi" ? "Mã QR đã hết hạn" : "QR Code Expired"}
-                    </p>
-                    <p className="text-[11px] text-zinc-400 leading-snug">
-                      {locale === "vi" ? "Đã quá 3 phút. Vui lòng lấy mã mới để tiếp tục." : "3 minutes limit reached. Please generate a new QR."}
-                    </p>
-                  </div>
-                  <Button
+                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center p-4 bg-[#080B11]/90 backdrop-blur-sm text-center space-y-3">
+                  <AlertTriangle className="size-8 text-amber-400" />
+                  <p className="text-xs font-bold text-white">
+                    {isVi ? "Mã QR đã hết thời gian hiệu lực" : isZh ? "支付码已超过有效支付时间" : "QR Code has expired"}
+                  </p>
+                  <button
                     onClick={startPayment}
-                    className="mt-1 h-9 px-4 text-xs font-bold bg-violet-600 hover:bg-violet-500 text-white shadow-lg shadow-violet-900/50 flex items-center gap-1.5 cursor-pointer"
+                    className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
                   >
-                    <RefreshCw className="size-3.5" />
-                    {locale === "vi" ? "Tạo mã QR mới" : "Recreate QR Code"}
-                  </Button>
+                    <RefreshCw className="size-3" />
+                    <span>{isVi ? "Tạo Mã Mới" : isZh ? "重新生成" : "Generate New"}</span>
+                  </button>
                 </div>
               )}
             </div>
 
-            {/* Order Code & Amount Details */}
-            <div className="text-sm space-y-2 text-center bg-zinc-950/80 p-3.5 rounded-xl border border-zinc-800 w-full">
+            {/* Transaction Details with Copy Buttons */}
+            <div className="w-full rounded-xl bg-[#080B11] border border-white/[0.08] p-3.5 space-y-2.5 text-xs">
               <div className="flex justify-between items-center gap-2">
-                <span className="text-zinc-500 text-xs font-semibold">{locale === "vi" ? "MÃ ĐƠN HÀNG:" : "ORDER CODE:"}</span>
-                <span className="font-mono font-bold text-violet-400 select-all text-sm bg-violet-500/10 px-2 py-0.5 rounded border border-violet-500/20">{payment.orderCode}</span>
+                <span className="text-zinc-500 font-bold uppercase text-[10px] tracking-wider">
+                  {isVi ? "NỘI DUNG CHUYỂN:" : isZh ? "转账附言/备注码:" : "TRANSFER CODE:"}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-mono font-bold text-white text-xs select-all">
+                    {payment.orderCode}
+                  </span>
+                  <button
+                    onClick={() => copyToClipboard(payment.orderCode || "", "code")}
+                    className="p-1 text-zinc-400 hover:text-white transition-colors"
+                    title={isVi ? "Sao chép" : isZh ? "复制" : "Copy"}
+                  >
+                    {copiedField === "code" ? (
+                      <Check className="size-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
-              <div className="flex justify-between items-center gap-2">
-                <span className="text-zinc-500 text-xs font-semibold">{locale === "vi" ? "SỐ TIỀN:" : "AMOUNT:"}</span>
-                <span className="font-bold text-emerald-400 text-sm">{payment.amount?.toLocaleString()} VND</span>
+
+              <div className="flex justify-between items-center gap-2 pt-1 border-t border-white/[0.04]">
+                <span className="text-zinc-500 font-bold uppercase text-[10px] tracking-wider">
+                  {isVi ? "SỐ TIỀN THANH TOÁN:" : isZh ? "支付金额:" : "AMOUNT:"}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-emerald-400 text-sm">
+                    {payment.amount?.toLocaleString()} VND
+                  </span>
+                  <button
+                    onClick={() => copyToClipboard(String(payment.amount || ""), "amount")}
+                    className="p-1 text-zinc-400 hover:text-white transition-colors"
+                    title={isVi ? "Sao chép" : isZh ? "复制" : "Copy"}
+                  >
+                    {copiedField === "amount" ? (
+                      <Check className="size-3.5 text-emerald-400" />
+                    ) : (
+                      <Copy className="size-3.5" />
+                    )}
+                  </button>
+                </div>
               </div>
             </div>
 
             {!isExpired && (
-              <p className="text-xs text-zinc-400 flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-                {t("waiting")}
-              </p>
+              <div className="flex items-center gap-2 text-xs text-zinc-400">
+                <Loader2 className="size-3 text-cyan-400 animate-spin" />
+                <span>{isVi ? "Đang chờ hệ thống ngân hàng xác nhận giao dịch..." : isZh ? "正在等待银行清算系统确认入账..." : "Waiting for bank transaction settlement..."}</span>
+              </div>
             )}
+
           </div>
         ) : (
-          <div className="mt-6 flex flex-col items-center gap-4">
-            <p className="text-sm text-red-400 text-center">{t("error")}</p>
-            <Button className="w-full" onClick={startPayment}>{locale === "vi" ? "Thử lại" : "Retry"}</Button>
+          <div className="py-8 text-center space-y-3">
+            <p className="text-xs text-rose-400">
+              {isVi ? "Có lỗi xảy ra khi tạo giao dịch thanh toán." : isZh ? "创建支付订单时发生错误。" : "An error occurred initiating payment."}
+            </p>
+            <button onClick={startPayment} className="btn-primary text-xs">
+              {isVi ? "Thử lại" : isZh ? "重试" : "Retry"}
+            </button>
           </div>
         )}
-        
-        {/* Modal Actions */}
-        <div className="flex gap-3 pt-2 w-full border-t border-zinc-800">
-          <Button variant="outline" className="flex-1 text-xs text-zinc-400 border-zinc-800 hover:bg-zinc-800 hover:text-white" onClick={onClose}>
-            {locale === "vi" ? "Đóng" : "Close"}
-          </Button>
-          <Button 
-            variant="outline" 
-            className="flex-1 text-xs bg-red-950/20 text-red-400 border border-red-500/20 hover:bg-red-600 hover:text-white transition"
+
+        {/* Modal Bottom Actions */}
+        <div className="pt-2 flex gap-3 border-t border-white/[0.08]">
+          <button
+            onClick={onClose}
+            className="btn-secondary flex-1 text-xs py-2"
+          >
+            {isVi ? "Đóng Cửa Sổ" : isZh ? "关闭窗口" : "Close Window"}
+          </button>
+          <button
             onClick={async () => {
-              if (window.confirm(locale === "vi" ? "Bạn có chắc chắn muốn hủy đơn hàng này?" : "Are you sure you want to cancel this order?")) {
+              if (window.confirm(isVi ? "Bạn có chắc muốn hủy đơn hàng này?" : isZh ? "您确定要取消此订单吗？" : "Are you sure you want to cancel?")) {
                 try {
                   await api.post(`/orders/${orderId}/cancel`);
                   onClose();
                 } catch (e) {
                   console.error(e);
-                  alert(locale === "vi" ? "Hủy đơn hàng thất bại. Vui lòng thử lại!" : "Failed to cancel order. Please try again!");
                 }
               }
             }}
+            className="btn-secondary flex-1 text-xs py-2 text-rose-400 border-rose-500/20 hover:bg-rose-500/10"
           >
-            {locale === "vi" ? "Hủy đơn hàng" : "Cancel Order"}
-          </Button>
+            {isVi ? "Hủy Đơn Hàng" : isZh ? "取消订单" : "Cancel Order"}
+          </button>
         </div>
-      </Card>
+
+      </div>
     </div>
   );
 }

@@ -52,7 +52,7 @@ public class GroqClient(IConfiguration config)
     private string[] GetApiKeys()
     {
         var keys = config.GetSection("Groq:ApiKeys").Get<string[]>() ?? [];
-        return keys.Where(k => !string.IsNullOrWhiteSpace(k)).ToArray();
+        return keys.Where(k => !string.IsNullOrWhiteSpace(k) && k.StartsWith("gsk_") && !k.Contains("YOUR_")).ToArray();
     }
 
     private string GetNextApiKey()
@@ -100,6 +100,7 @@ public class GroqClient(IConfiguration config)
                 using var request = new HttpRequestMessage(HttpMethod.Post,
                     "https://api.groq.com/openai/v1/chat/completions");
                 request.Headers.Add("Authorization", $"Bearer {apiKey.Trim()}");
+                request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GameVault/1.0");
 
                 object body;
                 if (responseMimeType == "application/json")
@@ -112,8 +113,8 @@ public class GroqClient(IConfiguration config)
                             new { role = "system", content = systemPrompt },
                             new { role = "user", content = userPrompt }
                         },
-                        temperature = 0.1,
-                        max_tokens = 1024,
+                        temperature = 0.2,
+                        max_tokens = 2048,
                         response_format = new { type = "json_object" }
                     };
                 }
@@ -127,8 +128,8 @@ public class GroqClient(IConfiguration config)
                             new { role = "system", content = systemPrompt },
                             new { role = "user", content = userPrompt }
                         },
-                        temperature = 0.1,
-                        max_tokens = 1024
+                        temperature = 0.2,
+                        max_tokens = 2048
                     };
                 }
 
@@ -410,148 +411,6 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                 ? "Đối với các game bạn đã mua, hãy đăng nhập và truy cập vào trang Thư viện của bạn. Tại đây, bạn sẽ thấy nút 'Tải game' để tải tệp cài đặt về máy tính của mình nhé!"
                 : "For games you have purchased, log in and head over to your Library. There, you'll find a 'Download' button next to each owned game to download the installer to your computer!";
         }
-        else if (q.Contains("danh sach nguoi dung") || q.Contains("danh sach user") || 
-                 q.Contains("thong tin nguoi dung") || q.Contains("thong tin user") || 
-                 q.Contains("liet ke nguoi dung") || q.Contains("liet ke user") || 
-                 q.Contains("user list") || q.Contains("list of users") || q.Contains("danh sach khach hang") || q.Contains("thong ke nguoi dung") || q.Contains("thống kê người dùng")
-                 || q.Contains("người dùng") || q.Contains("nguoi dung") || q.Contains("user info") || q.Contains("user"))
-        {
-            bool isAdmin = false;
-            if (userId.HasValue)
-            {
-                var userRoles = await db.UserRoles.AsNoTracking()
-                    .Where(ur => ur.UserId == userId.Value)
-                    .Join(db.Roles.AsNoTracking(), ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
-                    .ToListAsync(ct);
-                isAdmin = userRoles.Contains("Admin");
-            }
-
-            if (!isAdmin)
-            {
-                customAnswer = request.Locale == "vi"
-                    ? "Xin lỗi, thông tin người dùng chỉ dành cho Quản trị viên hệ thống."
-                    : "Sorry, user information is only accessible by System Administrators.";
-            }
-            else
-            {
-                var users = await db.Users.AsNoTracking()
-                    .OrderByDescending(u => u.CreatedAt)
-                    .Take(10)
-                    .ToListAsync(ct);
-
-                if (request.Locale == "vi")
-                {
-                    var lines = users.Select((u, index) => $"{index + 1}. **{u.FullName}** ({u.Email}) - Đăng ký: {u.CreatedAt.AddHours(7):dd/MM/yyyy HH:mm} - Trạng thái: {(u.IsActive ? "Hoạt động" : "Bị khóa")}");
-                    customAnswer = $"### Danh sách 10 người dùng mới nhất:\n" + string.Join("\n", lines);
-                }
-                else
-                {
-                    var lines = users.Select((u, index) => $"{index + 1}. **{u.FullName}** ({u.Email}) - Registered: {u.CreatedAt:yyyy-MM-dd HH:mm} - Status: {(u.IsActive ? "Active" : "Locked")}");
-                    customAnswer = $"### List of 10 latest users:\n" + string.Join("\n", lines);
-                }
-            }
-        }
-        else if (q.Contains("doanh thu") || q.Contains("doanh so") || q.Contains("revenue") || q.Contains("sales") || 
-                 q.Contains("lich su don hang") || q.Contains("order history") || q.Contains("giao dich") || q.Contains("transaction"))
-        {
-            bool isAdmin = false;
-            if (userId.HasValue)
-            {
-                var userRoles = await db.UserRoles.AsNoTracking()
-                    .Where(ur => ur.UserId == userId.Value)
-                    .Join(db.Roles.AsNoTracking(), ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
-                    .ToListAsync(ct);
-                isAdmin = userRoles.Contains("Admin");
-            }
-
-            if (!isAdmin)
-            {
-                customAnswer = request.Locale == "vi"
-                    ? "Xin lỗi, thông tin doanh thu và đơn hàng chỉ dành cho Quản trị viên hệ thống."
-                    : "Sorry, revenue and order information is only accessible by System Administrators.";
-            }
-            else
-            {
-                var completedOrders = await db.Orders.AsNoTracking()
-                    .Where(o => o.Status == "Paid")
-                    .ToListAsync(ct);
-
-                var totalRevenue = completedOrders.Sum(o => o.TotalAmount);
-                var orderCount = completedOrders.Count;
-
-                var latestOrders = await db.Orders.AsNoTracking()
-                    .Where(o => o.Status == "Paid")
-                    .OrderByDescending(o => o.CompletedAt ?? o.CreatedAt)
-                    .Take(10)
-                    .Include(o => o.User)
-                    .ToListAsync(ct);
-
-                if (request.Locale == "vi")
-                {
-                    var orderLines = latestOrders.Select((o, index) => 
-                        $"{index + 1}. **Mã đơn: {o.OrderCode}** - Khách hàng: {o.User?.FullName ?? "Khách"} - Số tiền: {o.TotalAmount:N0} {o.Currency} - Hoàn thành: {o.CompletedAt?.AddHours(7):dd/MM/yyyy HH:mm}");
-                        
-                    customAnswer = $"### Thống kê doanh thu cửa hàng:\n" +
-                                   $"- **Tổng doanh thu tích lũy**: **{totalRevenue:N0} VND** (từ {orderCount} đơn hàng thành công).\n\n" +
-                                   $"#### Lịch sử 10 giao dịch gần nhất:\n" +
-                                   (latestOrders.Any() ? string.Join("\n", orderLines) : "*Chưa có giao dịch hoàn thành nào.*");
-                }
-                else
-                {
-                    var orderLines = latestOrders.Select((o, index) => 
-                        $"{index + 1}. **Order: {o.OrderCode}** - Customer: {o.User?.FullName ?? "Guest"} - Amount: {o.TotalAmount:N2} {o.Currency} - Completed: {o.CompletedAt:yyyy-MM-dd HH:mm}");
-                        
-                    customAnswer = $"### Revenue Statistics:\n" +
-                                   $"- **Total Revenue**: **{totalRevenue:N2} VND** (from {orderCount} completed orders).\n\n" +
-                                   $"#### 10 Latest Completed Transactions:\n" +
-                                   (latestOrders.Any() ? string.Join("\n", orderLines) : "*No completed transactions found.*");
-                }
-            }
-        }
-        else if (q.Contains("thong ke he thong") || q.Contains("system information") || 
-                 q.Contains("system stats") || q.Contains("thong tin he thong") || q.Contains("thong ke") || q.Contains("statistics"))
-        {
-            bool isAdmin = false;
-            if (userId.HasValue)
-            {
-                var userRoles = await db.UserRoles.AsNoTracking()
-                    .Where(ur => ur.UserId == userId.Value)
-                    .Join(db.Roles.AsNoTracking(), ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
-                    .ToListAsync(ct);
-                isAdmin = userRoles.Contains("Admin");
-            }
-
-            if (isAdmin)
-            {
-                var totalUsers = await db.Users.CountAsync(ct);
-                var publishedGames = await db.Games.CountAsync(g => g.Status == "Published", ct);
-                var draftGames = await db.Games.CountAsync(g => g.Status == "Draft", ct);
-                var totalGames = publishedGames + draftGames;
-
-                var totalOrders = await db.Orders.CountAsync(ct);
-                var completedOrdersCount = await db.Orders.CountAsync(o => o.Status == "Paid", ct);
-                var pendingOrdersCount = await db.Orders.CountAsync(o => o.Status == "Pending", ct);
-
-                var totalRevenue = await db.Orders.Where(o => o.Status == "Paid").SumAsync(o => o.TotalAmount, ct);
-
-                if (request.Locale == "vi")
-                {
-                    customAnswer = $"### Báo cáo thống kê hệ thống GameVault:\n" +
-                                   $"- **Người dùng**: **{totalUsers}** thành viên đăng ký.\n" +
-                                   $"- **Kho game**: **{totalGames}** tựa game (bao gồm **{publishedGames}** đã xuất bản, **{draftGames}** bản nháp).\n" +
-                                   $"- **Đơn hàng**: **{totalOrders}** đơn hàng đã tạo (trong đó **{completedOrdersCount}** đã hoàn thành, **{pendingOrdersCount}** đang chờ xử lý).\n" +
-                                   $"- **Tổng doanh thu tích lũy**: **{totalRevenue:N0} VND**.";
-                }
-                else
-                {
-                    customAnswer = $"### GameVault System Statistics Report:\n" +
-                                   $"- **Users**: **{totalUsers}** registered members.\n" +
-                                   $"- **Catalog**: **{totalGames}** games (**{publishedGames}** published, **{draftGames}** drafts).\n" +
-                                   $"- **Orders**: **{totalOrders}** created (**{completedOrdersCount}** completed, **{pendingOrdersCount}** pending).\n" +
-                                   $"- **Total Store Revenue**: **{totalRevenue:N2} VND**.";
-                }
-            }
-        }
         else if (IsGreetingOnly(q))
         {
             customAnswer = request.Locale == "vi"
@@ -589,11 +448,6 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
             var userEntity = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId.Value, ct);
             if (userEntity != null)
             {
-                var roles = await db.UserRoles.AsNoTracking()
-                    .Where(ur => ur.UserId == userId.Value)
-                    .Join(db.Roles.AsNoTracking(), ur => ur.RoleId, r => r.Id, (ur, r) => r.Name)
-                    .ToListAsync(ct);
-
                 var purchasedCount = await db.UserGames.AsNoTracking().CountAsync(ug => ug.UserId == userId.Value, ct);
 
                 var wishlistedGames = await db.Wishlists.AsNoTracking()
@@ -606,7 +460,6 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                     .Join(db.Games.AsNoTracking(), r => r.GameId, g => g.Id, (r, g) => new { g.Title, r.Rating, r.Comment })
                     .ToListAsync(ct);
 
-                var rolesStr = string.Join(", ", roles);
                 var wishlistStr = wishlistedGames.Any() ? string.Join(", ", wishlistedGames) : "None";
                 var reviewsStr = reviews.Any() 
                     ? string.Join("; ", reviews.Select(rv => $"{rv.Title} (Rating: {rv.Rating}/5, Comment: \"{rv.Comment}\")"))
@@ -618,7 +471,6 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                     - User ID: {userEntity.Id}
                     - Full Name: {userEntity.FullName}
                     - Email: {userEntity.Email}
-                    - Roles: {rolesStr}
                     - Date of Birth: {userEntity.DateOfBirth?.ToString("yyyy-MM-dd") ?? "Not set"}
                     - Registered At: {userEntity.CreatedAt:yyyy-MM-dd}
                     - Number of Games Purchased: {purchasedCount}
@@ -1500,7 +1352,7 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         
         var staticGreetings = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "xin", "chao", "ban", "nhe", "ad", "admin", "em", "anh", "chi", "moi", "nguoi",
+            "alo", "xin", "chao", "ban", "nhe", "ad", "admin", "em", "anh", "chi", "moi", "nguoi",
             "ola", "greetings", "good", "morning", "afternoon", "evening", "buoi", "sang", "chieu", "toi", "ae", "nha", "oi", "da", "sup", "whatsup", "whats", "up",
             "hi", "hii", "hiii", "hiiii", "hello", "helloo", "helo", "heloo", "halo", "haloo", "hey", "heyy", "heyyy", "yo", "yoo", "he", "lo", "ni", "nee", "e"
         };

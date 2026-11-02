@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLocale } from "next-intl";
 import { api, type ApiResponse } from "@/lib/api/client";
 import type { GameListItem } from "@/components/game/GameCard";
 
@@ -20,20 +21,24 @@ export interface GameFilter {
 }
 
 export function useGames(filter: GameFilter = {}) {
+  const locale = useLocale();
+
   return useQuery({
-    queryKey: ["games", filter],
+    queryKey: ["games", filter, locale],
     queryFn: async () => {
-      const { data } = await api.get<ApiResponse<{ items: GameListItem[]; page: number; pageSize: number; total: number }>>("/games", { params: filter });
+      const { data } = await api.get<ApiResponse<{ items: GameListItem[]; page: number; pageSize: number; total: number }>>("/games", { params: { ...filter, locale } });
       return { games: data.data.items, meta: data.meta };
     },
   });
 }
 
 export function useGame(slug: string) {
+  const locale = useLocale();
+
   return useQuery({
-    queryKey: ["game", slug],
+    queryKey: ["game", slug, locale],
     queryFn: async () => {
-      const { data } = await api.get<ApiResponse<Record<string, unknown>>>(`/games/${slug}`);
+      const { data } = await api.get<ApiResponse<Record<string, unknown>>>(`/games/${slug}`, { params: { locale } });
       return data.data;
     },
     enabled: !!slug,

@@ -1,6 +1,472 @@
 @import "tailwindcss";
 
-body {
-  background: #09090b;
-  color: #fafafa;
+/* ===================================================================
+   GAME VAULT — Premium Dark Gaming Design System v3.0
+   Palette: Obsidian base, Electric Violet accent, Cyan highlights
+   =================================================================== */
+
+@layer base {
+  :root {
+    /* ── Core Palette ── */
+    --gv-bg-deep:       #060911;
+    --gv-bg-base:       #0A0E1A;
+    --gv-bg-surface:    #0F1424;
+    --gv-bg-elevated:   #151B30;
+    --gv-bg-hover:      #1A2240;
+    --gv-bg-active:     #1F2950;
+
+    /* ── Accent Colors ── */
+    --gv-violet:        #8B5CF6;
+    --gv-violet-bright: #A78BFA;
+    --gv-violet-dim:    #6D28D9;
+    --gv-cyan:          #22D3EE;
+    --gv-cyan-dim:      #0891B2;
+    --gv-emerald:       #34D399;
+    --gv-amber:         #FBBF24;
+    --gv-rose:          #FB7185;
+
+    /* ── Border & Surface ── */
+    --gv-border:        rgba(255, 255, 255, 0.06);
+    --gv-border-hover:  rgba(255, 255, 255, 0.12);
+    --gv-border-accent: rgba(139, 92, 246, 0.25);
+    --gv-glass:         rgba(15, 20, 36, 0.75);
+    --gv-glass-heavy:   rgba(10, 14, 26, 0.88);
+
+    /* ── Typography ── */
+    --gv-text:          #F1F5F9;
+    --gv-text-secondary:#94A3B8;
+    --gv-text-muted:    #64748B;
+    --gv-text-dim:      #475569;
+
+    /* ── Shadows ── */
+    --gv-shadow-sm:     0 2px 8px rgba(0,0,0,0.25);
+    --gv-shadow-md:     0 8px 32px rgba(0,0,0,0.35);
+    --gv-shadow-lg:     0 16px 64px rgba(0,0,0,0.5);
+    --gv-shadow-glow:   0 0 40px rgba(139,92,246,0.08);
+
+    /* ── Motion ── */
+    --gv-ease:          cubic-bezier(0.16, 1, 0.3, 1);
+    --gv-ease-bounce:   cubic-bezier(0.34, 1.56, 0.64, 1);
+    --gv-ease-spring:   cubic-bezier(0.22, 1.2, 0.36, 1);
+    --gv-duration:      0.3s;
+    --gv-duration-slow: 0.5s;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  .font-gaming {
+    font-family: 'Russo One', 'Outfit', system-ui, sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  body {
+    background-color: var(--gv-bg-deep);
+    color: var(--gv-text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    line-height: 1.6;
+    letter-spacing: -0.01em;
+  }
+
+  /* ── Premium Scrollbar ── */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.2);
+    border-radius: 9999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.4);
+  }
+
+  ::selection {
+    background-color: rgba(0, 242, 254, 0.35);
+    color: #ffffff;
+  }
+  ::-moz-selection {
+    background-color: rgba(0, 242, 254, 0.35);
+    color: #ffffff;
+  }
+  input::selection,
+  textarea::selection {
+    background-color: rgba(0, 242, 254, 0.35);
+    color: #ffffff;
+  }
+}
+
+/* ===================================================================
+   ANIMATIONS & KEYFRAMES
+   =================================================================== */
+
+@keyframes gv-fade-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gv-fade-in-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gv-slide-up {
+  from { opacity: 0; transform: translateY(40px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes gv-scale-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes gv-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes gv-pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.3); }
+  50% { box-shadow: 0 0 20px 4px rgba(139, 92, 246, 0.15); }
+}
+
+@keyframes gv-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes gv-gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+@keyframes gv-progress-bar {
+  from { width: 100%; }
+  to   { width: 0%; }
+}
+
+@keyframes gv-slide-left {
+  from { opacity: 0; transform: translateX(30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes gv-slide-right {
+  from { opacity: 0; transform: translateX(-30px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes gv-progress {
+  from { width: 0%; }
+  to   { width: 100%; }
+}
+
+@keyframes gv-shine {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes hero-flare {
+  0% {
+    transform: translateX(-120%) skewX(-20deg);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.9;
+  }
+  75% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateX(250%) skewX(-20deg);
+    opacity: 0;
+  }
+}
+
+/* ===================================================================
+   ANIMATION UTILITY CLASSES
+   =================================================================== */
+
+.animate-hero-flare {
+  animation: hero-flare 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-gv-slide-left {
+  animation: gv-slide-left 0.6s var(--gv-ease) forwards;
+}
+.animate-gv-slide-right {
+  animation: gv-slide-right 0.6s var(--gv-ease) forwards;
+}
+.animate-gv-progress {
+  animation: gv-progress 6s linear forwards;
+}
+.animate-gv-shine {
+  animation: gv-shine 3s ease-in-out infinite;
+}
+
+.animate-gv-fade-in {
+  animation: gv-fade-in 0.5s var(--gv-ease) forwards;
+}
+.animate-gv-fade-in-up {
+  animation: gv-fade-in-up 0.6s var(--gv-ease) forwards;
+}
+.animate-gv-slide-up {
+  animation: gv-slide-up 0.7s var(--gv-ease) forwards;
+}
+.animate-gv-scale-in {
+  animation: gv-scale-in 0.4s var(--gv-ease) forwards;
+}
+.animate-gv-float {
+  animation: gv-float 4s ease-in-out infinite;
+}
+.animate-gv-pulse-glow {
+  animation: gv-pulse-glow 2.5s ease-in-out infinite;
+}
+
+/* Staggered entrance helpers */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+.stagger-5 { animation-delay: 0.25s; }
+.stagger-6 { animation-delay: 0.3s; }
+.stagger-7 { animation-delay: 0.35s; }
+.stagger-8 { animation-delay: 0.4s; }
+
+/* ===================================================================
+   SURFACE & CARD SYSTEM
+   =================================================================== */
+
+/* Glass Surface — Primary card surface */
+.surface-card {
+  background: var(--gv-glass);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--gv-border);
+  border-radius: 16px;
+  transition: all var(--gv-duration) var(--gv-ease);
+}
+.surface-card:hover {
+  background: rgba(21, 27, 48, 0.85);
+  border-color: var(--gv-border-hover);
+  box-shadow: var(--gv-shadow-md), var(--gv-shadow-glow);
+  transform: translateY(-3px);
+}
+
+/* Elevated Surface — Modals, dropdowns */
+.surface-elevated {
+  background: var(--gv-bg-elevated);
+  backdrop-filter: blur(24px);
+  border: 1px solid var(--gv-border-hover);
+  border-radius: 20px;
+  box-shadow: var(--gv-shadow-lg);
+}
+
+/* Inset Surface — Input fields, inner containers */
+.surface-inset {
+  background: rgba(6, 9, 17, 0.6);
+  border: 1px solid var(--gv-border);
+  border-radius: 12px;
+}
+
+/* ===================================================================
+   BUTTON DESIGN SYSTEM (44px min touch target)
+   =================================================================== */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 28px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, var(--gv-violet) 0%, var(--gv-violet-dim) 100%);
+  color: #fff;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  box-shadow: 0 4px 16px rgba(139, 92, 246, 0.2), inset 0 1px 0 rgba(255,255,255,0.1);
+  transition: all var(--gv-duration) var(--gv-ease);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.35), inset 0 1px 0 rgba(255,255,255,0.15);
+}
+.btn-primary:hover::before {
+  opacity: 1;
+}
+.btn-primary:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.2);
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 48px;
+  padding: 0 24px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--gv-text);
+  border: 1px solid var(--gv-border-hover);
+  backdrop-filter: blur(8px);
+  transition: all var(--gv-duration) var(--gv-ease);
+  cursor: pointer;
+}
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+  box-shadow: var(--gv-shadow-sm);
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  background: transparent;
+  color: var(--gv-text-secondary);
+  border: 1px solid transparent;
+  transition: all var(--gv-duration) var(--gv-ease);
+  cursor: pointer;
+}
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--gv-text);
+}
+
+/* ===================================================================
+   BACKGROUND EFFECTS
+   =================================================================== */
+
+/* Subtle mesh grid */
+.bg-mesh {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(139,92,246,0.08) 0%, transparent 60%),
+    linear-gradient(to right, rgba(255,255,255,0.012) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255,255,255,0.012) 1px, transparent 1px);
+  background-size: 100% 100%, 80px 80px, 80px 80px;
+}
+
+/* Radial glow for hero sections */
+.bg-hero-glow {
+  background:
+    radial-gradient(ellipse 60% 40% at 70% 0%, rgba(139,92,246,0.1) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 50% at 20% 80%, rgba(34,211,238,0.05) 0%, transparent 60%);
+}
+
+/* Shimmer loading skeleton */
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--gv-bg-surface) 0%, var(--gv-bg-elevated) 50%, var(--gv-bg-surface) 100%);
+  background-size: 200% 100%;
+  animation: gv-shimmer 1.5s ease-in-out infinite;
+}
+
+/* ===================================================================
+   BADGE & TAG SYSTEM
+   =================================================================== */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.badge-violet {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--gv-violet-bright);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+}
+
+.badge-emerald {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--gv-emerald);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.badge-rose {
+  background: rgba(251, 113, 133, 0.12);
+  color: var(--gv-rose);
+  border: 1px solid rgba(251, 113, 133, 0.2);
+}
+
+.badge-cyan {
+  background: rgba(34, 211, 238, 0.1);
+  color: var(--gv-cyan);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+}
+
+/* ===================================================================
+   TYPOGRAPHY UTILITIES
+   =================================================================== */
+
+.font-display {
+  font-family: 'Inter', sans-serif;
+  letter-spacing: -0.03em;
+  font-weight: 800;
+}
+
+.font-mono-gv {
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* ===================================================================
+   FOCUS & ACCESSIBILITY
+   =================================================================== */
+
+.focus-ring {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid var(--gv-violet);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ===================================================================
+   REDUCED MOTION SUPPORT
+   =================================================================== */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

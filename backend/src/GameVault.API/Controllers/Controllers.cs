@@ -83,9 +83,14 @@ public class AuthController(IAuthService auth) : ControllerBase
 public class GamesController(IGameService games) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<ApiResponse<PagedResult<GameListDto>>>> List([FromQuery] GameFilterRequest filter, [FromHeader(Name = "Accept-Language")] string? locale, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<PagedResult<GameListDto>>>> List(
+        [FromQuery] GameFilterRequest filter, 
+        [FromHeader(Name = "Accept-Language")] string? localeHeader, 
+        [FromQuery] string? locale,
+        CancellationToken ct)
     {
-        var result = await games.GetGamesAsync(filter, locale ?? "vi", ct);
+        var effectiveLocale = !string.IsNullOrWhiteSpace(locale) ? locale : localeHeader;
+        var result = await games.GetGamesAsync(filter, effectiveLocale ?? "vi", ct);
         return Ok(ApiResponse<PagedResult<GameListDto>>.Ok(result, new ApiMeta(result.Page, result.PageSize, result.Total)));
     }
 
@@ -98,10 +103,15 @@ public class GamesController(IGameService games) : ControllerBase
         => Ok(ApiResponse<IReadOnlyList<TagDto>>.Ok(await games.GetTagsAsync(ct)));
 
     [HttpGet("{slug}")]
-    public async Task<ActionResult<ApiResponse<GameDetailDto>>> Detail(string slug, [FromHeader(Name = "Accept-Language")] string? locale, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<GameDetailDto>>> Detail(
+        string slug, 
+        [FromHeader(Name = "Accept-Language")] string? localeHeader, 
+        [FromQuery] string? locale,
+        CancellationToken ct)
     {
         Guid? userId = User.Identity?.IsAuthenticated == true ? Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!) : null;
-        var game = await games.GetBySlugAsync(slug, userId, locale ?? "vi", ct);
+        var effectiveLocale = !string.IsNullOrWhiteSpace(locale) ? locale : localeHeader;
+        var game = await games.GetBySlugAsync(slug, userId, effectiveLocale ?? "vi", ct);
         return game is null ? NotFound(ApiResponse<GameDetailDto>.Fail("GAME_NOT_FOUND", "Game not found")) : Ok(ApiResponse<GameDetailDto>.Ok(game));
     }
 
@@ -242,11 +252,19 @@ public class PaymentsController(IPaymentService payments, SePaySimulatorService 
         return Ok(ApiResponse<PaymentStatusDto>.Ok(await payments.GetStatusAsync(userId, id, ct)));
     }
 
-    // Trigger watch reload and amount validation integration..
-    [HttpPost("webhooks/sepay")]
-    [HttpPost("webhook/sepay")]
+    // SePay Webhook endpoints - supports root / (when ngrok routes root), /webhook, and /api/v1/webhooks/sepay
+    [HttpPost("/")]
+    [HttpPost("")]
+    [HttpPost("/webhook")]
+    [HttpPost("/webhooks")]
+    [HttpPost("/api/webhook")]
+    [HttpPost("/api/webhooks")]
     [HttpPost("/api/v1/webhooks/sepay")]
     [HttpPost("/api/v1/webhook/sepay")]
+    [HttpPost("/api/v1/payments/webhook")]
+    [HttpPost("/api/v1/payments/webhooks")]
+    [HttpPost("webhooks/sepay")]
+    [HttpPost("webhook/sepay")]
     public async Task<ActionResult> Webhook(CancellationToken ct)
     {
         Request.EnableBuffering();
@@ -255,30 +273,23 @@ public class PaymentsController(IPaymentService payments, SePaySimulatorService 
         var rawBody = await reader.ReadToEndAsync(ct);
         Request.Body.Position = 0;
 
-        if (Request.Headers.TryGetValue("X-SePay-Signature", out var signatureHeader))
+        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+        SePayWebhookBody? sePayBody = null;
+        try
         {
-            Request.Headers.TryGetValue("X-SePay-Timestamp", out var timestampHeader);
+            sePayBody = JsonSerializer.Deserialize<SePayWebhookBody>(rawBody, options);
+        }
+        catch { }
 
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var sePayBody = JsonSerializer.Deserialize<SePayWebhookBody>(rawBody, options);
-            if (sePayBody == null)
-            {
-                return BadRequest(ApiResponse<object>.Fail("INVALID_BODY", "Invalid SePay body"));
-            }
-
-            var isSignatureValid = sepay.VerifySePayWebhookSignature(rawBody, signatureHeader.ToString(), timestampHeader.ToString());
-            if (!isSignatureValid)
-            {
-                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_INVALID", "Invalid signature"));
-            }
-
+        if (sePayBody != null && (sePayBody.TransferAmount > 0 || !string.IsNullOrEmpty(sePayBody.Content) || !string.IsNullOrEmpty(sePayBody.Code)))
+        {
             var orderCode = sePayBody.Code ?? "";
             if (string.IsNullOrEmpty(orderCode) && !string.IsNullOrEmpty(sePayBody.Content))
             {
-                var match = System.Text.RegularExpressions.Regex.Match(sePayBody.Content, @"\b[A-Za-z0-9]{8,10}\b");
+                var match = System.Text.RegularExpressions.Regex.Match(sePayBody.Content, @"\bGV[A-Za-z0-9]{8}\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                 if (!match.Success)
                 {
-                    match = System.Text.RegularExpressions.Regex.Match(sePayBody.Content, @"[A-Za-z0-9]{8,10}");
+                    match = System.Text.RegularExpressions.Regex.Match(sePayBody.Content, @"\b[A-Za-z0-9]{8,10}\b");
                 }
                 if (match.Success)
                 {
@@ -287,7 +298,7 @@ public class PaymentsController(IPaymentService payments, SePaySimulatorService 
             }
 
             var payload = new SePayWebhookPayload(
-                TransactionId: sePayBody.Id.ToString(),
+                TransactionId: sePayBody.Id > 0 ? sePayBody.Id.ToString() : (sePayBody.ReferenceCode ?? Guid.NewGuid().ToString("n")[..8].ToUpper()),
                 OrderCode: orderCode,
                 Amount: sePayBody.TransferAmount,
                 Status: "success",
@@ -301,9 +312,27 @@ public class PaymentsController(IPaymentService payments, SePaySimulatorService 
             await payments.HandleWebhookAsync(signedPayload, ct);
             return Ok(new { success = true, received = true });
         }
+        else if (Request.Headers.TryGetValue("X-SePay-Signature", out var signatureHeader))
+        {
+            Request.Headers.TryGetValue("X-SePay-Timestamp", out var timestampHeader);
+
+            var isSignatureValid = sepay.VerifySePayWebhookSignature(rawBody, signatureHeader.ToString(), timestampHeader.ToString());
+            if (!isSignatureValid)
+            {
+                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_INVALID", "Invalid signature"));
+            }
+
+            var payload = JsonSerializer.Deserialize<SePayWebhookPayload>(rawBody, options);
+            if (payload == null)
+            {
+                return BadRequest(ApiResponse<object>.Fail("INVALID_BODY", "Invalid request payload"));
+            }
+
+            await payments.HandleWebhookAsync(payload, ct);
+            return Ok(new { success = true, received = true });
+        }
         else
         {
-            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var payload = JsonSerializer.Deserialize<SePayWebhookPayload>(rawBody, options);
             if (payload == null)
             {
@@ -483,25 +512,6 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
     public async Task<ActionResult<ApiResponse<AdminStatsDto>>> Stats(CancellationToken ct)
         => Ok(ApiResponse<AdminStatsDto>.Ok(await admin.GetStatsAsync(ct)));
 
-    [HttpPost("ai/avatar")]
-    public async Task<ActionResult<ApiResponse<object>>> UploadAiAvatar(IFormFile file, [FromServices] IWebHostEnvironment env, CancellationToken ct)
-    {
-        await using var stream = file.OpenReadStream();
-        var (_, url) = await drive.UploadAsync(stream, file.FileName, file.ContentType, "ai/avatar", ct);
-        
-        var settingsPath = Path.Combine(env.WebRootPath, "uploads", "ai", "settings.json");
-        var dir = Path.GetDirectoryName(settingsPath);
-        if (dir != null && !Directory.Exists(dir))
-        {
-            Directory.CreateDirectory(dir);
-        }
-        
-        var settings = new AiSettings { AvatarUrl = url };
-        var json = JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-        await System.IO.File.WriteAllTextAsync(settingsPath, json, ct);
-        
-        return Ok(ApiResponse<object>.Ok(new { url }));
-    }
 
     [HttpPost("games")]
     public async Task<ActionResult<ApiResponse<GameDetailDto>>> CreateGame(CreateGameRequest request, CancellationToken ct)
@@ -514,6 +524,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
             .Include(g => g.GameCategories).ThenInclude(gc => gc.Category)
             .Include(g => g.Images)
             .Include(g => g.Videos)
+            .Include(g => g.Files)
             .Include(g => g.UnityDemo)
             .Include(g => g.GameTags).ThenInclude(gt => gt.Tag)
             .FirstOrDefaultAsync(g => g.Id == id, ct);
@@ -539,86 +550,202 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
         return Ok(ApiResponse<object>.Ok(new { }));
     }
 
-    [HttpPost("games/{id:guid}/upload")]
-    [RequestSizeLimit(524_288_000)]
-    public async Task<ActionResult<ApiResponse<object>>> Upload(Guid id, [FromForm] string type, IFormFile file, CancellationToken ct)
+    [HttpPatch("games/{id:guid}/status")]
+    public async Task<ActionResult<ApiResponse<object>>> UpdateGameStatus(Guid id, [FromBody] UpdateGameStatusRequest request, CancellationToken ct)
     {
         var game = await db.Games.FindAsync([id], ct);
         if (game is null) return NotFound(ApiResponse<object>.Fail("GAME_NOT_FOUND", "Game not found"));
-        string gameFolder = string.IsNullOrEmpty(game.Slug) ? id.ToString() : game.Slug;
 
-        await using var stream = file.OpenReadStream();
-        var (fileId, url) = await drive.UploadAsync(stream, file.FileName, file.ContentType, $"games/{gameFolder}/{type}", ct);
-        
-        string buildUrl = url;
-        string buildPath = url;
-
-        switch (type.ToLowerInvariant())
+        var normalizedStatus = request.Status?.Trim();
+        if (string.Equals(normalizedStatus, GameVault.Domain.Enums.GameStatus.Draft, StringComparison.OrdinalIgnoreCase))
         {
-            case "image":
-                var existingImages = await db.GameImages.Where(i => i.GameId == id).ToListAsync(ct);
-                foreach (var img in existingImages)
-                {
-                    img.IsPrimary = false;
-                }
-                db.GameImages.Add(new Domain.Entities.GameImage { GameId = id, GoogleDriveFileId = fileId, Url = url, IsPrimary = true });
-                break;
-            case "trailer":
-                db.GameVideos.Add(new Domain.Entities.GameVideo { GameId = id, GoogleDriveFileId = fileId, Url = url, Title = file.FileName });
-                break;
-            case "installer":
-                db.GameFiles.Add(new Domain.Entities.GameFile { GameId = id, GoogleDriveFileId = fileId, FileName = file.FileName, FileSizeBytes = file.Length, MimeType = file.ContentType, DownloadUrl = url });
-                break;
-            case "demo":
-                if (Path.GetExtension(file.FileName).Equals(".zip", StringComparison.OrdinalIgnoreCase))
-                {
-                    try
+            game.Status = GameVault.Domain.Enums.GameStatus.Draft;
+        }
+        else if (string.Equals(normalizedStatus, GameVault.Domain.Enums.GameStatus.Published, StringComparison.OrdinalIgnoreCase))
+        {
+            game.Status = GameVault.Domain.Enums.GameStatus.Published;
+            if (game.PublishedAt is null)
+            {
+                game.PublishedAt = DateTime.UtcNow;
+            }
+        }
+        else if (string.Equals(normalizedStatus, GameVault.Domain.Enums.GameStatus.Archived, StringComparison.OrdinalIgnoreCase))
+        {
+            game.Status = GameVault.Domain.Enums.GameStatus.Archived;
+        }
+        else
+        {
+            return BadRequest(ApiResponse<object>.Fail("INVALID_STATUS", "Invalid status value. Must be Draft, Published, or Archived."));
+        }
+
+        await db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<object>.Ok(new { success = true, status = game.Status }));
+    }
+
+    [HttpPost("games/translate")]
+    public async Task<ActionResult<ApiResponse<TranslateGameTextResponse>>> TranslateGameText([FromBody] TranslateGameTextRequest request, CancellationToken ct)
+        => Ok(ApiResponse<TranslateGameTextResponse>.Ok(await admin.TranslateGameTextAsync(request, ct)));
+
+    [HttpPost("games/{id:guid}/upload")]
+    [RequestSizeLimit(524_288_000)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 524_288_000)]
+    public async Task<ActionResult<ApiResponse<object>>> Upload(Guid id, [FromForm] string type, IFormFile file, CancellationToken ct)
+    {
+        try
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(ApiResponse<object>.Fail("FILE_EMPTY", "Tệp tải lên không được để trống."));
+            }
+
+            var game = await db.Games.FindAsync([id], ct);
+            if (game is null) return NotFound(ApiResponse<object>.Fail("GAME_NOT_FOUND", "Game not found"));
+            string gameFolder = string.IsNullOrEmpty(game.Slug) ? id.ToString() : game.Slug;
+
+            await using var stream = file.OpenReadStream();
+            var (fileId, url) = await drive.UploadAsync(stream, file.FileName, file.ContentType ?? "application/octet-stream", $"games/{gameFolder}/{type}", ct);
+            
+            string buildUrl = url;
+            string buildPath = url;
+
+            switch (type.ToLowerInvariant())
+            {
+                case "image":
+                case "cover":
+                    var existingPrimaryCovers = await db.GameImages.Where(i => i.GameId == id && i.IsPrimary).ToListAsync(ct);
+                    foreach (var oldCover in existingPrimaryCovers)
                     {
-                        var demoDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", gameFolder, "demo");
-                        var extractDir = Path.Combine(demoDir, "extracted");
-
-                        if (Directory.Exists(extractDir))
+                        if (!string.IsNullOrEmpty(oldCover.GoogleDriveFileId))
                         {
-                            try { Directory.Delete(extractDir, true); } catch {}
+                            try { await drive.DeleteAsync(oldCover.GoogleDriveFileId, ct); } catch (Exception ex) { Console.WriteLine($"Drive delete cover error: {ex.Message}"); }
                         }
-                        Directory.CreateDirectory(extractDir);
+                    }
+                    db.GameImages.RemoveRange(existingPrimaryCovers);
+                    db.GameImages.Add(new Domain.Entities.GameImage { GameId = id, GoogleDriveFileId = fileId, Url = url, IsPrimary = true, SortOrder = 0 });
+                    break;
 
-                        using (var ms = new MemoryStream())
+                case "screenshot":
+                case "screenshots":
+                    var maxOrder = await db.GameImages.Where(i => i.GameId == id).MaxAsync(i => (int?)i.SortOrder, ct) ?? 0;
+                    db.GameImages.Add(new Domain.Entities.GameImage { GameId = id, GoogleDriveFileId = fileId, Url = url, IsPrimary = false, SortOrder = maxOrder + 1 });
+                    break;
+
+                case "trailer":
+                    var existingVideos = await db.GameVideos.Where(v => v.GameId == id).ToListAsync(ct);
+                    foreach (var oldVid in existingVideos)
+                    {
+                        if (!string.IsNullOrEmpty(oldVid.GoogleDriveFileId))
                         {
-                            await file.CopyToAsync(ms, ct);
-                            ms.Position = 0;
-                            using (var archive = new System.IO.Compression.ZipArchive(ms))
+                            try { await drive.DeleteAsync(oldVid.GoogleDriveFileId, ct); } catch (Exception ex) { Console.WriteLine($"Drive delete trailer error: {ex.Message}"); }
+                        }
+                    }
+                    db.GameVideos.RemoveRange(existingVideos);
+                    db.GameVideos.Add(new Domain.Entities.GameVideo { GameId = id, GoogleDriveFileId = fileId, Url = url, Title = file.FileName, SortOrder = 0 });
+                    break;
+
+                case "installer":
+                    var existingFiles = await db.GameFiles.Where(f => f.GameId == id).ToListAsync(ct);
+                    foreach (var oldFile in existingFiles)
+                    {
+                        if (!string.IsNullOrEmpty(oldFile.GoogleDriveFileId))
+                        {
+                            try { await drive.DeleteAsync(oldFile.GoogleDriveFileId, ct); } catch (Exception ex) { Console.WriteLine($"Drive delete installer error: {ex.Message}"); }
+                        }
+                    }
+                    db.GameFiles.RemoveRange(existingFiles);
+                    db.GameFiles.Add(new Domain.Entities.GameFile { GameId = id, GoogleDriveFileId = fileId, FileName = file.FileName, FileSizeBytes = file.Length, MimeType = file.ContentType ?? "application/octet-stream", DownloadUrl = url });
+                    break;
+                case "demo":
+                    if (Path.GetExtension(file.FileName).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
+                        {
+                            var demoDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", gameFolder, "demo");
+                            var extractDir = Path.Combine(demoDir, "extracted");
+
+                            if (Directory.Exists(extractDir))
                             {
-                                archive.ExtractToDirectory(extractDir, overwriteFiles: true);
+                                try { Directory.Delete(extractDir, true); } catch {}
+                            }
+                            Directory.CreateDirectory(extractDir);
+
+                            using (var fileStream = file.OpenReadStream())
+                            using (var archive = new System.IO.Compression.ZipArchive(fileStream, System.IO.Compression.ZipArchiveMode.Read))
+                            {
+                                foreach (var entry in archive.Entries)
+                                {
+                                    if (string.IsNullOrEmpty(entry.Name)) continue;
+                                    var targetPath = Path.GetFullPath(Path.Combine(extractDir, entry.FullName));
+                                    if (!targetPath.StartsWith(Path.GetFullPath(extractDir), StringComparison.OrdinalIgnoreCase)) continue;
+                                    var dir = Path.GetDirectoryName(targetPath);
+                                    if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                                    entry.ExtractToFile(targetPath, overwrite: true);
+                                }
+                            }
+
+                            var indexFiles = Directory.GetFiles(extractDir, "index.html", SearchOption.AllDirectories);
+                            if (indexFiles.Length > 0)
+                            {
+                                var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                                var relativePath = indexFiles[0];
+                                if (relativePath.StartsWith(wwwrootPath, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    relativePath = relativePath.Substring(wwwrootPath.Length);
+                                }
+                                buildUrl = relativePath.Replace('\\', '/');
+                                if (!buildUrl.StartsWith('/')) buildUrl = "/" + buildUrl;
+                                buildPath = indexFiles[0];
+                            }
+                            else
+                            {
+                                buildUrl = $"/uploads/games/{gameFolder}/demo/extracted/index.html";
+                                buildPath = Path.Combine(extractDir, "index.html");
                             }
                         }
-
-                        var indexFiles = Directory.GetFiles(extractDir, "index.html", SearchOption.AllDirectories);
-                        if (indexFiles.Length > 0)
+                        catch (Exception ex)
                         {
-                            var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-                            buildUrl = indexFiles[0].Replace(wwwrootPath, "").Replace('\\', '/');
-                            buildPath = indexFiles[0];
-                        }
-                        else
-                        {
-                            buildUrl = $"/uploads/games/{gameFolder}/demo/extracted/index.html";
-                            buildPath = Path.Combine(extractDir, "index.html");
+                            Console.WriteLine($"[DEMO EXTRACTION ERROR]: {ex}");
                         }
                     }
-                    catch (Exception ex)
+
+                    var demo = await db.UnityDemos.FirstOrDefaultAsync(d => d.GameId == id, ct);
+                    if (demo is null)
                     {
-                        Console.WriteLine($"Error extracting Unity WebGL demo zip: {ex.Message}");
+                        db.UnityDemos.Add(new Domain.Entities.UnityDemo
+                        {
+                            Id = Guid.NewGuid(),
+                            GameId = id,
+                            GoogleDriveFileId = fileId,
+                            BuildUrl = buildUrl,
+                            BuildPath = buildPath,
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow,
+                            UpdatedAt = DateTime.UtcNow
+                        });
                     }
-                }
+                    else
+                    {
+                        if (!string.IsNullOrEmpty(demo.GoogleDriveFileId) && demo.GoogleDriveFileId != fileId)
+                        {
+                            try { await drive.DeleteAsync(demo.GoogleDriveFileId, ct); } catch (Exception ex) { Console.WriteLine($"Drive delete demo error: {ex.Message}"); }
+                        }
+                        demo.BuildUrl = buildUrl;
+                        demo.BuildPath = buildPath;
+                        demo.GoogleDriveFileId = fileId;
+                        demo.IsActive = true;
+                        demo.UpdatedAt = DateTime.UtcNow;
+                    }
+                    break;
+            }
 
-                var demo = await db.UnityDemos.FirstOrDefaultAsync(d => d.GameId == id, ct);
-                if (demo is null) db.UnityDemos.Add(new Domain.Entities.UnityDemo { GameId = id, GoogleDriveFileId = fileId, BuildUrl = buildUrl, BuildPath = buildPath });
-                else { demo.BuildUrl = buildUrl; demo.BuildPath = buildPath; demo.GoogleDriveFileId = fileId; demo.IsActive = true; }
-                break;
+            await db.SaveChangesAsync(ct);
+            return Ok(ApiResponse<object>.Ok(new { fileId, url }));
         }
-        await db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<object>.Ok(new { fileId, url }));
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[UPLOAD ERROR]: {ex}");
+            return StatusCode(500, ApiResponse<object>.Fail("UPLOAD_FAILED", ex.Message));
+        }
     }
 
 
@@ -632,9 +759,32 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
     [HttpDelete("games/{id:guid}/cover")]
     public async Task<ActionResult<ApiResponse<object>>> DeleteCover(Guid id, CancellationToken ct)
     {
-        var images = await db.GameImages.Where(i => i.GameId == id).ToListAsync(ct);
+        var images = await db.GameImages.Where(i => i.GameId == id && i.IsPrimary).ToListAsync(ct);
+        foreach (var img in images)
+        {
+            if (!string.IsNullOrEmpty(img.GoogleDriveFileId))
+            {
+                try { await drive.DeleteAsync(img.GoogleDriveFileId, ct); } catch (Exception ex) { Console.WriteLine($"Drive delete cover error: {ex.Message}"); }
+            }
+        }
         db.GameImages.RemoveRange(images);
         await db.SaveChangesAsync(ct);
+        return Ok(ApiResponse<object>.Ok(new { success = true }));
+    }
+
+    [HttpDelete("games/{id:guid}/images/{imageId:guid}")]
+    public async Task<ActionResult<ApiResponse<object>>> DeleteImage(Guid id, Guid imageId, CancellationToken ct)
+    {
+        var img = await db.GameImages.FirstOrDefaultAsync(i => i.GameId == id && i.Id == imageId, ct);
+        if (img != null)
+        {
+            if (!string.IsNullOrEmpty(img.GoogleDriveFileId))
+            {
+                try { await drive.DeleteAsync(img.GoogleDriveFileId, ct); } catch (Exception ex) { Console.WriteLine($"Drive delete image error: {ex.Message}"); }
+            }
+            db.GameImages.Remove(img);
+            await db.SaveChangesAsync(ct);
+        }
         return Ok(ApiResponse<object>.Ok(new { success = true }));
     }
 
@@ -642,6 +792,13 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
     public async Task<ActionResult<ApiResponse<object>>> DeleteTrailer(Guid id, CancellationToken ct)
     {
         var videos = await db.GameVideos.Where(v => v.GameId == id).ToListAsync(ct);
+        foreach (var vid in videos)
+        {
+            if (!string.IsNullOrEmpty(vid.GoogleDriveFileId))
+            {
+                try { await drive.DeleteAsync(vid.GoogleDriveFileId, ct); } catch (Exception ex) { Console.WriteLine($"Drive delete trailer error: {ex.Message}"); }
+            }
+        }
         db.GameVideos.RemoveRange(videos);
         await db.SaveChangesAsync(ct);
         return Ok(ApiResponse<object>.Ok(new { success = true }));
@@ -653,12 +810,23 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
         var demo = await db.UnityDemos.FirstOrDefaultAsync(d => d.GameId == id, ct);
         if (demo != null)
         {
+            if (!string.IsNullOrEmpty(demo.GoogleDriveFileId))
+            {
+                try { await drive.DeleteAsync(demo.GoogleDriveFileId, ct); } catch (Exception ex) { Console.WriteLine($"Drive delete demo error: {ex.Message}"); }
+            }
             db.UnityDemos.Remove(demo);
             
-            var demoDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", id.ToString(), "demo");
+            var game = await db.Games.FindAsync([id], ct);
+            string gameFolder = game != null && !string.IsNullOrEmpty(game.Slug) ? game.Slug : id.ToString();
+            var demoDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", gameFolder, "demo");
             if (Directory.Exists(demoDir))
             {
                 try { Directory.Delete(demoDir, true); } catch {}
+            }
+            var demoDirId = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", id.ToString(), "demo");
+            if (Directory.Exists(demoDirId))
+            {
+                try { Directory.Delete(demoDirId, true); } catch {}
             }
             
             await db.SaveChangesAsync(ct);
@@ -670,13 +838,25 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
     public async Task<ActionResult<ApiResponse<object>>> DeleteInstaller(Guid id, CancellationToken ct)
     {
         var files = await db.GameFiles.Where(f => f.GameId == id).ToListAsync(ct);
+        foreach (var file in files)
+        {
+            if (!string.IsNullOrEmpty(file.GoogleDriveFileId))
+            {
+                try { await drive.DeleteAsync(file.GoogleDriveFileId, ct); } catch (Exception ex) { Console.WriteLine($"Drive delete installer error: {ex.Message}"); }
+            }
+        }
         db.GameFiles.RemoveRange(files);
         await db.SaveChangesAsync(ct);
         return Ok(ApiResponse<object>.Ok(new { success = true }));
     }
     [HttpPost("migrate-uploads-to-drive")]
-    public async Task<ActionResult<ApiResponse<object>>> MigrateUploadsToDrive([FromServices] IWebHostEnvironment env, CancellationToken ct)
+    public async Task<ActionResult<ApiResponse<object>>> MigrateUploadsToDrive([FromServices] IWebHostEnvironment env, [FromServices] IConfiguration config, CancellationToken ct)
     {
+        if (config.GetValue<bool>("GoogleDrive:UseLocalFallback", false))
+        {
+            return BadRequest(ApiResponse<object>.Fail("LOCAL_FALLBACK_ACTIVE", "Hệ thống đang bật chế độ 'UseLocalFallback' (lưu trữ cục bộ). Để tải tệp lên Google Drive thật sự, hãy cấu hình tài khoản Google Drive và đổi 'UseLocalFallback' thành false."));
+        }
+
         int imagesMigrated = 0;
         int videosMigrated = 0;
         int filesMigrated = 0;
@@ -979,14 +1159,28 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
             }
         }
 
-        if (imagesMigrated > 0 || videosMigrated > 0 || filesMigrated > 0 || demosMigrated > 0 || avatarsMigrated > 0)
+        int totalMigrated = imagesMigrated + videosMigrated + filesMigrated + demosMigrated + avatarsMigrated + aiAvatarsMigrated;
+        if (totalMigrated > 0)
         {
             await db.SaveChangesAsync(ct);
+        }
+
+        var errors = details.Where(d => d.StartsWith("Failed")).ToList();
+        if (totalMigrated == 0 && errors.Any())
+        {
+            string firstError = errors.First();
+            string friendlyMsg = "Không thể tải tệp lên Google Drive.";
+            if (firstError.Contains("Service Accounts do not have storage quota") || firstError.Contains("storageQuotaExceeded"))
+            {
+                friendlyMsg = "Lỗi Google Drive: Tài khoản Service Account không có dung lượng lưu trữ trên 'Drive của tôi' cá nhân (Lỗi Google 403: storageQuotaExceeded). Bạn cần chuyển thư mục sang 'Bộ nhớ dùng chung' (Shared Drive) hoặc cấu hình OAuth 2.0.";
+            }
+            return BadRequest(ApiResponse<object>.Fail("DRIVE_UPLOAD_FAILED", friendlyMsg));
         }
 
         return Ok(ApiResponse<object>.Ok(new
         {
             success = true,
+            totalMigrated = totalMigrated,
             migrated = new { images = imagesMigrated, videos = videosMigrated, files = filesMigrated, demos = demosMigrated, avatars = avatarsMigrated, aiAvatars = aiAvatarsMigrated },
             details = details
         }));
@@ -1251,46 +1445,6 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
     public async Task<ActionResult<ApiResponse<IReadOnlyList<AdminGameListDto>>>> GetGames(CancellationToken ct)
         => Ok(ApiResponse<IReadOnlyList<AdminGameListDto>>.Ok(await admin.GetAdminGamesAsync(ct)));
 
-    [HttpGet("ai/logs")]
-    public async Task<ActionResult<ApiResponse<List<object>>>> GetAiLogs(CancellationToken ct)
-    {
-        var logPath = Path.Combine(Directory.GetCurrentDirectory(), "logs", "groq_api_calls.json");
-        var list = new List<object>();
-        if (System.IO.File.Exists(logPath))
-        {
-            var lines = await System.IO.File.ReadAllLinesAsync(logPath, ct);
-            foreach (var line in lines)
-            {
-                if (string.IsNullOrWhiteSpace(line)) continue;
-                try
-                {
-                    var parsed = JsonSerializer.Deserialize<object>(line);
-                    if (parsed != null) list.Add(parsed);
-                }
-                catch { /* ignore parsing errors */ }
-            }
-        }
-        list.Reverse(); // Newest first
-        return Ok(ApiResponse<List<object>>.Ok(list));
-    }
-
-    [HttpDelete("ai/logs")]
-    public async Task<ActionResult<ApiResponse<object>>> ClearAiLogs(CancellationToken ct)
-    {
-        var logPath = Path.Combine(Directory.GetCurrentDirectory(), "logs", "groq_api_calls.json");
-        if (System.IO.File.Exists(logPath))
-        {
-            try
-            {
-                System.IO.File.Delete(logPath);
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, ApiResponse<object>.Fail("LOG_DELETE_FAILED", $"Failed to delete logs file: {ex.Message}"));
-            }
-        }
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
 }
 
 [ApiController]

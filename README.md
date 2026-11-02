@@ -2,9 +2,10 @@
 
 # 🎮 GAMEVAULT
 ### Nền tảng phân phối game kỹ thuật số thế hệ mới
-*Đồ án chuyên ngành phát triển ứng dụng web - CDIO 4*
+*Đồ án chuyên ngành phát triển ứng dụng web - COTS / CS 445*
 
 [![Next.js](https://img.shields.io/badge/Next.js-15.x-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19.x-blue?style=for-the-badge&logo=react&logoColor=white)](https://react.dev/)
 [![ASP.NET Core](https://img.shields.io/badge/ASP.NET_Core-9.0-512BD4?style=for-the-badge&logo=.net&logoColor=white)](https://dotnet.microsoft.com/)
 [![MySQL](https://img.shields.io/badge/MySQL-8.0-4479A1?style=for-the-badge&logo=mysql&logoColor=white)](https://www.mysql.com/)
 [![Groq Cloud](https://img.shields.io/badge/Groq_AI-Llama_3.1-orange?style=for-the-badge&logo=openai&logoColor=white)](https://groq.com/)
@@ -13,198 +14,166 @@
 
 ---
 
-Chào mọi người! 👋 Đây là **GameVault** - Đồ án môn học CDIO 4 của nhóm tụi mình. GameVault là một nền tảng phân phối game bản quyền kỹ thuật số dạng Web App lấy cảm hứng từ Steam, Epic Games và itch.io. Dự án tích hợp các công nghệ hiện đại như Chatbot AI tự dịch ngôn ngữ tự nhiên thành câu lệnh SQL, thanh toán quét mã VietQR tự động điền thông tin, đối soát số dư qua SePay Webhook, bảo mật đăng ký bằng bộ kiểm tra bản ghi DNS MX, và quản lý lưu trữ đám mây qua Google Drive.
-
-[Xem Hướng dẫn chạy Local](#-hướng-dẫn-cài-đặt-và-khởi-chạy-chi-tiết) • [Kịch bản Demo cho Giáo viên](#-kịch-bản-kiểm-thử--demo-toàn-bộ-chức-năng-dành-cho-báo-cáo) • [Cấu hình SePay Webhook](#-cấu-hình-cổng-thanh-toán-sepay-webhook-và-vietqr-thật) • [Cấu hình Google Drive](#-cấu-hình-google-drive-cloud-storage) • [Trợ giúp lỗi thường gặp](#-troubleshooting-sửa-lỗi-thường-gặp)
+Chào mừng bạn đến với **GameVault**! Đây là nền tảng phân phối game kỹ thuật số dạng Web App lấy cảm hứng từ Steam, Epic Games và itch.io. Hệ thống được trang bị đầy đủ các tính năng hiện đại: **Trợ lý ảo AI Vault Oracle tự động dịch ngôn ngữ tự nhiên thành câu lệnh SQL**, **Thanh toán quét mã VietQR tự động khớp giao dịch qua Webhook**, **Chơi thử bản WebGL Demo trực tiếp trên trình duyệt**, **Bảo vệ đăng ký bằng DNS MX Verification**, và **Hệ thống lưu trữ đám mây Google Drive tích hợp cơ chế chịu lỗi Local Fallback**.
 
 </div>
 
 ---
 
-## 🌟 Các tính năng nổi bật của dự án
-
-### 1. 🤖 Trợ lý ảo AI thông minh (AI Chatbot)
-- **Natural Language to SQL:** Chatbot tích hợp **Groq AI (Llama-3.1-8b-instant)** cho phép tìm kiếm game bằng giọng điệu giao tiếp tự nhiên. Ví dụ: *"Kiếm giúp tôi game hành động nào có đánh giá từ 4 sao trở lên"* hoặc *"Có game nào miễn phí chơi thử WebGL không"*.
-- **Cơ chế FallbackSQL:** Hệ thống tự động biên dịch câu hỏi thành câu lệnh MySQL hợp lệ để truy vấn trực tiếp cơ sở dữ liệu và hiển thị danh sách game dạng Card trực quan cho người dùng ngay trong khung chat.
-
-### 2. 💳 Cổng thanh toán quét mã VietQR tự động qua SEPAY Webhook
-- **VietQR động tự điền:** Khi mua game, hệ thống tự động tạo mã QR ngân hàng chuẩn VietQR thông qua API của `img.vietqr.io`. Mã QR này tự động điền sẵn: **Ngân hàng đích**, **Số tài khoản**, **Tên chủ tài khoản**, **Số tiền** và **Nội dung chuyển khoản (chính là mã đơn hàng `GVXXXXXXXX`)**.
-- **Xác thực bảo mật HMAC-SHA256:** Tích hợp SEPAY Webhook chạy qua tunnel `ngrok` ở local. Backend kiểm tra chữ ký HMAC-SHA256 gửi từ SEPAY để xác nhận nguồn gốc giao dịch.
-- **Tự nhận diện mã đơn hàng:** Sử dụng Regex bóc tách mã đơn hàng trong nội dung giao dịch kể cả khi người dùng chuyển khoản có kèm thêm ký tự lạ. Hệ thống đối soát số tiền chuyển khoản thực tế với giá đơn hàng để tránh lỗ hổng khai thác trả thiếu tiền.
-- **Tự động kích hoạt game:** Khi chuyển khoản thành công, hệ thống tự động cập nhật đơn hàng thành `Paid`, gửi email hóa đơn và lập tức đẩy game vào **Thư viện** của người dùng.
-
-### 3. 📧 Tự động gửi Email hóa đơn qua Resend API
-- **Xác nhận mua hàng:** Gửi email hóa đơn HTML chuyên nghiệp kèm game đã mua và giá tiền về email của người dùng ngay khi thanh toán thành công.
-- **Thông báo hủy đơn:** Tự động gửi thư thông báo tới người dùng kèm lý do chi tiết từ Admin khi đơn hàng bị từ chối/hủy bỏ.
-
-### 4. 🔒 Bảo mật đăng ký (DNS MX Verification)
-- Khi người dùng đăng ký tài khoản mới, hệ thống sử dụng thư viện **DnsClient** để kiểm tra bản ghi **MX (Mail Exchange)** trực tuyến của tên miền email đó.
-- Ngăn chặn hoàn toàn việc người dùng sử dụng email ảo không tồn tại (như `test@a.com`, `abc@123.com`) để spam tài khoản.
-
-### 5. ☁️ Lưu trữ đám mây Google Drive & Local Fallback
-- **Tải lên & Quản lý tài nguyên đám mây:** Toàn bộ ảnh bìa game, video trailer, tệp cài đặt (ZIP) và demo chơi thử WebGL được tải và lưu trữ trực tiếp lên Google Drive.
-- **Cơ chế Local Fallback:** Nếu chưa cấu hình Google Drive hoặc kết nối cloud bị lỗi, hệ thống tự động chuyển sang chế độ dự phòng local, lưu tệp vào thư mục `wwwroot/uploads` của server để đảm bảo dịch vụ không bị gián đoạn.
-- **Đồng bộ một chạm (Sync to Drive):** Quản trị viên có thể đồng bộ toàn bộ tệp local đang có sẵn trong `wwwroot/uploads` lên Google Drive và ngược lại với chỉ bằng một nút bấm tại trang quản trị **Admin Dashboard**.
+## 📑 Mục lục
+1. [Yêu cầu phần mềm trên máy tính mới](#-1-yêu-cầu-phần-mềm-cần-cài-đặt-trước)
+2. [Cấu trúc thư mục dự án](#-2-cấu-trúc-thư-mục-dự-án)
+3. [Hướng dẫn cài đặt & Khởi chạy từ A - Z (Cho máy mới)](#-3-hướng-dẫn-cài-đặt--khởi-chạy-chi-tiết-từ-a---z)
+   - [Cách 1: Khởi động 1-Click bằng Script (Khuyên dùng)](#cách-1-khởi-động-siêu-tốc-bằng-script-1-click-khuyên-dùng)
+   - [Cách 2: Khởi động thủ công theo từng bước](#cách-2-khởi-động-thủ-công-theo-từng-bước)
+4. [Tài khoản kiểm thử mặc định](#-4-danh-sách-tài-khoản-mặc-định-sẵn-có)
+5. [Kịch bản kiểm thử toàn bộ 100% tính năng](#-5-kịch-bản-kiểm-thử-đầy-đủ-100-chức-năng)
+6. [Cấu hình Cổng thanh toán SePay Webhook thật](#-6-hướng-dẫn-cấu-hình-thanh-toán-thật-sepay--ngrok)
+7. [Khắc phục sự cố thường gặp (Troubleshooting)](#-7-khắc-phục-sự-cố-thường-gặp-troubleshooting)
 
 ---
 
-## 🏗 Kiến trúc hệ thống
+## 💻 1. Yêu cầu phần mềm cần cài đặt trước
 
-Dự án được triển khai theo mô hình **Clean Architecture** (Kiến trúc sạch) giúp dễ bảo trì, mở rộng và viết Unit Test:
+Trước khi bắt đầu cài đặt GameVault, hãy đảm bảo máy tính của bạn đã được cài đặt các công cụ sau:
+
+1. **Git**: Tải từ [git-scm.com](https://git-scm.com/downloads) (Dùng để clone dự án).
+2. **Docker Desktop** *(Bắt buộc)*: Tải từ [docker.com](https://www.docker.com/products/docker-desktop/).
+   > [!IMPORTANT]
+   > Sau khi cài đặt, hãy **mở Docker Desktop lên** và đợi biểu tượng ở góc trái dưới chuyển sang màu xanh lá (*Engine running*).
+3. **.NET SDK 9.0** trở lên: Tải từ [dotnet.microsoft.com](https://dotnet.microsoft.com/en-us/download/dotnet/9.0).
+   - Kiểm tra bằng lệnh: `dotnet --version` (Kết quả trả về `9.x.x`).
+4. **Node.js (LTS 18.x, 20.x hoặc 22.x)**: Tải từ [nodejs.org](https://nodejs.org/).
+   - Kiểm tra bằng lệnh: `node -v` và `npm -v`.
+
+---
+
+## 🏗 2. Cấu trúc thư mục dự án
 
 ```text
-VaultGame (Root)
-├── backend (C# .NET 9.0 Web API)
-│   ├── src
-│   │   ├── GameVault.Domain          # Định nghĩa Entity, Enum (Lớp lõi, không phụ thuộc)
-│   │   ├── GameVault.Application     # DTO, Interfaces, Logic nghiệp vụ, Validators
-│   │   ├── GameVault.Infrastructure  # Database Context, Migrations, Các dịch vụ ngoài (AI, Email, Payment, Drive)
-│   │   └── GameVault.API             # Controllers, Endpoint, Middleware, Cấu hình khởi chạy
-│   └── backend.sln
+VaultGame/
+├── backend/                              # Backend ASP.NET Core 9.0 Web API
+│   ├── src/
+│   │   ├── GameVault.Domain/             # Thực thể (Entities), Enums lõi
+│   │   ├── GameVault.Application/        # DTOs, Business Logic, Dịch vụ nội bộ
+│   │   ├── GameVault.Infrastructure/     # EF Core MySQL, AI Groq, Drive, SePay, Resend
+│   │   └── GameVault.API/                # REST Controllers, JWT Auth, wwwroot/uploads
+│   └── GameVault.sln
 │
-├── frontend (Next.js 15.x App Router + Turbopack)
-│   ├── src
-│   │   ├── app                       # Next.js Routing & Pages (Đa ngôn ngữ vi/en)
-│   │   ├── components                # UI Components (AI Chat, Payment Modal, Game Card...)
-│   │   ├── hooks                     # React Query Hooks
-│   │   └── lib                       # API Client, Auth Store (Zustand)
-│   └── .env.local                    # Cấu hình môi trường Frontend
+├── frontend/                             # Frontend Next.js 15 (App Router + Turbopack)
+│   ├── src/
+│   │   ├── app/[locale]/                 # Routing đa ngôn ngữ (vi / en / zh)
+│   │   │   ├── admin/                    # Trang quản trị dành cho Admin
+│   │   │   ├── game/[slug]/              # Chi tiết game & Chơi thử WebGL Demo
+│   │   │   ├── library/                  # Thư viện game cá nhân sau khi mua
+│   │   │   └── ...
+│   │   ├── components/                   # UI components (Vault Oracle, Modal, Game Card...)
+│   │   └── lib/                          # Axios Client, Auth Store (Zustand)
+│   ├── .env.example                      # File mẫu biến môi trường Frontend
+│   └── package.json
 │
-├── database                          # Thư mục lưu trữ database thiết kế
-│   ├── schema                        # File SQL tạo bảng (Init)
-│   └── seeds                         # File SQL nạp dữ liệu mẫu ban đầu
+├── database/                             # Kịch bản cơ sở dữ liệu
+│   ├── schema/001_init.sql               # File DDL tạo toàn bộ bảng và quan hệ mới nhất
+│   └── seeds/002_seed_data.sql           # File nạp dữ liệu mẫu mới nhất (Game, User, Review...)
 │
-├── docs                              # Thư mục tập trung chứa tài liệu & sơ đồ (.drawio, .xml, .md)
-│
-├── docker-compose.yml                # Docker Compose chạy MySQL container nhanh
-└── .gitignore                        # File quy định bỏ qua các file nhạy cảm khi đẩy lên Git
+├── pull_db.ps1                           # Script 1-Click: Tự động khởi động DB & nạp dữ liệu mẫu
+├── push_db.ps1                           # Script đóng gói dữ liệu DB mới nhất lên schema & seed
+├── run.ps1                               # Script 1-Click: Tự động khởi chạy cả Backend & Frontend
+├── docker-compose.yml                    # Cấu hình MySQL 8.0 Container
+└── README.md                             # Hướng dẫn chi tiết này
 ```
 
 ---
 
-## 🚀 Hướng dẫn cài đặt và khởi chạy chi tiết (Dành cho mọi đối tượng)
+## 🚀 3. Hướng dẫn cài đặt & Khởi chạy chi tiết từ A - Z
 
-Dự án này đã được tối ưu hóa bằng các script tự động. Chỉ cần thực hiện theo các bước đơn giản dưới đây:
-
-### 📋 Yêu cầu hệ thống trước khi chạy
-1. **Docker Desktop** (Bắt buộc phải bật để chạy cơ sở dữ liệu MySQL).
-   - Tải về và cài đặt từ trang chủ [Docker Desktop](https://www.docker.com/products/docker-desktop/). Đảm bảo Docker Desktop đã được mở và chạy ngầm (icon Docker ở khay hệ thống hiển thị màu xanh lá).
-2. **.NET SDK 9.0** trở lên.
-   - Tải về và cài đặt từ [Microsoft .NET SDK 9.0](https://dotnet.microsoft.com/en-us/download/dotnet/9.0).
-3. **Node.js 18.x** trở lên.
-   - Tải về từ [Node.js](https://nodejs.org/).
-
----
-
-### 💻 KỊCH BẢN 1: Dành cho người nhận dự án (Máy B - Thầy cô / Bạn cùng lớp clone về chạy)
-
-Khi bạn clone dự án này từ GitHub về máy mới, hãy làm theo đúng 4 bước cực kỳ đơn giản sau:
-
-#### Bước 1: Sao chép các tệp cấu hình bảo mật
-Do các tệp chứa khóa bảo mật (API keys) không được đẩy lên GitHub để đảm bảo an toàn, bạn cần tạo thủ công:
-1. **Cấu hình Backend:**
-   - Tạo file `appsettings.Development.json` nằm tại thư mục `backend/src/GameVault.API/`.
-   - Copy nội dung cấu hình thực tế của bạn (bao gồm API Keys của Groq AI, Resend Email, SePay và Google Drive OAuth) dán vào file này. Xem cấu hình mẫu ở [Mục 🔑 Cấu hình file appsettings.Development.json](#-cấu-hình-file-appsettingsdevelopmentjson) phía dưới.
-2. **Cấu hình Frontend:**
-   - Tạo file `.env.local` nằm tại thư mục `frontend/`.
-   - Dán cấu hình cổng Google OAuth và chế độ thanh toán thử nghiệm SePay:
-     ```env
-     # Google Client ID cho Google Login
-     NEXT_PUBLIC_GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
-
-     # Đặt thành true để tự duyệt thanh toán sau 8 giây (không cần quét QR ngân hàng thật)
-     NEXT_PUBLIC_SEPAY_SIMULATE=false
-     ```
-
-#### Bước 2: Khởi động Docker Desktop
-- Hãy chắc chắn rằng phần mềm **Docker Desktop** đã được mở và đang chạy.
-
-#### Bước 3: Chạy script tự động thiết lập cơ sở dữ liệu
-Mở một cửa sổ PowerShell mới tại thư mục gốc của dự án (`VaultGame/`) và chạy lệnh sau:
-```powershell
-./pull_db.ps1
-```
-* **Script này sẽ tự động làm gì?**
-  - Dọn dẹp sạch sẽ các container và Volume cũ (nếu có) để tránh xung đột dữ liệu.
-  - Tự động tải và chạy MySQL container mới qua Docker.
-  - Tự động nạp toàn bộ cấu trúc bảng (Schema) và toàn bộ dữ liệu mẫu mới nhất (Seed) được đồng bộ từ Máy A sang.
-  - Tự động kiểm tra và báo khi cơ sở dữ liệu đã sẵn sàng 100%.
-
-#### Bước 4: Khởi chạy dự án và trải nghiệm
-Vẫn ở cửa sổ PowerShell đó, chạy lệnh sau để khởi chạy cả Backend và Frontend cùng lúc:
-```powershell
-./run.ps1
-```
-- Mở trình duyệt web của bạn và truy cập: `http://localhost:3000/vi`
-- **Tận hưởng**: Toàn bộ dữ liệu game (Hitman 3, Racer, Survival...), ảnh bìa, video trailer, game file, avatar người dùng và chatbot đã được đồng bộ sẵn cục bộ (do thư mục `uploads/` đã được lưu trữ trong Git). Bạn có thể chơi thử game WebGL Demo, xem trailer và trò chuyện với trợ lý AI ngay lập tức mà không cần bấm thêm bất cứ nút đồng bộ nào!
-
----
-
-### 💻 KỊCH BẢN 2: Dành cho người phát triển dự án (Máy A - Khi muốn đóng gói dữ liệu đẩy lên Git)
-
-Khi bạn (Quản trị viên/Máy A) đã sửa đổi dữ liệu (tạo thêm game mới, thêm ảnh, thêm tài khoản...) và muốn đóng gói lại để Máy B tải về không bị lỗi hiển thị hay thiếu hụt dữ liệu:
-
-#### Bước 1: Chạy script đóng gói dữ liệu
-Đảm bảo Docker MySQL đang chạy, mở PowerShell ở thư mục gốc của dự án và chạy:
-```powershell
-./push_db.ps1
-```
-* **Script này sẽ tự động làm gì?**
-  - Kết nối vào Docker MySQL và tự động xuất toàn bộ cấu trúc cơ sở dữ liệu mới nhất lưu vào `./database/schema/001_init.sql`.
-  - Tự động xuất toàn bộ các bản ghi dữ liệu mẫu mới nhất lưu vào `./database/seeds/002_seed_data.sql`.
-  - Thông báo hoàn tất đóng gói dữ liệu.
-
-#### Bước 2: Đẩy lên Git thủ công
-Sau khi script báo đóng gói thành công, chạy các lệnh Git sau để đẩy lên GitHub:
+### Tải mã nguồn về máy
+Mở **PowerShell** hoặc **Terminal** và điều hướng đến thư mục làm việc của bạn:
 ```bash
-git add .
-git commit -m "sync: cập nhật mã nguồn và dữ liệu database mới nhất"
-git push origin main
+git clone https://github.com/1Adidas/VaultGame.git
+cd VaultGame
 ```
 
 ---
 
-### 🔑 Cấu hình file `appsettings.Development.json`
-Nội dung mẫu chuẩn để copy vào file `backend/src/GameVault.API/appsettings.Development.json`:
+### Cách 1: Khởi động siêu tốc bằng Script (1-Click - Khuyên dùng)
+
+Nếu bạn sử dụng **Windows** và muốn chạy ngay lập tức mà không cần gõ nhiều lệnh:
+
+1. **Khởi tạo Database tự động**:
+   Mở PowerShell tại thư mục `VaultGame` và chạy:
+   ```powershell
+   .\pull_db.ps1
+   ```
+   *Script sẽ tự động dọn sạch volume cũ, kích hoạt container MySQL 8.0 và nạp 100% dữ liệu mẫu mới nhất.*
+
+2. **Cấu hình file môi trường Frontend**:
+   Chỉ cần copy file mẫu `.env.example`:
+   ```powershell
+   Copy-Item frontend\.env.example frontend\.env.local
+   ```
+
+3. **Khởi chạy đồng thời cả Backend và Frontend**:
+   ```powershell
+   .\run.ps1
+   ```
+   *Script sẽ tự động phát hiện IP Wi-Fi, khởi chạy Backend (port 5000), Frontend (port 3000) và mở link truy cập `http://localhost:3000/vi`.*
+
+---
+
+### Cách 2: Khởi động thủ công theo từng bước
+
+Nếu bạn muốn kiểm soát từng bước hoặc chạy trên macOS / Linux:
+
+#### Bước 1: Cấu hình biến môi trường
+1. **Frontend**: Sao chép file mẫu:
+   ```bash
+   cp frontend/.env.example frontend/.env.local
+   ```
+2. **Backend**: Tệp `backend/src/GameVault.API/appsettings.json` đã được cấu hình sẵn với `"UseLocalFallback": true` và kết nối MySQL Docker (port 3307), có thể chạy được ngay.
+   *(Tùy chọn)* Nếu bạn muốn ghi đè API keys riêng (Groq, Resend...), bạn có thể tạo `backend/src/GameVault.API/appsettings.Development.json`:
+
 ```json
 {
   "Logging": {
     "LogLevel": {
       "Default": "Information",
       "Microsoft.AspNetCore": "Warning",
-      "Microsoft.EntityFrameworkCore": "Information"
+      "Microsoft.EntityFrameworkCore": "Warning"
     }
+  },
+  "AllowedHosts": "*",
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Port=3307;Database=gamevault;User=gamevault;Password=gamevault123;"
+  },
+  "JWT": {
+    "Secret": "GameVault_2026_Super_Secret_Key_At_Least_32_Characters_Long",
+    "Issuer": "GameVault",
+    "Audience": "GameVault",
+    "AccessTokenExpirationMinutes": "60",
+    "RefreshTokenExpirationDays": "7"
   },
   "Groq": {
     "Model": "llama-3.1-8b-instant",
     "ApiKeys": [
-      "gsk_your_groq_api_key_1",
-      "gsk_your_groq_api_key_2"
+      "gsk_your_groq_api_key_here"
     ]
   },
   "Resend": {
-    "ApiKey": "re_your_resend_api_key",
+    "ApiKey": "re_your_resend_api_key_here",
     "FromEmail": "onboarding@resend.dev",
     "FromName": "GameVault"
   },
   "SePay": {
-    "WebhookSecret": "mat_khau_webhook_tu_dat_cua_ban",
-    "BankCode": "your_bank_code",
-    "AccountNumber": "your_bank_account_number",
-    "AccountName": "YOUR BANK ACCOUNT NAME",
+    "WebhookSecret": "gamevault_sepay_webhook_secret_key",
+    "BankCode": "970422",
+    "AccountNumber": "0123456789",
+    "AccountName": "GAMEVAULT STORE",
     "PaymentExpiryMinutes": "15"
   },
   "GoogleDrive": {
-    "ServiceAccountJsonBase64": "ewogICJ0eXBlIjogInNlcnZpY2VfYWNjb3VudCIKfQ==",
-    "client_email": "gamevault-drive-uploader@gamevault-500501.iam.gserviceaccount.com",
-    "client_id": "103757946439088075199",
-    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-    "token_uri": "https://oauth2.googleapis.com/token",
-    "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
-    "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/gamevault-drive-uploader%40gamevault-500501.iam.gserviceaccount.com",
-    "universe_domain": "googleapis.com",
-    "RootFolderId": "1HJa4N6DId6rWLIOEo6E8Qq1vqFgXi-nB",
-    "UseLocalFallback": false,
+    "RootFolderId": "YOUR_GOOGLE_DRIVE_FOLDER_ID",
+    "UseLocalFallback": true,
     "OAuth": {
       "ClientId": "YOUR_OAUTH_CLIENT_ID",
       "ClientSecret": "YOUR_OAUTH_CLIENT_SECRET",
@@ -213,62 +182,238 @@ Nội dung mẫu chuẩn để copy vào file `backend/src/GameVault.API/appsett
   },
   "Authentication": {
     "Google": {
-      "ClientId": "Your_Google_Client_Id"
+      "ClientId": "YOUR_GOOGLE_CLIENT_ID"
     }
+  },
+  "CORS": {
+    "AllowedOrigins": "http://localhost:3000"
   }
 }
 ```
 
+> [!TIP]
+> - Nếu bạn **chưa có Google Drive API**: Hệ thống đã bật sẵn `"UseLocalFallback": true`. Toàn bộ ảnh bìa, tệp cài đặt và WebGL Demo có sẵn trong thư mục `wwwroot/uploads` sẽ được đọc cục bộ và hoạt động 100% bình thường.
+> - Nếu bạn **chưa có Groq API Key**: Bạn có thể đăng ký tài khoản miễn phí tại [console.groq.com](https://console.groq.com/) và lấy API Key trong 1 phút.
+
+#### 2. Tạo tệp cấu hình Frontend: `frontend/.env.local`
+Tạo file mới tại đường dẫn `frontend/.env.local` và dán nội dung sau:
+
+```env
+# URL trỏ đến Backend Web API
+NEXT_PUBLIC_API_URL=http://localhost:5000
+
+# Google OAuth Client ID (Dùng cho tính năng Đăng nhập bằng Google)
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=YOUR_GOOGLE_CLIENT_ID
+
+# Chế độ giả lập thanh toán SePay:
+# Đặt 'true' để hệ thống tự động duyệt thanh toán thành công sau 8 giây (tiện lợi cho việc kiểm thử/chấm điểm nhanh)
+# Đặt 'false' nếu muốn chuyển khoản ngân hàng thật qua mã VietQR
+NEXT_PUBLIC_SEPAY_SIMULATE=true
+```
+
 ---
 
-## 🎯 Kịch bản kiểm thử & Demo toàn bộ chức năng (Dành cho báo cáo)
+### Bước 3: Khởi chạy Cơ sở dữ liệu MySQL bằng Docker
 
-Để chứng minh phần mềm hoạt động chuẩn mực và thuyết phục, thực hiện demo theo kịch bản chi tiết dưới đây:
+Dự án sử dụng Docker Compose để tạo container MySQL 8.0, đồng thời tự động nạp toàn bộ cấu trúc bảng và dữ liệu mẫu.
 
-| STT | Tính năng kiểm thử | Thao tác thực hiện | Kết quả kỳ vọng (Thuyết trình) |
+1. Đảm bảo **Docker Desktop đang chạy**.
+2. Mở cửa sổ Terminal tại thư mục `VaultGame/` và thực thi:
+
+```bash
+# 1. Dọn dẹp container và volume cũ (nếu có)
+docker compose down -v
+
+# 2. Khởi tạo container và tự động nạp Schema & Seed data
+docker compose up -d
+```
+
+3. **Kiểm tra trạng thái sẵn sàng**:
+```bash
+docker ps
+```
+Bạn sẽ thấy container `gamevault-mysql` hiển thị trạng thái `Up` và cổng `0.0.0.0:3307->3306/tcp`.
+Cơ sở dữ liệu đã nạp sẵn danh sách game (ShootV1, ShootV2, Survival On Earth, Boomerang Aventure, Racer...), thể loại, tài khoản Admin và Customer.
+
+---
+
+### Bước 4: Cài đặt và Khởi chạy Backend (C# .NET 9.0)
+
+1. Mở một cửa sổ Terminal mới và di chuyển vào thư mục API:
+```bash
+cd backend/src/GameVault.API
+```
+
+2. Tải các gói thư viện phụ thuộc:
+```bash
+dotnet restore
+```
+
+3. Khởi chạy Backend Server:
+```bash
+dotnet run
+```
+*(Hoặc dùng lệnh `dotnet watch run` để tự động reload khi sửa code).*
+
+4. Khi Terminal xuất hiện dòng thông báo:
+```text
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://0.0.0.0:5000
+```
+👉 Backend đã sẵn sàng tại địa chỉ: **`http://localhost:5000`**.
+
+---
+
+### Bước 5: Cài đặt và Khởi chạy Frontend (Next.js 15)
+
+1. Mở thêm một cửa sổ Terminal khác và di chuyển vào thư mục Frontend:
+```bash
+cd frontend
+```
+
+2. Cài đặt toàn bộ dependencies (chỉ cần chạy lần đầu):
+```bash
+npm install
+```
+
+3. Khởi chạy máy chủ phát triển Next.js:
+```bash
+npm run dev
+```
+
+4. Khi màn hình hiển thị:
+```text
+▲ Next.js 15.x.x (Turbopack)
+- Local:        http://localhost:3000
+```
+👉 Mở trình duyệt web của bạn và truy cập: **`http://localhost:3000`** (Hệ thống sẽ tự động chuyển hướng về giao diện tiếng Việt: `http://localhost:3000/vi`).
+
+---
+
+## 🔑 4. Danh sách tài khoản mặc định sẵn có
+
+Cơ sở dữ liệu đã chuẩn bị sẵn 2 tài khoản mẫu phục vụ cho việc kiểm thử mọi quyền hạn:
+
+| Vai trò | Email đăng nhập | Mật khẩu mặc định | Quyền hạn nổi bật |
 | :--- | :--- | :--- | :--- |
-| **1** | **Trợ lý ảo AI thông minh** *(Natural Language to SQL)* | 1. Nhấp biểu tượng Chatbot AI ở góc dưới bên phải màn hình.<br>2. Nhập câu hỏi tự nhiên: `"Kiếm giúp mình game đua xe có đánh giá từ 4 sao trở lên"` hoặc `"Có game nào miễn phí chơi thử WebGL không?"` | - Chatbot trả về lời thoại chào mừng.<br>- Tự dịch câu chat thành SQL MySQL chuẩn xác, thực thi và xuất ra danh sách Card Game tương ứng ngay trong khung chat để người dùng click xem. |
-| **2** | **Thanh toán VietQR & Webhook** *(Tự động kích hoạt game)* | 1. Chọn mua một game bất kỳ (ví dụ: *Racer*), nhấp **Thanh toán**.<br>2. Giao diện xuất hiện mã QR ngân hàng động.<br>3. **Chạy thử nhanh:** Bật `NEXT_PUBLIC_SEPAY_SIMULATE=true` ở file `.env.local` -> Đợi 8 giây hệ thống tự động báo thành công.<br>4. **Chạy thử thật:** Chuyển khoản thật vào mã QR đó bằng ứng dụng ngân hàng khi SePay chạy qua `ngrok` (Test Mode). | - Mã QR hiển thị đúng số tiền, số tài khoản nhận tiền và nội dung chuyển khoản là mã đơn hàng `GVXXXXXXXX`.<br>- Sau khi thanh toán thành công, giao diện tự đóng và thông báo mua game thành công.<br>- Game được kích hoạt tự động đưa vào **Thư viện** của người dùng. |
-| **3** | **Email xác nhận & hóa đơn** *(Resend API)* | 1. Thực hiện thanh toán thành công ở bước 2.<br>2. Hoặc: Đăng nhập Admin (`admin@gamevault.com`/`password`), vào tab **Đơn hàng**, chọn một đơn nhấp **Hủy đơn** và điền lý do hủy. | - Ngay khi thanh toán thành công, một email hóa đơn định dạng HTML chuyên nghiệp được gửi về hòm thư người dùng.<br>- Khi Admin hủy đơn hàng, người dùng nhận được email thông báo thu hồi game kèm lý do chi tiết. |
-| **4** | **Chơi thử WebGL Demo trực tiếp** *(Unity WebGL Player)* | 1. Vào trang chi tiết của game có bản chơi thử (ví dụ: *Survival On Earth* hoặc *Boomerang Aventure*).<br>2. Nhấp nút **Chơi thử (WebGL Demo)**. | - Trình phát Unity WebGL trực tiếp load trên trình duyệt web của bạn và chạy game bình thường mà không cần cài đặt thêm plugin nào. |
-| **5** | **Đồng bộ đám mây một chạm** *(Google Drive Storage)* | 1. Đăng nhập tài khoản Admin, đi tới trang quản trị `/admin` (Tab **Tổng quan**).<br>2. Bấm nút **`Đồng bộ wwwroot lên Drive`** ở thẻ *Thao Tác & Đồng Bộ*. | - Hệ thống quét toàn bộ ảnh bìa, tệp cài đặt và WebGL Demo dưới local `wwwroot/uploads` đẩy lên Google Drive.<br>- Tự nén file demo thành zip nếu mất file gốc.<br>- Bản ghi database tự chuyển sang liên kết Google Drive, giải phóng bộ nhớ server local. |
-| **6** | **Bảo mật Đăng ký** *(DNS MX Verification)* | 1. Vào trang Đăng ký tài khoản mới.<br>2. Nhập một email ảo không tồn tại (Ví dụ: `test@abcdefg.com`).<br>3. Nhập một email thật (Ví dụ: `nguyenvana@gmail.com`). | - Email ảo: Hệ thống báo lỗi *"Tên miền email không tồn tại hoặc không hỗ trợ nhận thư (Lỗi bản ghi MX)"*.<br>- Email thật: Đăng ký thành công, thông tin được ghi vào database. |
+| **Quản trị viên (Admin)** | `admin@gamevault.com` | `password` | Quản trị toàn hệ thống, thêm/sửa/xóa game, upload file game, duyệt/hủy đơn hàng, xem báo cáo doanh thu, đồng bộ Drive. |
+| **Khách hàng (Customer)** | `customer@example.com` | `password` | Mua game, thanh toán QR, sở hữu game trong Thư viện, chơi WebGL Demo, đánh giá game, trò chuyện cùng AI Chatbot. |
 
 ---
 
-## 🔌 Cấu hình cổng thanh toán SePay Webhook và VietQR thật
+## 🎯 5. Kịch bản kiểm thử đầy đủ 100% chức năng
 
-Để kiểm thử quy trình nhận tiền từ tài khoản ngân hàng thật và tự động kích hoạt game:
+Dưới đây là kịch bản chi tiết từng bước để kiểm thử toàn diện mọi tính năng của hệ thống:
 
-1. **Khởi chạy ngrok tạo đường hầm:**
+### 1. Trải nghiệm Duyệt Store & Chơi thử WebGL Demo trực tiếp
+1. Truy cập `http://localhost:3000`.
+2. Tại trang chủ hoặc trang **Cửa hàng (`/games`)**, chọn tựa game **Survival On Earth** hoặc **Boomerang Aventure**.
+3. Tại trang chi tiết game, nhấp nút **"Chơi thử (WebGL Demo)"**.
+4. **Kết quả kỳ vọng**: Trình phát Unity WebGL nhúng trực tiếp trên trình duyệt sẽ khởi động và cho phép bạn chơi game ngay lập tức mà không cần cài đặt thêm phần mềm nào.
+
+---
+
+### 2. Mua game & Thanh toán VietQR tự động
+1. Đăng nhập tài khoản `customer@example.com` / `password`.
+2. Chọn mua tựa game bất kỳ (Ví dụ: *ShootV1* hoặc *The Eternal Reef 3D*), nhấn nút **"Mua ngay"**.
+3. Modal thanh toán hiện ra kèm mã **VietQR ngân hàng** với nội dung chuyển khoản là mã đơn hàng `GVXXXXXXXX`.
+4. **Kiểm thử nhanh (Mô phỏng):** Do file `.env.local` đã bật `NEXT_PUBLIC_SEPAY_SIMULATE=true`, sau **8 giây**, hệ thống tự động giả lập tín hiệu chuyển khoản thành công.
+5. **Kết quả kỳ vọng**:
+   - Màn hình thông báo thanh toán thành công.
+   - Tự động chuyển hướng về trang **Thư viện (`/library`)**.
+   - Game vừa mua lập tức xuất hiện trong thư viện với nút **"Tải về"**.
+
+---
+
+### 3. Tải tệp cài đặt game (Game ZIP Download)
+1. Trong trang **Thư viện cá nhân (`/library`)**, nhấp vào nút **"Tải về"** tại game bạn đã sở hữu.
+2. **Kết quả kỳ vọng**: Trình duyệt kích hoạt tải tệp tin cài đặt của game (được phục vụ thông qua Local Storage fallback hoặc Google Drive link an toàn).
+
+---
+
+### 4. Trò chuyện & Tìm game bằng Trợ lý ảo AI (Vault Oracle - Groq Llama-3.1)
+1. Nhấp vào thanh dock nổi **Vault Oracle** ở góc dưới bên phải màn hình tại bất kỳ trang nào.
+2. Gõ câu hỏi bằng ngôn ngữ tự nhiên:
+   - *"Kiếm giúp tôi các game hành động có đánh giá cao"*
+   - *"Có game nào miễn phí chơi thử không?"*
+   - *"Game của nhà phát triển Tân Khương Vỹ"*
+3. **Kết quả kỳ vọng**:
+   - AI phân tích câu hỏi, tự sinh truy vấn MySQL hợp lệ (Natural Language to SQL).
+   - Chatbot phản hồi bằng văn bản tự nhiên kèm theo **các Card Game trực quan** (ảnh bìa, giá, đánh giá) ngay trong khung chat để người dùng nhấp vào xem.
+
+---
+
+### 5. Viết đánh giá & Bình luận (Reviews & Ratings)
+1. Vào trang chi tiết của một game bạn đã sở hữu trong Thư viện.
+2. Cuộn xuống phần **Đánh giá của cộng đồng**, chọn số sao (1 đến 5 sao) và nhập nhận xét.
+3. Nhấn **Gửi đánh giá**.
+4. **Kết quả kỳ vọng**: Đánh giá hiển thị ngay lập tức, điểm trung bình của game được cập nhật theo thời gian thực.
+
+---
+
+### 6. Thử nghiệm Cơ chế Bảo mật Đăng ký (DNS MX Verification)
+1. Đăng xuất tài khoản hiện tại, vào trang **Đăng ký (`/register`)**.
+2. **Trường hợp 1 (Email ảo):** Nhập email bừa bãi không tồn tại (Ví dụ: `admin@fakemaildomain123456.com`).
+   - *Kết quả*: Hệ thống kiểm tra DNS MX trực tuyến và chặn lại: *"Tên miền email không tồn tại hoặc không hỗ trợ nhận thư"*.
+3. **Trường hợp 2 (Email thật):** Nhập email có đuôi `@gmail.com` thật.
+   - *Kết quả*: Đăng ký thành công và tự động chuyển về trang đăng nhập.
+
+---
+
+### 7. Bảng điều khiển Quản trị viên (Admin Dashboard)
+1. Đăng nhập tài khoản `admin@gamevault.com` / `password`.
+2. Truy cập trang **Quản trị (`/admin`)**:
+   - **Tab Tổng quan**: Xem tổng doanh thu, số lượng thành viên, tổng số game và số đơn hàng.
+   - **Tab Quản lý Game**: Thêm tựa game mới, chỉnh sửa giá tiền, cập nhật trạng thái *Published / Draft*, tải lên ảnh bìa và file game.
+   - **Tab Đơn hàng**: Xem danh sách giao dịch, thực hiện **Hủy đơn hàng** kèm lý do (hệ thống sẽ tự động thu hồi quyền sở hữu game và gửi email thông báo qua Resend API).
+   - **Tab Đồng bộ đám mây**: Bấm nút **"Đồng bộ wwwroot lên Drive"** để tự động đẩy media local lên Google Drive Cloud.
+
+---
+
+## 🔌 6. Hướng dẫn cấu hình thanh toán thật (SePay + ngrok)
+
+Nếu bạn muốn trình diễn quét mã QR từ app ngân hàng thật trên điện thoại và nhận tiền thật:
+
+1. **Khởi chạy đường hầm ngrok trỏ vào cổng Backend:**
    ```bash
    ngrok http 5000
    ```
-2. **Thiết lập trên SePay Dashboard:**
-   - Chọn **Thêm Webhook** mới với cấu hình:
-     - **URL nhận Webhook:** `https://<MÃ_NGROK_CỦA_BẠN>.ngrok-free.app/api/v1/webhooks/sepay`
-     - **Phương thức xác thực:** Chọn **`HMAC-SHA256`**.
-     - **Mã bí mật (Secret Key):** Nhập đúng mã `SePay:WebhookSecret` bạn đã đặt trong file `appsettings.Development.json`.
+2. **Cấu hình trên SePay Dashboard (my.sepay.vn):**
+   - Vào mục **Tích hợp Webhook** -> **Thêm Webhook**.
+   - **URL nhận Webhook:** `https://<DIA_CHI_NGROK_CỦA_BẠN>.ngrok-free.app/api/v1/webhooks/sepay`
+   - **Kiểu xác thực:** Chọn `HMAC-SHA256`.
+   - **Mã bí mật (Secret):** Nhập chuỗi giống hệt giá trị `SePay:WebhookSecret` trong `appsettings.Development.json`.
+3. **Cấu hình Frontend:**
+   - Trong `frontend/.env.local`, đổi thành: `NEXT_PUBLIC_SEPAY_SIMULATE=false`.
+4. **Trải nghiệm:** Mua game trên web -> Quét mã VietQR bằng app ngân hàng -> Tiền về tài khoản -> SePay gọi webhook về Backend -> Game tự động mở khóa trong tích tắc!
 
 ---
 
-## 🛠 Troubleshooting (Sửa lỗi thường gặp)
+## 🛠 7. Khắc phục sự cố thường gặp (Troubleshooting)
 
-### 1. Lỗi khóa tệp tin khi chạy `dotnet watch` (Mã lỗi CS2012)
-Mở PowerShell (Admin) và chạy lệnh sau để giải phóng file bị khóa:
-```powershell
-Stop-Process -Name GameVault.API, VBCSCompiler, msbuild -Force -ErrorAction SilentlyContinue
-```
+### ❓ 1. Cổng 3307 bị chiếm dụng khi bật Docker
+* **Nguyên nhân**: Máy bạn đang có dịch vụ MySQL khác chạy cổng 3307.
+* **Cách khắc phục**: Mở file `docker-compose.yml`, sửa dòng `3307:3306` thành cổng khác (ví dụ: `3308:3306`). Sau đó cập nhật dòng `"Server=localhost;Port=3308;..."` trong `appsettings.Development.json`.
 
-### 2. Các tệp tin bảo mật cần tránh đẩy lên Git
-Đảm bảo các tệp tin chứa thông tin nhạy cảm sau đây đã nằm trong file `.gitignore` và không được đẩy lên GitHub công khai:
-* `backend/src/GameVault.API/appsettings.Development.json` (Chứa API key thật)
-* `frontend/.env.local` (Chứa thông tin cấu hình Frontend local)
+### ❓ 2. Lỗi khóa tệp build khi chạy `dotnet run` (CS2012)
+* **Khắc phục**: Mở PowerShell và chạy lệnh sau để đóng tiến trình đang chiếm file:
+  ```powershell
+  Stop-Process -Name GameVault.API, VBCSCompiler, msbuild -Force -ErrorAction SilentlyContinue
+  ```
+
+### ❓ 3. Muốn làm mới lại toàn bộ dữ liệu mẫu ban đầu (Reset Database)
+* **Khắc phục**: Chạy 2 lệnh sau ở thư mục `VaultGame/`:
+  ```bash
+  docker compose down -v
+  docker compose up -d
+  ```
+  *(Dữ liệu mẫu chuẩn từ `001_init.sql` và `002_seed_data.sql` sẽ được nạp lại mới tinh 100%).*
 
 ---
 
-## 👥 Thành viên nhóm thực hiện
-Đồ án môn học CDIO 4 được thiết kế và triển khai bởi tập thể nhóm sinh viên ngành Kỹ thuật phần mềm. 
-Rất cảm ơn các thầy cô giáo bộ môn đã hướng dẫn nhóm hoàn thành dự án này!
+<div align="center">
 
-*Chúc các bạn chạy thử dự án thành công!* ❤️
+### Chúc bạn cài đặt và chạy thử dự án GameVault thành công! 🎉
+*Nếu có bất kỳ thắc mắc nào trong quá trình kiểm thử, vui lòng liên hệ nhóm phát triển để được hỗ trợ nhanh nhất.*
+
+</div>

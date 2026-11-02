@@ -1,32 +1,116 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
-import { useTranslations, useLocale } from "next-intl";
+import { useTranslations } from "next-intl";
+import { useAppLocale } from "@/components/i18n/AppLocaleProvider";
 import { useAuthStore } from "@/lib/auth/store";
-import { Button } from "@/components/ui/button";
-import { UserCircle, Bell, Menu, X } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { UserCircle, Bell, Menu, X, Search, Globe, ChevronDown, Check, Loader2 } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { api, type ApiResponse } from "@/lib/api/client";
-import { formatDateTimeShort, resolveImageUrl } from "@/lib/utils";
+import { formatDateTimeShort, resolveImageUrl, formatPrice } from "@/lib/utils";
 
-export function Navbar() {
+interface NavbarProps {
+  onToggleSidebar?: () => void;
+}
+
+export function Navbar({ onToggleSidebar }: NavbarProps) {
   const t = useTranslations("nav");
-  const locale = useLocale();
+  const { locale, setLocale } = useAppLocale();
   const { user, logout } = useAuthStore();
   const pathname = usePathname();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const prefix = `/${locale}`;
+  const isVi = locale === "vi";
+  const isZh = locale === "zh";
 
   const [notifications, setNotifications] = useState<any[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const isAdminPage = pathname.includes("/admin");
+
+  // OmniSearch State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setAvatarError(false);
   }, [user?.avatarUrl]);
+
+  // Global Ctrl+K / Cmd+K shortcut
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        setIsSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Click outside search container to close
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setIsSearchOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Live search debouncing
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const { data } = await api.get<ApiResponse<any>>(`/games?q=${encodeURIComponent(searchQuery.trim())}&pageSize=5`);
+        if (data?.data?.items) {
+          setSearchResults(data.data.items);
+        } else if (Array.isArray(data?.data)) {
+          setSearchResults(data.data);
+        }
+      } catch (err) {
+        console.error("Omni-search error:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 280);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!searchQuery.trim()) return;
+    router.push(`${prefix}/games?q=${encodeURIComponent(searchQuery.trim())}`);
+  };
+
+  const parseNotificationText = (text: string | null | undefined, currentLocale: string): string => {
+    if (!text) return "";
+    if (!text.includes(" / ")) return text;
+    const parts = text.split(" / ");
+    if (currentLocale === "vi") {
+      return parts[0]?.trim() || text;
+    }
+    if (currentLocale === "zh") {
+      return parts[2]?.trim() || parts[1]?.trim() || parts[0]?.trim() || text;
+    }
+    return parts[1]?.trim() || parts[0]?.trim() || text;
+  };
 
   const fetchNotifications = async () => {
     try {
@@ -42,8 +126,7 @@ export function Navbar() {
   useEffect(() => {
     if (!user) return;
     fetchNotifications();
-    const intervalMs = 15000;
-    const interval = setInterval(fetchNotifications, intervalMs);
+    const interval = setInterval(fetchNotifications, 20000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -68,15 +151,15 @@ export function Navbar() {
         const meta = typeof n.metadata === "string" ? JSON.parse(n.metadata) : n.metadata;
         const slug = meta?.slug || n.metadata;
         const hash = meta?.reviewId ? `#review-${meta.reviewId}` : "";
-        router.push(`/${locale}/game/${slug}${hash}`);
+        router.push(`${prefix}/game/${slug}${hash}`);
       } catch {
-        router.push(`/${locale}/game/${n.metadata}`);
+        router.push(`${prefix}/game/${n.metadata}`);
       }
     } else if (n.relatedEntityType === "Order" || n.relatedEntityType === "Payment") {
       if (user?.roles.includes("Admin")) {
-        router.push(`/${locale}/admin?tab=orders`);
+        router.push(`${prefix}/admin?tab=orders`);
       } else {
-        router.push(`/${locale}/orders`);
+        router.push(`${prefix}/orders`);
       }
     }
   };
@@ -90,75 +173,213 @@ export function Navbar() {
     }
   };
 
-  const switchedLocale = locale === "vi" ? "en" : "vi";
-  const search = searchParams.toString() ? `?${searchParams.toString()}` : "";
-  const switchedPath = `${pathname.replace(
-    new RegExp(`^/${locale}(/|$)`),
-    `/${switchedLocale}$1`
-  )}${search}`;
-
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4">
-        <Link href={prefix} className="text-xl font-bold text-violet-400">GameVault</Link>
-        <nav className="hidden gap-6 md:flex">
-          <Link href={prefix} className="text-sm hover:text-violet-300">{t("home")}</Link>
-          <Link href={`${prefix}/games`} className="text-sm hover:text-violet-300">{t("games")}</Link>
-          {user && (
-            <>
-              {!user.roles.includes("Admin") && (
-                <>
-                  <Link href={`${prefix}/library`} className="text-sm hover:text-violet-300">{t("library")}</Link>
-                  <Link href={`${prefix}/wishlist`} className="text-sm hover:text-violet-300">{t("wishlist")}</Link>
-                  <Link href={`${prefix}/orders`} className="text-sm hover:text-violet-300">{t("orders")}</Link>
-                </>
-              )}
-              {user.roles.includes("Admin") && (
-                <Link href={`${prefix}/admin`} className="text-sm hover:text-violet-300">{t("admin")}</Link>
-              )}
-            </>
-          )}
-          <Link href={`${prefix}/ai-chat`} className="text-sm hover:text-violet-300">{t("ai")}</Link>
-        </nav>
-        <div className="flex items-center gap-2">
-          {/* Hamburger menu button for mobile */}
+    <header className="sticky top-0 z-40 h-16 border-b border-white/[0.06] bg-[#070A11]/85 backdrop-blur-2xl shrink-0">
+      <div className="size-full px-4 sm:px-8 flex items-center justify-between gap-4">
+        
+        {/* Left Side: Mobile Menu Button & Quick Context */}
+        <div className="flex items-center gap-3">
           <button
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            className="md:hidden text-zinc-400 hover:text-violet-400 p-1.5 rounded-lg hover:bg-zinc-900 transition-colors cursor-pointer"
+            type="button"
+            onClick={onToggleSidebar}
+            className="lg:hidden p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/[0.06] transition"
             title="Menu"
           >
-            {isMobileMenuOpen ? <X className="size-5" /> : <Menu className="size-5" />}
+            <Menu className="size-5" />
           </button>
 
-          <Link
-            href={switchedPath}
-            className="rounded-md border border-white/10 px-2 py-0.5 text-xs text-zinc-400 hover:border-violet-500/50 hover:text-violet-300 transition-colors"
-          >
-            {locale === "vi" ? "EN" : "VI"}
-          </Link>
+          {/* Quick Breadcrumb Indicator */}
+          <div className="hidden sm:flex items-center gap-2 text-xs">
+            <span className="font-semibold text-white tracking-tight">GameVault</span>
+            <span className="text-zinc-600">/</span>
+            <span className="text-zinc-400 font-medium">
+              {pathname === prefix
+                ? (isVi ? "Trang Chủ Khám Phá" : isZh ? "首页" : "Discover")
+                : pathname.includes("/games")
+                ? (isVi ? "Kho Game" : isZh ? "游戏商城" : "Store")
+                : pathname.includes("/library")
+                ? (isVi ? "Thư Viện" : isZh ? "我的游戏库" : "Library")
+                : pathname.includes("/admin")
+                ? (isVi ? "Bảng Quản Trị" : isZh ? "管理控制台" : "Admin Console")
+                : (isVi ? "Cửa Hàng" : "Store")}
+            </span>
+          </div>
+        </div>
 
+        {/* Center: Live Omni-Search Bar */}
+        <div ref={searchContainerRef} className="relative flex-1 max-w-md hidden md:block">
+          <form onSubmit={handleSearchSubmit} className="relative">
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setIsSearchOpen(true);
+              }}
+              onFocus={() => setIsSearchOpen(true)}
+              placeholder={
+                isVi
+                  ? "Tìm kiếm trò chơi, thể loại... (Ctrl + K)"
+                  : isZh
+                  ? "搜索正版游戏、分类... (Ctrl + K)"
+                  : "Search games, genres... (Ctrl + K)"
+              }
+              className="w-full h-9 pl-9 pr-14 rounded-full border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.05] focus:bg-[#0E131E] text-xs text-white placeholder:text-zinc-500 outline-none focus:border-white/20 transition-all shadow-inner"
+            />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500 pointer-events-none" />
+            
+            {/* Shortcut Badge */}
+            <div className="absolute right-2.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+              {isSearching ? (
+                <Loader2 className="size-3 text-zinc-400 animate-spin" />
+              ) : (
+                <span className="text-[10px] font-mono text-zinc-500 bg-white/[0.06] border border-white/[0.08] px-1.5 py-0.5 rounded pointer-events-none">
+                  ⌘K
+                </span>
+              )}
+            </div>
+          </form>
+
+          {/* Floating Search Dropdown Results */}
+          {isSearchOpen && searchQuery.trim().length > 0 && (
+            <div className="absolute top-11 left-0 right-0 rounded-2xl border border-white/[0.08] bg-[#0E131E] p-2 shadow-2xl backdrop-blur-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+              {searchResults.length > 0 ? (
+                <div className="space-y-1">
+                  {searchResults.map((game: any) => (
+                    <Link
+                      key={game.id}
+                      href={`${prefix}/game/${game.slug}`}
+                      onClick={() => {
+                        setIsSearchOpen(false);
+                        setSearchQuery("");
+                      }}
+                      className="flex items-center gap-3 p-2 rounded-xl hover:bg-white/[0.06] transition group"
+                    >
+                      <div className="size-10 rounded-lg overflow-hidden bg-zinc-900 shrink-0 border border-white/10">
+                        {game.primaryImageUrl && (
+                          <img
+                            src={resolveImageUrl(game.primaryImageUrl)}
+                            alt={game.title}
+                            className="size-full object-cover group-hover:scale-105 transition-transform"
+                          />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="text-xs font-semibold text-white truncate group-hover:text-zinc-200">
+                          {game.title}
+                        </h4>
+                        <div className="flex items-center gap-2 text-[10px] text-zinc-400 mt-0.5">
+                          <span>{game.categoryName || "Game PC"}</span>
+                          {game.hasDemo && (
+                            <span className="text-emerald-400 font-semibold">• WebGL Demo</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-bold text-white">
+                          {game.price === 0
+                            ? (isVi ? "Miễn Phí" : isZh ? "免费" : "Free")
+                            : formatPrice(game.discountPrice ?? game.price, game.currency || "VND")}
+                        </span>
+                      </div>
+                    </Link>
+                  ))}
+                  <div className="pt-1.5 border-t border-white/[0.06] text-center">
+                    <button
+                      type="button"
+                      onClick={handleSearchSubmit}
+                      className="text-[11px] font-medium text-zinc-400 hover:text-white transition"
+                    >
+                      {isVi
+                        ? `Xem tất cả kết quả cho "${searchQuery}" →`
+                        : `View all results for "${searchQuery}" →`}
+                    </button>
+                  </div>
+                </div>
+              ) : !isSearching ? (
+                <div className="p-4 text-center text-xs text-zinc-500">
+                  {isVi ? "Không tìm thấy trò chơi phù hợp" : "No games found"}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+
+        {/* Right Tools: Language, Notifications, User Capsule */}
+        <div className="flex items-center gap-3">
+          
+          {/* Apple Language Selector (Hidden in Admin) */}
+          {!isAdminPage && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
+                className="flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.07] px-3 py-1.5 text-xs font-medium text-zinc-300 hover:text-white transition cursor-pointer select-none"
+              >
+                <Globe className="size-3.5 text-zinc-400" />
+                <span>{locale === "vi" ? "Tiếng Việt" : locale === "zh" ? "中文" : "English"}</span>
+                <ChevronDown className="size-3 text-zinc-500" />
+              </button>
+
+              {isLangDropdownOpen && (
+                <div
+                  className="absolute right-0 mt-2 w-36 rounded-xl border border-white/10 bg-[#0E131E] p-1.5 shadow-2xl backdrop-blur-xl z-50 text-xs"
+                  onClick={() => setIsLangDropdownOpen(false)}
+                >
+                  <button
+                    onClick={() => setLocale("vi")}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-left transition cursor-pointer text-xs ${
+                      locale === "vi" ? "bg-white/[0.08] text-white font-medium" : "text-zinc-400 hover:text-white hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <span>Tiếng Việt</span>
+                    {locale === "vi" && <span className="text-[10px] text-zinc-400">VI</span>}
+                  </button>
+                  <button
+                    onClick={() => setLocale("en")}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-left transition cursor-pointer text-xs ${
+                      locale === "en" ? "bg-white/[0.08] text-white font-medium" : "text-zinc-400 hover:text-white hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <span>English</span>
+                    {locale === "en" && <span className="text-[10px] text-zinc-400">EN</span>}
+                  </button>
+                  <button
+                    onClick={() => setLocale("zh")}
+                    className={`w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-left transition cursor-pointer text-xs ${
+                      locale === "zh" ? "bg-white/[0.08] text-white font-medium" : "text-zinc-400 hover:text-white hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <span>中文</span>
+                    {locale === "zh" && <span className="text-[10px] text-zinc-400">ZH</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Notifications Center */}
           {user && (
             <div className="relative">
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
-                className="relative text-zinc-400 hover:text-violet-400 p-1.5 rounded-lg hover:bg-zinc-900 transition-colors cursor-pointer flex items-center justify-center"
-                title={locale === "vi" ? "Thông báo" : "Notifications"}
+                className="relative text-zinc-400 hover:text-white size-8 rounded-full flex items-center justify-center hover:bg-white/[0.06] transition"
+                title={isVi ? "Thông báo" : "Notifications"}
               >
-                <Bell className="size-5" />
+                <Bell className="size-4" />
                 {unreadCount > 0 && (
-                  <span className="absolute top-0.5 right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white ring-2 ring-zinc-950">
-                    {unreadCount}
-                  </span>
+                  <span className="absolute top-1 right-1 size-2 rounded-full bg-rose-500 ring-2 ring-[#070A11]" />
                 )}
               </button>
 
               {showDropdown && (
-                <div className="fixed top-16 right-4 left-4 md:absolute md:top-auto md:right-0 md:left-auto md:w-80 mt-2 rounded-xl border border-zinc-800 bg-zinc-950/95 p-2 shadow-2xl backdrop-blur-xl z-50 max-h-96 overflow-y-auto">
-                  <div className="flex items-center justify-between border-b border-zinc-800 px-3 py-2">
-                    <span className="text-xs font-bold text-zinc-200">
-                      {locale === "vi" ? "Thông báo mới" : "Notifications"}
+                <div className="fixed top-16 right-4 left-4 sm:absolute sm:top-auto sm:right-0 sm:left-auto sm:w-80 mt-2 rounded-2xl border border-white/[0.08] bg-[#0E131E] p-3 shadow-2xl backdrop-blur-2xl z-50 max-h-96 overflow-y-auto">
+                  <div className="flex items-center justify-between border-b border-white/[0.06] pb-2 px-1">
+                    <span className="text-xs font-semibold text-zinc-200">
+                      {isVi ? "Thông Báo" : "Notifications"}
                     </span>
                     <div className="flex gap-2 items-center">
                       {unreadCount > 0 && (
@@ -169,9 +390,9 @@ export function Navbar() {
                               await markAsRead(n.id);
                             }
                           }}
-                          className="text-[10px] text-violet-400 hover:text-violet-300 cursor-pointer"
+                          className="text-[10px] text-zinc-400 hover:text-white cursor-pointer"
                         >
-                          {locale === "vi" ? "Đọc tất cả" : "Mark all read"}
+                          {isVi ? "Đọc tất cả" : "Mark all read"}
                         </button>
                       )}
                       {notifications.length > 0 && (
@@ -179,73 +400,44 @@ export function Navbar() {
                           {unreadCount > 0 && <span className="text-[10px] text-zinc-700">|</span>}
                           <button
                             onClick={clearAllNotifications}
-                            className="text-[10px] text-red-400 hover:text-red-300 cursor-pointer"
+                            className="text-[10px] text-zinc-500 hover:text-rose-400 cursor-pointer"
                           >
-                            {locale === "vi" ? "Xóa tất cả" : "Clear all"}
+                            {isVi ? "Xóa" : "Clear"}
                           </button>
                         </>
                       )}
                     </div>
                   </div>
-                  <div className="divide-y divide-zinc-900 mt-1 max-h-80 overflow-y-auto">
+
+                  <div className="divide-y divide-white/[0.04] mt-1.5">
                     {notifications.length === 0 ? (
-                      <div className="px-3 py-6 text-center text-xs text-zinc-600 italic">
-                        {locale === "vi" ? "Không có thông báo nào" : "No notifications"}
+                      <div className="px-3 py-6 text-center text-xs text-zinc-500 italic">
+                        {isVi ? "Không có thông báo mới" : "No new notifications"}
                       </div>
                     ) : (
-                      notifications.map((n) => {
-                        const rawTitle = n.title || "";
-                        const rawMessage = n.message || "";
-                        let displayTitle = rawTitle;
-                        let displayMessage = rawMessage;
-
-                        if (rawTitle.includes(" / ")) {
-                          const parts = rawTitle.split(" / ");
-                          displayTitle = locale === "vi" ? parts[0] : parts[1];
-                        } else {
-                          if (locale === "vi") {
-                            if (rawTitle === "Payment successful") displayTitle = "Thanh toán thành công";
-                            if (rawTitle === "Payment failed") displayTitle = "Thanh toán thất bại";
-                            if (rawTitle === "Order Cancelled") displayTitle = "Đơn hàng bị hủy";
-                          }
-                        }
-
-                        if (rawMessage.includes(" / ")) {
-                          const parts = rawMessage.split(" / ");
-                          displayMessage = locale === "vi" ? parts[0] : parts[1];
-                        } else {
-                          if (locale === "vi") {
-                            if (rawMessage.startsWith("Order ") && rawMessage.endsWith(" paid. Games added to library.")) {
-                              const orderCode = rawMessage.substring(6, rawMessage.length - 30).trim();
-                              displayMessage = `Đơn hàng ${orderCode} đã được thanh toán. Trò chơi đã được thêm vào thư viện của bạn.`;
-                            }
-                            if (rawMessage.startsWith("Payment for order ") && rawMessage.endsWith(" failed.")) {
-                              const orderCode = rawMessage.substring(18, rawMessage.length - 8).trim();
-                              displayMessage = `Giao dịch thanh toán cho đơn hàng ${orderCode} đã thất bại.`;
-                            }
-                          }
-                        }
-
-                        return (
-                          <div
-                            key={n.id}
-                            onClick={() => handleNotificationClick(n)}
-                            className={`p-3 text-xs transition-colors rounded-lg cursor-pointer my-0.5 ${
-                              n.isRead
-                                ? "text-zinc-500 hover:bg-zinc-900/50"
-                                : "bg-violet-950/20 text-zinc-200 hover:bg-violet-950/30"
-                            }`}
-                          >
-                            <div className="flex justify-between items-start gap-2 mb-1">
-                              <span className="font-semibold truncate max-w-[180px]">{displayTitle}</span>
-                              <span className="text-[9px] text-zinc-600 shrink-0">
-                                {formatDateTimeShort(n.createdAt)}
-                              </span>
-                            </div>
-                            <p className="leading-relaxed text-zinc-400 text-[11px] whitespace-pre-line">{displayMessage}</p>
+                      notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => handleNotificationClick(n)}
+                          className={`p-2.5 text-xs transition-colors rounded-xl cursor-pointer my-0.5 ${
+                            n.isRead
+                              ? "text-zinc-500 hover:bg-white/[0.02]"
+                              : "bg-white/[0.04] text-zinc-200 hover:bg-white/[0.07]"
+                          }`}
+                        >
+                          <div className="flex justify-between items-start gap-2 mb-1">
+                            <span className="font-semibold truncate max-w-[180px]">
+                              {parseNotificationText(n.title, locale)}
+                            </span>
+                            <span className="text-[9px] text-zinc-500 shrink-0">
+                              {formatDateTimeShort(n.createdAt)}
+                            </span>
                           </div>
-                        );
-                      })
+                          <p className="leading-relaxed text-zinc-400 text-[11px] whitespace-pre-line">
+                            {parseNotificationText(n.message, locale)}
+                          </p>
+                        </div>
+                      ))
                     )}
                   </div>
                 </div>
@@ -253,55 +445,56 @@ export function Navbar() {
             </div>
           )}
 
+          {/* User Profile Capsule or Login */}
           {user ? (
-            <>
-              <Link href={`${prefix}/profile`} className="text-zinc-400 hover:text-violet-400 flex items-center justify-center">
+            <div className="flex items-center gap-2 pl-1 border-l border-white/[0.06]">
+              <Link
+                href={`${prefix}/profile`}
+                className="flex items-center gap-2 p-1 pr-2 rounded-full hover:bg-white/[0.06] transition"
+              >
                 {user.avatarUrl && !avatarError ? (
                   <img
                     src={resolveImageUrl(user.avatarUrl)}
                     alt={user.fullName}
-                    className="size-7 rounded-full object-cover border border-violet-500/50"
+                    className="size-7 rounded-full object-cover border border-white/10"
                     referrerPolicy="no-referrer"
-                    onError={() => {
-                      setAvatarError(true);
-                    }}
+                    onError={() => setAvatarError(true)}
                   />
                 ) : (
-                  <UserCircle className="size-6" />
+                  <UserCircle className="size-6 text-zinc-400" />
                 )}
+                <span className="text-xs font-semibold text-zinc-200 hidden sm:inline truncate max-w-[110px]">
+                  {user.fullName || "Gamer"}
+                </span>
               </Link>
-              <Button variant="outline" size="sm" onClick={() => logout()}>{t("logout")}</Button>
-            </>
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="text-[11px] font-medium text-zinc-400 hover:text-white px-2.5 py-1 rounded-full hover:bg-white/[0.06] transition cursor-pointer"
+              >
+                {t("logout")}
+              </button>
+            </div>
           ) : (
-            <>
-              <Link href={`${prefix}/login`}><Button variant="ghost" size="sm">{t("login")}</Button></Link>
-              <Link href={`${prefix}/register`}><Button size="sm">{t("register")}</Button></Link>
-            </>
+            <div className="flex items-center gap-2 pl-1 border-l border-white/[0.06]">
+              <Link
+                href={`${prefix}/login`}
+                className="px-3.5 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:text-white hover:bg-white/[0.06] transition"
+              >
+                {t("login")}
+              </Link>
+              <Link
+                href={`${prefix}/register`}
+                className="px-4 py-1.5 rounded-full bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition active:scale-[0.98] shadow-sm"
+              >
+                {t("register")}
+              </Link>
+            </div>
           )}
+
         </div>
+
       </div>
-      {/* Mobile navigation links */}
-      {isMobileMenuOpen && (
-        <nav className="md:hidden border-t border-zinc-900 bg-zinc-950/95 px-4 py-4 space-y-3 flex flex-col">
-          <Link href={prefix} onClick={() => setIsMobileMenuOpen(false)} className="text-sm hover:text-violet-300 py-1 transition-colors">{t("home")}</Link>
-          <Link href={`${prefix}/games`} onClick={() => setIsMobileMenuOpen(false)} className="text-sm hover:text-violet-300 py-1 transition-colors">{t("games")}</Link>
-          {user && (
-            <>
-              {!user.roles.includes("Admin") && (
-                <>
-                  <Link href={`${prefix}/library`} onClick={() => setIsMobileMenuOpen(false)} className="text-sm hover:text-violet-300 py-1 transition-colors">{t("library")}</Link>
-                  <Link href={`${prefix}/wishlist`} onClick={() => setIsMobileMenuOpen(false)} className="text-sm hover:text-violet-300 py-1 transition-colors">{t("wishlist")}</Link>
-                  <Link href={`${prefix}/orders`} onClick={() => setIsMobileMenuOpen(false)} className="text-sm hover:text-violet-300 py-1 transition-colors">{t("orders")}</Link>
-                </>
-              )}
-              {user.roles.includes("Admin") && (
-                <Link href={`${prefix}/admin`} onClick={() => setIsMobileMenuOpen(false)} className="text-sm hover:text-violet-300 py-1 transition-colors">{t("admin")}</Link>
-              )}
-            </>
-          )}
-          <Link href={`${prefix}/ai-chat`} onClick={() => setIsMobileMenuOpen(false)} className="text-sm hover:text-violet-300 py-1 transition-colors">{t("ai")}</Link>
-        </nav>
-      )}
     </header>
   );
 }

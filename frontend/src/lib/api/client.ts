@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000");
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
 
 export const api = axios.create({ baseURL: `${API_URL}/api/v1` });
 
@@ -64,8 +64,10 @@ api.interceptors.request.use((config) => {
   
   if (typeof window !== "undefined") {
     const pathname = window.location.pathname;
-    const isEn = pathname.startsWith("/en") || pathname === "/en";
-    config.headers["Accept-Language"] = isEn ? "en" : "vi";
+    let loc = "vi";
+    if (pathname.startsWith("/en") || pathname === "/en") loc = "en";
+    else if (pathname.startsWith("/zh") || pathname === "/zh") loc = "zh";
+    config.headers["Accept-Language"] = loc;
   }
   return config;
 });

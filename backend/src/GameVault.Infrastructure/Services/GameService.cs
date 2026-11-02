@@ -61,6 +61,7 @@ public class GameService(AppDbContext db) : IGameService
             .Include(g => g.GameCategories).ThenInclude(gc => gc.Category)
             .Include(g => g.Images)
             .Include(g => g.Videos)
+            .Include(g => g.Files)
             .Include(g => g.UnityDemo)
             .Include(g => g.GameTags).ThenInclude(gt => gt.Tag)
             .FirstOrDefaultAsync(g => g.Slug == slug && (g.Status == GameStatus.Published || g.Status == GameStatus.Archived), ct);
@@ -105,10 +106,20 @@ public class GameService(AppDbContext db) : IGameService
         => await db.Tags.AsNoTracking().OrderBy(t => t.Name)
             .Select(t => new TagDto(t.Id, t.Name, t.Slug)).ToListAsync(ct);
 
+    private static string NormalizeLocale(string? locale)
+    {
+        if (string.IsNullOrWhiteSpace(locale)) return "vi";
+        locale = locale.Trim().ToLowerInvariant();
+        if (locale.StartsWith("zh")) return "zh";
+        if (locale.StartsWith("en")) return "en";
+        return "vi";
+    }
+
     public static GameListDto MapList(Domain.Entities.Game g, string locale = "vi")
     {
-        var title = locale == "en" && !string.IsNullOrEmpty(g.TitleEn) ? g.TitleEn : g.Title;
-        var shortDesc = locale == "en" && !string.IsNullOrEmpty(g.ShortDescriptionEn) ? g.ShortDescriptionEn : g.ShortDescription;
+        locale = NormalizeLocale(locale);
+        var title = locale == "zh" && !string.IsNullOrEmpty(g.TitleZh) ? g.TitleZh : (locale == "en" && !string.IsNullOrEmpty(g.TitleEn) ? g.TitleEn : g.Title);
+        var shortDesc = locale == "zh" && !string.IsNullOrEmpty(g.ShortDescriptionZh) ? g.ShortDescriptionZh : (locale == "en" && !string.IsNullOrEmpty(g.ShortDescriptionEn) ? g.ShortDescriptionEn : g.ShortDescription);
         
         var primaryImage = g.Images.Where(i => i.Locale == null || i.Locale == locale)
                                    .OrderBy(i => i.SortOrder)
@@ -127,9 +138,10 @@ public class GameService(AppDbContext db) : IGameService
 
     public static GameDetailDto MapDetail(Domain.Entities.Game g, bool owned, bool wished, string locale = "vi")
     {
-        var title = locale == "en" && !string.IsNullOrEmpty(g.TitleEn) ? g.TitleEn : g.Title;
-        var desc = locale == "en" && !string.IsNullOrEmpty(g.DescriptionEn) ? g.DescriptionEn : g.Description;
-        var shortDesc = locale == "en" && !string.IsNullOrEmpty(g.ShortDescriptionEn) ? g.ShortDescriptionEn : g.ShortDescription;
+        locale = NormalizeLocale(locale);
+        var title = locale == "zh" && !string.IsNullOrEmpty(g.TitleZh) ? g.TitleZh : (locale == "en" && !string.IsNullOrEmpty(g.TitleEn) ? g.TitleEn : g.Title);
+        var desc = locale == "zh" && !string.IsNullOrEmpty(g.DescriptionZh) ? g.DescriptionZh : (locale == "en" && !string.IsNullOrEmpty(g.DescriptionEn) ? g.DescriptionEn : g.Description);
+        var shortDesc = locale == "zh" && !string.IsNullOrEmpty(g.ShortDescriptionZh) ? g.ShortDescriptionZh : (locale == "en" && !string.IsNullOrEmpty(g.ShortDescriptionEn) ? g.ShortDescriptionEn : g.ShortDescription);
         
         var images = g.Images.Where(i => i.Locale == null || i.Locale == locale)
                              .OrderByDescending(i => i.IsPrimary)
@@ -148,6 +160,9 @@ public class GameService(AppDbContext db) : IGameService
             g.Videos.OrderBy(v => v.SortOrder).Select(v => new GameVideoDto(v.Id, v.Url, v.Title, v.ThumbnailUrl)).ToList(),
             g.UnityDemo is { IsActive: true } d ? new UnityDemoDto(d.Id, d.BuildUrl, d.BuildPath) : null,
             owned, wished,
-            g.TitleEn, g.DescriptionEn, g.ShortDescriptionEn, g.Status, g.IsFeatured);
+            g.TitleEn, g.DescriptionEn, g.ShortDescriptionEn,
+            g.TitleZh, g.DescriptionZh, g.ShortDescriptionZh,
+            g.Status, g.IsFeatured,
+            g.Files != null && g.Files.Count > 0);
     }
 }

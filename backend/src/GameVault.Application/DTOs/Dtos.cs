@@ -37,7 +37,9 @@ public record GameDetailDto(
     UnityDemoDto? Demo,
     bool IsOwned, bool IsWishlisted,
     string? TitleEn, string? DescriptionEn, string? ShortDescriptionEn,
-    string Status, bool IsFeatured);
+    string? TitleZh, string? DescriptionZh, string? ShortDescriptionZh,
+    string Status, bool IsFeatured,
+    bool HasFile = false);
 
 public record GameImageDto(Guid Id, string Url, string? Caption, bool IsPrimary);
 public record GameVideoDto(Guid Id, string Url, string Title, string? ThumbnailUrl);
@@ -51,6 +53,7 @@ public record GameFilterRequest(
 public record CreateGameRequest(
     string Title, string Slug, string Description, string ShortDescription,
     string? TitleEn, string? DescriptionEn, string? ShortDescriptionEn,
+    string? TitleZh, string? DescriptionZh, string? ShortDescriptionZh,
     IReadOnlyList<Guid> CategoryIds, string Developer, string? Publisher, DateOnly? ReleaseDate,
     decimal Price, decimal? DiscountPrice, int MinAge, bool IsFeatured,
     string? SystemRequirements, IReadOnlyList<Guid>? TagIds, string Status = "Draft");
@@ -58,13 +61,32 @@ public record CreateGameRequest(
 public record UpdateGameRequest(
     string Title, string Description, string ShortDescription,
     string? TitleEn, string? DescriptionEn, string? ShortDescriptionEn,
+    string? TitleZh, string? DescriptionZh, string? ShortDescriptionZh,
     IReadOnlyList<Guid> CategoryIds, string Developer, string? Publisher, DateOnly? ReleaseDate,
     decimal Price, decimal? DiscountPrice, int MinAge, bool IsFeatured, string Status,
     string? SystemRequirements, IReadOnlyList<Guid>? TagIds);
 
+public record UpdateGameStatusRequest(string Status);
+
+public record TranslateGameTextRequest(
+    string SourceLocale,
+    string? Title,
+    string? Description,
+    string? ShortDescription);
+
+public record LocalizedGameText(
+    string Title,
+    string Description,
+    string ShortDescription);
+
+public record TranslateGameTextResponse(
+    LocalizedGameText Vi,
+    LocalizedGameText En,
+    LocalizedGameText Zh);
+
 public record CreateReviewRequest(byte? Rating, string? Title, string Comment, Guid? ParentId = null);
 public record UpdateReviewRequest(byte? Rating, string Comment);
-public record ReviewDto(Guid Id, Guid GameId, Guid UserId, string UserName, string? UserAvatarUrl, byte? Rating, string? Title, string Comment, bool IsVerifiedPurchase, DateTime CreatedAt, Guid? ParentId = null);
+public record ReviewDto(Guid Id, Guid GameId, Guid UserId, string UserName, string? UserAvatarUrl, byte? Rating, string? Title, string Comment, bool IsVerifiedPurchase, DateTime CreatedAt, Guid? ParentId = null, string? UserRole = null);
 
 public record CreateOrderRequest(IReadOnlyList<Guid> GameIds);
 public record OrderDto(Guid Id, string OrderCode, string Status, decimal TotalAmount, string Currency, DateTime CreatedAt, IReadOnlyList<OrderItemDto> Items, string? CancelReason = null, string? AdminNote = null);
