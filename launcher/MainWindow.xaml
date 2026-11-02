@@ -71,9 +71,7 @@
                             <TextBlock Text="🎮" FontSize="30" HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
 
-                        <TextBlock Text="GAMEVAULT" FontSize="26" FontWeight="Black" Foreground="White" HorizontalAlignment="Center" />
-                        <TextBlock Text="HỆ THỐNG XÁC THỰC BẢN QUYỀN CLIENT" FontSize="11" FontWeight="Bold" Foreground="#00E5FF" HorizontalAlignment="Center" Margin="0,4,0,6" />
-                        <TextBlock Text="Đăng nhập tài khoản để đồng bộ Thư viện game và khởi chạy bảo vệ" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,26" />
+                        <TextBlock Text="GAMEVAULT" FontSize="26" FontWeight="Black" Foreground="White" HorizontalAlignment="Center" Margin="0,0,0,24" />
 
                         <!-- Email Input -->
                         <TextBlock Text="Email tài khoản" FontSize="11" FontWeight="Bold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
@@ -136,30 +134,36 @@
                             </Button>
                         </StackPanel>
 
-                        <!-- Center: Omni-Search Bar in Header (Compact) -->
-                        <Border Grid.Column="1" HorizontalAlignment="Center" Width="200" Background="#0C101A" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="16" Padding="10,3">
-                            <Grid>
+                        <!-- Center: Omni-Search Bar in Header (Slim & Wide) -->
+                        <Border Grid.Column="1" HorizontalAlignment="Center" Width="320" Height="28" Background="#0C101A" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="12,0" VerticalAlignment="Center">
+                            <Grid VerticalAlignment="Center">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="20" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="🔍" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
-                                <TextBox Grid.Column="1" x:Name="txtSearchGame" Background="Transparent" BorderThickness="0" Padding="2,1" FontSize="12" TextChanged="TxtSearchGame_TextChanged" CaretBrush="#00E5FF" />
+                                <TextBox Grid.Column="1" x:Name="txtSearchGame" Background="Transparent" BorderThickness="0" Padding="4,0" FontSize="12" VerticalAlignment="Center" TextChanged="TxtSearchGame_TextChanged" CaretBrush="#00E5FF" />
                             </Grid>
                         </Border>
 
                         <!-- Right: User Profile & Actions -->
                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                            <!-- User Avatar (Perfect Circle) -->
-                            <Border Width="34" Height="34" CornerRadius="17" Background="{StaticResource PrimaryGradient}" Margin="0,0,10,0" BorderBrush="#00E5FF" BorderThickness="1.5">
-                                <Border.Clip>
-                                    <EllipseGeometry Center="17,17" RadiusX="17" RadiusY="17" />
-                                </Border.Clip>
-                                <Grid>
-                                    <TextBlock x:Name="txtUserAvatarInitial" Text="U" FontWeight="Black" FontSize="14" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                    <Image x:Name="imgUserAvatar" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
-                                </Grid>
-                            </Border>
+                            <!-- User Avatar (Bo tron 100% ca anh va vien) -->
+                            <Grid Width="34" Height="34" Margin="0,0,10,0" VerticalAlignment="Center">
+                                <!-- Base Circle with Initial Fallback -->
+                                <Ellipse Fill="{StaticResource PrimaryGradient}" Width="34" Height="34" />
+                                <TextBlock x:Name="txtUserAvatarInitial" Text="U" FontWeight="Black" FontSize="13" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+
+                                <!-- Circular Image (Strict 17px radius clip) -->
+                                <Image x:Name="imgUserAvatar" Width="34" Height="34" Stretch="UniformToFill" Visibility="Collapsed">
+                                    <Image.Clip>
+                                        <EllipseGeometry Center="17,17" RadiusX="17" RadiusY="17" />
+                                    </Image.Clip>
+                                </Image>
+
+                                <!-- Neon Cyan Ring Overlay -->
+                                <Ellipse Width="34" Height="34" Stroke="#00E5FF" StrokeThickness="1.5" IsHitTestVisible="False" />
+                            </Grid>
 
                             <!-- User Info -->
                             <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
