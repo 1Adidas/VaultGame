@@ -13,7 +13,7 @@ import {
   LayoutDashboard, Gamepad2, ShoppingBag, Users as UsersIcon,
   DollarSign, HelpCircle, Upload, Trash2, Edit, CheckCircle2,
   XCircle, ToggleLeft, ToggleRight, Info, PlusCircle, Save, ExternalLink,
-  Bot, AlertTriangle, BarChart3, TrendingUp, Clock, ArrowUpRight, Download, Settings
+  Bot, AlertTriangle, BarChart3, TrendingUp, Clock, ArrowUpRight, Download, Settings, ArrowLeft
 } from "lucide-react";
 
 
@@ -82,7 +82,7 @@ export default function AdminPage() {
       <main className="flex-1 min-w-0">
         {activeTab === "overview" && <OverviewTab />}
         {activeTab === "analytics" && <AnalyticsTab />}
-        {activeTab === "games" && <GamesTab />}
+        {activeTab === "games" && <GamesTab onNavigate={handleTabChange} />}
         {activeTab === "orders" && <OrdersTab />}
         {activeTab === "users" && <UsersTab />}
         {activeTab === "revenue" && <RevenueTab />}
@@ -342,7 +342,7 @@ function OverviewTab() {
 /* ============================================================================
    GAMES TAB (CRUD + Uploads)
    ============================================================================ */
-function GamesTab() {
+function GamesTab({ onNavigate }: { onNavigate?: (tab: string) => void }) {
   const locale = useLocale();
   const { data: categories } = useCategories();
 
@@ -397,7 +397,7 @@ function GamesTab() {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
 
   // Upload fields
-  const [fileType, setFileType] = useState("image");
+  const [fileType, setFileType] = useState("installer");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -513,6 +513,21 @@ function GamesTab() {
     }
   };
 
+  const onFileSelected = (file: File | null) => {
+    setSelectedFile(file);
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (name.endsWith(".zip") || name.endsWith(".exe") || name.endsWith(".rar") || name.endsWith(".7z")) {
+      if (fileType === "image" || fileType === "trailer") {
+        setFileType("installer");
+      }
+    } else if (name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".webp")) {
+      setFileType("image");
+    } else if (name.endsWith(".mp4") || name.endsWith(".webm") || name.endsWith(".mkv")) {
+      setFileType("trailer");
+    }
+  };
+
   const handleAssetUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedFile || !selectedGameForUpload) return;
@@ -522,15 +537,26 @@ function GamesTab() {
     form.append("file", selectedFile);
     form.append("type", fileType);
 
+    // Direct upload to ASP.NET Core backend to bypass Next.js proxy payload limits and IPv6 hang
+    const backendBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:5000";
+
     try {
-      await api.post(`/admin/games/${selectedGameForUpload.id}/upload`, form);
-      alert("File uploaded and linked successfully!");
+      await api.post(`${backendBase}/api/v1/admin/games/${selectedGameForUpload.id}/upload`, form, {
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+      });
+      alert(locale === "vi" ? "Tải lên tệp và liên kết thành công!" : "File uploaded and linked successfully!");
       setSelectedFile(null);
       setSelectedGameForUpload(null);
       refetchGames();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Error uploading asset.");
+      const serverMsg = error?.response?.data?.error?.message 
+        || error?.response?.data?.message 
+        || error?.response?.data?.title 
+        || error?.message 
+        || "Lỗi tải tệp lên máy chủ.";
+      alert(locale === "vi" ? `Lỗi tải tệp: ${serverMsg}` : `Error uploading asset: ${serverMsg}`);
     } finally {
       setUploading(false);
     }
@@ -594,13 +620,26 @@ function GamesTab() {
 
   return (
     <div className="space-y-8">
+      {/* Top Header & Breadcrumbs */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white">Games Catalog</h1>
-          <p className="text-sm text-zinc-500 mt-1">Create, edit, and upload files for games.</p>
+          <p className="text-sm text-zinc-500 mt-1">
+            {(isCreating || editingGame || selectedGameForUpload) ? (
+              <span className="text-violet-400 font-medium">
+                {isCreating
+                  ? (locale === "vi" ? "Đang thêm trò chơi mới" : "Adding new game")
+                  : editingGame
+                    ? `${locale === "vi" ? "Đang chỉnh sửa" : "Editing"}: ${editingGame.title}`
+                    : `${locale === "vi" ? "Đang tải tệp cho" : "Uploading files for"}: ${selectedGameForUpload?.title}`}
+              </span>
+            ) : (
+              locale === "vi" ? "Tạo, chỉnh sửa và tải lên tệp cài đặt cho các trò chơi." : "Create, edit, and upload files for games."
+            )}
+          </p>
         </div>
-        {!isCreating && !editingGame && (
-          <Button onClick={startCreate} className="bg-violet-600 hover:bg-violet-500 text-white gap-2 font-medium">
+        {!isCreating && !editingGame && !selectedGameForUpload && (
+          <Button onClick={startCreate} className="bg-violet-600 hover:bg-violet-500 text-white gap-2 font-medium shadow-lg shadow-violet-900/20">
             <PlusCircle className="size-4" />
             {locale === "vi" ? "Thêm game mới" : "Add New Game"}
           </Button>
@@ -610,9 +649,21 @@ function GamesTab() {
       {/* Forms Area */}
       {(isCreating || editingGame) && (
         <Card className="p-6 bg-zinc-900/40 border-violet-500/10 backdrop-blur">
-          <h2 className="text-xl font-bold text-white mb-6">
-            {isCreating ? (locale === "vi" ? "Thêm Trò Chơi Mới" : "Add New Game Entry") : `Editing: ${editingGame.title}`}
-          </h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-white">
+              {isCreating ? (locale === "vi" ? "Thêm Trò Chơi Mới" : "Add New Game Entry") : `Editing: ${editingGame.title}`}
+            </h2>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => { setIsCreating(false); setEditingGame(null); }}
+              className="border-white/10 hover:bg-white/10 text-zinc-300 gap-1.5"
+            >
+              <ArrowLeft className="size-4" />
+              {locale === "vi" ? "Quay lại danh sách" : "Back to list"}
+            </Button>
+          </div>
           <form onSubmit={handleSaveGame} className="space-y-6">
 
             {/* Translations */}
@@ -791,8 +842,20 @@ function GamesTab() {
 
       {/* Asset Upload Drawer/Modal */}
       {selectedGameForUpload && (
-        <Card className="p-6 bg-zinc-900/40 border-violet-500/10 backdrop-blur">
-          <h2 className="text-xl font-bold text-white mb-2">Upload Assets</h2>
+        <Card className="p-6 bg-zinc-900/40 border-violet-500/20 backdrop-blur">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-xl font-bold text-white">Upload Assets</h2>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedGameForUpload(null)}
+              className="border-white/10 hover:bg-white/10 text-zinc-300 gap-1.5"
+            >
+              <ArrowLeft className="size-4" />
+              {locale === "vi" ? "Quay lại danh sách" : "Back to list"}
+            </Button>
+          </div>
           <p className="text-xs text-zinc-500 mb-6">Linking files to game: <span className="font-semibold text-violet-400">{selectedGameForUpload.title}</span></p>
           <form onSubmit={handleAssetUpload} className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
@@ -801,24 +864,24 @@ function GamesTab() {
                   {locale === "vi" ? "Loại tệp đính kèm" : "Asset Type"}
                 </label>
                 <select className="w-full rounded-md border border-zinc-700 bg-zinc-950 p-2 text-sm text-zinc-300 cursor-pointer" value={fileType} onChange={(e) => setFileType(e.target.value)}>
-                  <option value="image">{locale === "vi" ? "Ảnh bìa / Ảnh minh họa (image)" : "Cover Image / Artwork"}</option>
+                  <option value="installer">{locale === "vi" ? "File cài đặt game (.zip / .exe) (installer)" : "Actual Game Installer (zip/exe)"}</option>
+                  <option value="demo">{locale === "vi" ? "Bản chơi thử Unity WebGL (.zip) (demo)" : "Unity WebGL Demo (zip / index.html)"}</option>
+                  <option value="image">{locale === "vi" ? "Ảnh bìa / Poster Game (.png / .jpg) (image)" : "Cover Image / Artwork"}</option>
                   <option value="trailer">{locale === "vi" ? "Video Trailer (.mp4) (trailer)" : "Trailer video (.mp4)"}</option>
-                  <option value="installer">{locale === "vi" ? "File cài đặt game (zip/exe) (installer)" : "Actual Game Installer (zip/exe)"}</option>
-                  <option value="demo">{locale === "vi" ? "Bản chơi thử Unity WebGL (zip) (demo)" : "Unity WebGL Demo (zip / index.html)"}</option>
                 </select>
               </div>
               <div className="space-y-2">
                 <label className="text-xs text-zinc-400">Select File</label>
-                <Input type="file" required onChange={(e) => setSelectedFile(e.target.files?.[0] ?? null)} />
+                <Input type="file" required onChange={(e) => onFileSelected(e.target.files?.[0] ?? null)} />
               </div>
             </div>
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="outline" onClick={() => setSelectedGameForUpload(null)}>
-                Cancel
+                {locale === "vi" ? "Hủy" : "Cancel"}
               </Button>
               <Button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white gap-2" disabled={uploading}>
                 <Upload className="size-4" />
-                {uploading ? "Uploading..." : "Upload File"}
+                {uploading ? (locale === "vi" ? "Đang tải lên..." : "Uploading...") : (locale === "vi" ? "Tải lên tệp" : "Upload File")}
               </Button>
             </div>
           </form>
@@ -1055,7 +1118,11 @@ function GamesTab() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setSelectedGameForUpload(g)}
+                          onClick={() => {
+                            setSelectedGameForUpload(g);
+                            setFileType("installer");
+                            setSelectedFile(null);
+                          }}
                           title="Upload Assets"
                           className="hover:bg-violet-500/10 hover:text-violet-400 p-2"
                         >

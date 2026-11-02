@@ -28,6 +28,11 @@ export function Navbar() {
     setAvatarError(false);
   }, [user?.avatarUrl]);
 
+  const handleLogout = async () => {
+    await logout();
+    window.location.href = `${prefix}/login`;
+  };
+
   const fetchNotifications = async () => {
     try {
       const { data } = await api.get<ApiResponse<any[]>>("/notifications");
@@ -270,7 +275,7 @@ export function Navbar() {
                   <UserCircle className="size-6" />
                 )}
               </Link>
-              <Button variant="outline" size="sm" onClick={() => logout()}>{t("logout")}</Button>
+              <Button variant="outline" size="sm" onClick={handleLogout}>{t("logout")}</Button>
             </>
           ) : (
             <>

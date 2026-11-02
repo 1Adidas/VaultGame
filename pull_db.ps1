@@ -17,7 +17,7 @@ Write-Host "-> Dang xoa du lieu cu (Volume cu) de dam bao dong bo hoan toan..." 
 # Tat cac tien trinh dang chay neu co
 Stop-Process -Name GameVault.API, VBCSCompiler, msbuild -Force -ErrorAction SilentlyContinue | Out-Null
 docker compose down -v
-Write-Host "✓ Da lam sach du lieu cu." -ForegroundColor Green
+Write-Host "[OK] Da lam sach du lieu cu." -ForegroundColor Green
 
 # 3. Khoi dong MySQL container moi
 Write-Host "-> Dang khoi dong MySQL tu Docker Compose..." -ForegroundColor Yellow
@@ -37,10 +37,10 @@ do {
     }
 } while ($health -ne '"healthy"')
 
-Write-Host "✓ Thiet lap co so du lieu hoan tat! Da nap 100% du lieu moi nhat tu may A." -ForegroundColor Green
+Write-Host "[OK] Thiet lap co so du lieu hoan tat! Da nap 100% du lieu moi nhat tu may A." -ForegroundColor Green
 
 Write-Host "==========================================================" -ForegroundColor Green
-Write-Host "✓ THIET LAP DU LIEU THANH CONG!" -ForegroundColor Green
+Write-Host "[OK] THIET LAP DU LIEU THANH CONG!" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "-> Bay gio ban chi can chay lenh './run.ps1' va mo web len de tan huong!" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Green

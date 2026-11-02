@@ -50,33 +50,44 @@ export function useCategories() {
   });
 }
 
+import { useAuthStore } from "@/lib/auth/store";
+
 export function useLibrary() {
+  const user = useAuthStore((s) => s.user);
   return useQuery({
-    queryKey: ["library"],
+    queryKey: ["library", user?.id],
     queryFn: async () => {
+      if (!user) return [];
       const { data } = await api.get<ApiResponse<Record<string, unknown>[]>>("/library");
       return data.data;
     },
+    enabled: !!user,
   });
 }
 
 export function useWishlist() {
+  const user = useAuthStore((s) => s.user);
   return useQuery({
-    queryKey: ["wishlist"],
+    queryKey: ["wishlist", user?.id],
     queryFn: async () => {
+      if (!user) return [];
       const { data } = await api.get<ApiResponse<GameListItem[]>>("/wishlist");
       return data.data;
     },
+    enabled: !!user,
   });
 }
 
 export function useOrders() {
+  const user = useAuthStore((s) => s.user);
   return useQuery({
-    queryKey: ["orders"],
+    queryKey: ["orders", user?.id],
     queryFn: async () => {
+      if (!user) return [];
       const { data } = await api.get<ApiResponse<Record<string, unknown>[]>>("/orders");
       return data.data;
     },
+    enabled: !!user,
   });
 }
 
