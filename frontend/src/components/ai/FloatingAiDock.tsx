@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocale } from "next-intl";
 import { usePathname } from "next/navigation";
-import { X } from "lucide-react";
+import { X, RotateCcw } from "lucide-react";
 import { api, type ApiResponse } from "@/lib/api/client";
 import { formatPrice, resolveImageUrl } from "@/lib/utils";
 import Link from "next/link";
@@ -272,10 +272,10 @@ export function FloatingAiDock() {
             <div className="flex items-center gap-2">
               <button
                 onClick={handleResetSession}
-                className="px-2.5 py-1 text-xs font-mono font-medium text-zinc-300 hover:text-white rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
-                title={isVi ? "Làm mới hội thoại" : "Reset chat"}
+                className="size-8 flex items-center justify-center text-zinc-300 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
+                title={isVi ? "Làm mới hội thoại" : isZh ? "重置会话" : "Reset chat"}
               >
-                {isVi ? "Làm mới" : isZh ? "重置" : "Reset"}
+                <RotateCcw className="size-4" />
               </button>
               <button
                 onClick={() => setIsOpen(false)}
