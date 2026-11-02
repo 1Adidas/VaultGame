@@ -134,58 +134,72 @@ public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
     {
         if (IsLocalFallback())
         {
-            Directory.CreateDirectory(Path.Combine(LocalRoot, folder));
-            var fileId = Guid.NewGuid().ToString();
-            var safeName = $"{fileId}_{Path.GetFileName(fileName)}";
-            var path = Path.Combine(LocalRoot, folder, safeName);
-            await using var fs = System.IO.File.Create(path);
-            await stream.CopyToAsync(fs, ct);
-            return (fileId, $"/uploads/{folder}/{safeName}");
+            return await UploadLocalAsync(stream, fileName, folder, ct);
         }
         else
         {
-            var service = GetDriveService();
-            var rootFolderId = config["GoogleDrive:RootFolderId"] ?? "root";
-            var parentFolderId = await GetOrCreateFolderIdAsync(service, folder, rootFolderId, ct);
-
-            var driveFile = new DriveFile
-            {
-                Name = fileName,
-                Parents = new List<string> { parentFolderId }
-            };
-
-            var request = service.Files.Create(driveFile, stream, mimeType);
-            request.Fields = "id, webViewLink, webContentLink";
-
-            var progress = await request.UploadAsync(ct);
-            if (progress.Status == UploadStatus.Failed)
-            {
-                throw new Exception($"Google Drive upload failed: {progress.Exception?.Message}", progress.Exception);
-            }
-
-            var uploadedFile = request.ResponseBody;
-
             try
             {
-                var permission = new Google.Apis.Drive.v3.Data.Permission
+                var service = GetDriveService();
+                var rootFolderId = config["GoogleDrive:RootFolderId"] ?? "root";
+                var parentFolderId = await GetOrCreateFolderIdAsync(service, folder, rootFolderId, ct);
+
+                var driveFile = new DriveFile
                 {
-                    Role = "reader",
-                    Type = "anyone"
+                    Name = fileName,
+                    Parents = new List<string> { parentFolderId }
                 };
-                await service.Permissions.Create(permission, uploadedFile.Id).ExecuteAsync(ct);
+
+                var request = service.Files.Create(driveFile, stream, mimeType);
+                request.Fields = "id, webViewLink, webContentLink";
+
+                var progress = await request.UploadAsync(ct);
+                if (progress.Status == UploadStatus.Failed)
+                {
+                    throw new Exception($"Google Drive upload failed: {progress.Exception?.Message}", progress.Exception);
+                }
+
+                var uploadedFile = request.ResponseBody;
+
+                try
+                {
+                    var permission = new Google.Apis.Drive.v3.Data.Permission
+                    {
+                        Role = "reader",
+                        Type = "anyone"
+                    };
+                    await service.Permissions.Create(permission, uploadedFile.Id).ExecuteAsync(ct);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Warning: Failed to set public permissions: {ex.Message}");
+                }
+
+                string url = uploadedFile.WebContentLink ?? uploadedFile.WebViewLink;
+                if (mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+                {
+                    url = $"https://drive.google.com/thumbnail?sz=w1000&id={uploadedFile.Id}";
+                }
+                return (uploadedFile.Id, url);
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Warning: Failed to set public permissions: {ex.Message}");
+                Console.WriteLine($"Google Drive upload failed, automatically falling back to local storage: {ex.Message}");
+                if (stream.CanSeek) stream.Position = 0;
+                return await UploadLocalAsync(stream, fileName, folder, ct);
             }
-
-            string url = uploadedFile.WebContentLink ?? uploadedFile.WebViewLink;
-            if (mimeType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-            {
-                url = $"https://drive.google.com/thumbnail?sz=w1000&id={uploadedFile.Id}";
-            }
-            return (uploadedFile.Id, url);
         }
+    }
+
+    private async Task<(string FileId, string Url)> UploadLocalAsync(Stream stream, string fileName, string folder, CancellationToken ct)
+    {
+        Directory.CreateDirectory(Path.Combine(LocalRoot, folder));
+        var fileId = Guid.NewGuid().ToString();
+        var safeName = $"{fileId}_{Path.GetFileName(fileName)}";
+        var path = Path.Combine(LocalRoot, folder, safeName);
+        await using var fs = System.IO.File.Create(path);
+        await stream.CopyToAsync(fs, ct);
+        return (fileId, $"/uploads/{folder}/{safeName}");
     }
 
     public async Task<string> GetDownloadUrlAsync(string fileId, CancellationToken ct = default)

@@ -3,7 +3,7 @@
 import { useLibrary } from "@/hooks/useGames";
 import { api } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
-import { Download, Trash2, Gamepad2 } from "lucide-react";
+import { Trash2, Gamepad2 } from "lucide-react";
 import { useLocale } from "next-intl";
 import Link from "next/link";
 import { formatDateTimeShort, resolveImageUrl } from "@/lib/utils";
@@ -18,22 +18,15 @@ export default function LibraryPage() {
   const { data, isLoading, refetch } = useLibrary();
 
   useEffect(() => {
+    const token = typeof window !== "undefined" ? (localStorage.getItem("gv_access") || sessionStorage.getItem("gv_access")) : null;
+    if (!token && !user) {
+      router.replace(`/${locale}/login`);
+      return;
+    }
     if (user?.roles.includes("Admin")) {
       router.replace(`/${locale}/admin`);
     }
   }, [user, locale, router]);
-
-  const download = async (gameId: string) => {
-    try {
-      const { data: res } = await api.get(`/library/${gameId}/download`);
-      const url = (res as { data: { url: string } }).data.url;
-      window.open(url.startsWith("http") ? url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${url}`, "_blank");
-      refetch();
-    } catch (error: any) {
-      console.error("Failed to download", error);
-      alert(locale === "vi" ? "Không thể tải game. Vui lòng thử lại sau." : "Failed to fetch download link. Please try again later.");
-    }
-  };
 
   const removeFromLibrary = async (gameId: string, title: string) => {
     const confirmMessage = locale === "vi" 
@@ -52,7 +45,7 @@ export default function LibraryPage() {
     }
   };
 
-  if (isLoading || user?.roles.includes("Admin")) {
+  if (!user || isLoading || user?.roles.includes("Admin")) {
     return (
       <div className="mx-auto max-w-7xl px-4 py-8">
         {/* Title skeleton */}
@@ -114,17 +107,18 @@ export default function LibraryPage() {
                     )}
                   </div>
                 </div>
-                <div className="mt-6 grid grid-cols-2 gap-2 pt-3 border-t border-white/5">
-                  <Button
-                    className="text-xs bg-violet-600 hover:bg-violet-500 text-white gap-1.5"
-                    onClick={() => download(g.gameId)}
+                <div className="mt-6 flex flex-col gap-2 pt-3 border-t border-white/5">
+                  <a
+                    href={`gamevault://open/${g.gameId}`}
+                    className="flex items-center justify-center text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg py-2.5 px-3 font-semibold gap-1.5 transition shadow-sm shadow-emerald-950/20"
+                    title={locale === "vi" ? "Mở GameVault Launcher trên máy tính" : "Open GameVault Launcher"}
                   >
-                    <Download className="size-3.5" />
-                    {locale === "vi" ? "Tải game" : "Download"}
-                  </Button>
+                    <Gamepad2 className="size-3.5" />
+                    {locale === "vi" ? "Mở qua Launcher" : "Open in Launcher"}
+                  </a>
                   <Button
                     variant="outline"
-                    className="text-xs hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 gap-1.5"
+                    className="text-xs border-white/10 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 text-zinc-400 gap-1.5 h-8 w-full transition"
                     onClick={() => removeFromLibrary(g.gameId, g.title)}
                   >
                     <Trash2 className="size-3.5" />

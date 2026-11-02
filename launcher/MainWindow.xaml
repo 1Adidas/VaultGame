@@ -1,0 +1,287 @@
+<Window x:Class="GameVault.Launcher.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="GameVault Client"
+        Height="740" Width="1180"
+        MinHeight="620" MinWidth="980"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BgDarkBrush}"
+        Foreground="{StaticResource TextPrimaryBrush}">
+
+    <Grid>
+        <!-- ==================== 1. MÀN HÌNH ĐĂNG NHẬP (LOGIN VIEW) ==================== -->
+        <!-- Màn hình sạch sẽ, không có Hình 1 (Máy chủ) và không có Hình 2 (Nút ghé thăm web) -->
+        <Grid x:Name="viewLogin" Visibility="Visible">
+            <Border Width="420" VerticalAlignment="Center" HorizontalAlignment="Center"
+                    Background="{StaticResource BgCardBrush}" CornerRadius="12" Padding="36"
+                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                <StackPanel>
+                    <TextBlock Text="🎮" FontSize="42" HorizontalAlignment="Center" Margin="0,0,0,10" />
+                    <TextBlock Text="GAMEVAULT" FontSize="24" FontWeight="Black" Foreground="{StaticResource PrimaryBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="Đăng nhập vào tài khoản của bạn để truy cập Thư viện Game" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,26" />
+
+                    <!-- Email -->
+                    <TextBlock Text="Email tài khoản" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
+                    <TextBox x:Name="txtLoginEmail" Margin="0,0,0,16" Padding="12,10" />
+
+                    <!-- Password -->
+                    <TextBlock Text="Mật khẩu" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,0,0,6" />
+                    <PasswordBox x:Name="txtLoginPassword" Margin="0,0,0,16" Padding="12,10" KeyDown="TxtLoginPassword_KeyDown" />
+
+                    <!-- Backend API Config (Internal) -->
+                    <TextBox x:Name="txtApiUrl" Visibility="Collapsed" />
+
+                    <!-- Error Alert -->
+                    <Border x:Name="pnlLoginError" Visibility="Collapsed" Background="#3B181E" BorderBrush="{StaticResource DangerBrush}" BorderThickness="1" CornerRadius="6" Padding="10" Margin="0,0,0,16">
+                        <TextBlock x:Name="txtLoginError" Text="Lỗi đăng nhập" Foreground="#FCA5A5" FontSize="12" TextWrapping="Wrap" />
+                    </Border>
+
+                    <!-- Login Button -->
+                    <Button x:Name="btnLogin" Style="{StaticResource PrimaryBtn}" Content="ĐĂNG NHẬP" Height="44" FontSize="14" FontWeight="Bold" Click="BtnLogin_Click" Margin="0,0,0,14" />
+
+                    <!-- Register Link -->
+                    <Button Style="{StaticResource OutlineBtn}" Content="Chưa có tài khoản? Đăng ký trên Website" Click="BtnOpenRegisterWeb_Click" />
+                </StackPanel>
+            </Border>
+        </Grid>
+
+        <!-- ==================== 2. GIAO DIỆN CHÍNH SAU KHI ĐĂNG NHẬP (HÌNH 3 - STEAM STYLE) ==================== -->
+        <Grid x:Name="viewMainSteam" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="56" /> <!-- Top Header Navigation Bar (Store, Library...) -->
+                <RowDefinition Height="*" />  <!-- Body: Sidebar List + Main Game Shelf Grid -->
+                <RowDefinition Height="28" /> <!-- Footer Bar (Bottom info) -->
+            </Grid.RowDefinitions>
+
+            <!-- TOP NAVIGATION BAR (Chuẩn Steam - đưa Hình 2 'Ghé thăm Website' vào tab STORE) -->
+            <Border Grid.Row="0" Background="{StaticResource BgHeaderBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                <Grid Margin="16,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Logo -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,20,0">
+                        <TextBlock Text="🎮" FontSize="22" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBlock Text="GAMEVAULT" FontSize="16" FontWeight="Black" Foreground="White" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- Nav Tabs: STORE (Hình 2 được tích hợp ở đây) & LIBRARY -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- STORE BUTTON (Hình 2: Ghé thăm website / Cửa hàng) -->
+                        <Button x:Name="btnSteamStore" Style="{StaticResource SteamStoreNavBtn}" Click="BtnVisitWebsite_Click" Margin="0,0,10,0">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="🌐 " FontSize="13" />
+                                <TextBlock Text="STORE (CỬA HÀNG)" FontWeight="Black" FontSize="13" />
+                            </StackPanel>
+                        </Button>
+
+                        <!-- LIBRARY TAB (Active) -->
+                        <Button Style="{StaticResource SteamActiveNavBtn}" Content="LIBRARY" Margin="0,0,4,0" />
+                    </StackPanel>
+
+                    <!-- Right Profile / User Area -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <!-- User Avatar -->
+                        <Border Width="34" Height="34" CornerRadius="17" Background="{StaticResource SteamBlueBrush}" Margin="0,0,10,0" ClipToBounds="True" BorderBrush="#384358" BorderThickness="1.5">
+                            <Grid>
+                                <TextBlock x:Name="txtUserAvatarInitial" Text="U" FontWeight="Bold" FontSize="14" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <Image x:Name="imgUserAvatar" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+                            </Grid>
+                        </Border>
+                        <!-- User Name -->
+                        <TextBlock x:Name="txtUserName" Text="Gamer" FontWeight="Bold" FontSize="13" Foreground="White" VerticalAlignment="Center" Margin="0,0,16,0" />
+                        
+                        <!-- Logout Button -->
+                        <Button Style="{StaticResource OutlineBtn}" Padding="10,6" Click="BtnLogout_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="🚪 " FontSize="12" />
+                                <TextBlock Text="Đăng xuất" FontSize="12" FontWeight="SemiBold" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- BODY AREA: Cột danh sách bên trái + Lưới Posters bên phải (Chuẩn Hình 3 của Steam) -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="240" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <!-- ==================== CỘT TRÁI (STEAM GAMES LIST SIDEBAR) ==================== -->
+                <Border Grid.Column="0" Background="{StaticResource BgSidebarBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,1,0">
+                    <Grid Margin="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!-- Header & Search -->
+                        <Grid Grid.Row="0" Margin="0,0,0,10">
+                            <TextBlock Text="Home" FontSize="14" FontWeight="Bold" Foreground="#94A3B8" VerticalAlignment="Center" />
+                            <TextBlock x:Name="txtGamesCountBadge" Text="Games (0)" FontSize="11" Foreground="{StaticResource TextMutedBrush}" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <!-- Search Box -->
+                        <Border Grid.Row="1" Background="#161922" CornerRadius="6" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" Margin="0,0,0,12" Padding="6,2">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="22" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="🔍" FontSize="12" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" Margin="2,0,0,0" />
+                                <TextBox Grid.Column="1" x:Name="txtSearchGame" Background="Transparent" BorderThickness="0" Padding="4,4" FontSize="12" TextChanged="TxtSearchGame_TextChanged" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Compact Games List (Giống cột bên trái của Steam trong Hình 3) -->
+                        <ListBox Grid.Row="2" x:Name="lstSidebarGames" Background="Transparent" BorderThickness="0" SelectionChanged="LstGames_SelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="Transparent" CornerRadius="4" Padding="6,6" Margin="0,1" Cursor="Hand">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="20" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="{Binding StatusBadgeIcon}" FontSize="12" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" Foreground="{Binding StatusColorBrush}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+
+                <!-- ==================== VÙNG CHÍNH (STEAM SHELF POSTER GRID - HÌNH 3) ==================== -->
+                <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Background="{StaticResource BgDarkBrush}" Padding="24">
+                    <StackPanel>
+                        <!-- Section 1 Header: Recent Games / All Games Shelf -->
+                        <Grid Margin="0,0,0,16">
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <TextBlock Text="Recent Games" FontSize="18" FontWeight="Bold" Foreground="White" />
+                                <TextBlock Text=" ⌵" FontSize="14" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                                <TextBlock x:Name="txtShelfCount" Text=" (Tất cả trò chơi sở hữu)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="8,2,0,0" />
+                            </StackPanel>
+                            <Button Style="{StaticResource OutlineBtn}" Content="🔄 Làm mới" Click="BtnRefreshLibrary_Click" HorizontalAlignment="Right" Padding="10,6" />
+                        </Grid>
+
+                        <!-- Empty State if no games -->
+                        <Border x:Name="pnlEmptyLibrary" Visibility="Collapsed" Background="{StaticResource BgCardBrush}" CornerRadius="10" Padding="32" Margin="0,20,0,0" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+                            <StackPanel HorizontalAlignment="Center">
+                                <TextBlock Text="🎮" FontSize="46" HorizontalAlignment="Center" Margin="0,0,0,10" />
+                                <TextBlock Text="Thư viện của bạn đang trống" FontSize="18" FontWeight="Bold" HorizontalAlignment="Center" />
+                                <TextBlock Text="Hãy ghé thăm Cửa hàng Web (STORE) để thêm các tựa game yêu thích vào tài khoản!" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" Margin="0,4,0,18" HorizontalAlignment="Center" />
+                                <Button Style="{StaticResource SteamStoreNavBtn}" Content="🌐 Ghé thăm Website Cửa hàng" Click="BtnVisitWebsite_Click" HorizontalAlignment="Center" Padding="18,10" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- STEAM POSTER CARDS GRID (Y hệt bố cục Hình 3 của Steam) -->
+                        <ItemsControl x:Name="icGamePosters">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <WrapPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <!-- Poster Card (Tỷ lệ poster đứng chuẩn Steam 185x280px) -->
+                                    <Border Width="195" Height="305" Background="#161922" CornerRadius="6" Margin="0,0,18,20" BorderBrush="#252A38" BorderThickness="1" ClipToBounds="True">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="220" /> <!-- Ảnh bìa Poster Game -->
+                                                <RowDefinition Height="*" />   <!-- Action Footer (PLAY / INSTALL) -->
+                                            </Grid.RowDefinitions>
+
+                                            <!-- 1. Game Poster Image -->
+                                            <Border Grid.Row="0" Background="#1C202C">
+                                                <Grid>
+                                                    <Image Source="{Binding CoverUrl}" Stretch="UniformToFill" />
+                                                    <!-- Title Overlay on top of image -->
+                                                    <Border VerticalAlignment="Bottom" Background="#CC0F1117" Padding="8,6">
+                                                        <TextBlock Text="{Binding Title}" FontWeight="Bold" FontSize="12" Foreground="White" TextTrimming="CharacterEllipsis" />
+                                                    </Border>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- 2. Bottom Action Footer (Chuẩn style Steam Hình 3) -->
+                                            <Border Grid.Row="1" Background="#12141A" Padding="8,6">
+                                                <Grid>
+                                                    <!-- A. State: INSTALLED (PLAY BUTTON - Xanh lá chuẩn Steam Hình 3) -->
+                                                    <Grid Visibility="{Binding IsInstalledVisible}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="42" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <!-- Green Play Button -->
+                                                        <Button Grid.Column="0" Tag="{Binding}" Click="BtnCardPlay_Click" Style="{StaticResource PlayBtn}" Padding="0" Height="36" Width="36" ToolTip="Khởi chạy qua Launcher DRM">
+                                                            <TextBlock Text="▶" FontSize="14" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Button>
+                                                        <!-- Time / Status text -->
+                                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                            <TextBlock Text="TIME PLAYED" FontSize="9" FontWeight="Bold" Foreground="#64748B" />
+                                                            <TextBlock Text="Sẵn sàng chơi" FontSize="11" FontWeight="SemiBold" Foreground="#10B981" />
+                                                        </StackPanel>
+                                                        <!-- Manage Menu (Options) -->
+                                                        <Button Grid.Column="2" Tag="{Binding}" Click="BtnCardOptions_Click" Style="{StaticResource OutlineBtn}" Padding="6,2" Height="26" Content="⋮" ToolTip="Tùy chọn: Gỡ cài đặt / Xóa khỏi tài khoản / Mở thư mục" />
+                                                    </Grid>
+
+                                                    <!-- B. State: NOT INSTALLED (INSTALL BUTTON - Xanh dương/Xám) -->
+                                                    <Grid Visibility="{Binding IsNotInstalledVisible}">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="42" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <!-- Install Button -->
+                                                        <Button Grid.Column="0" Tag="{Binding}" Click="BtnCardInstall_Click" Style="{StaticResource PrimaryBtn}" Padding="0" Height="36" Width="36" ToolTip="Tải và cài đặt game">
+                                                            <TextBlock Text="⬇" FontSize="14" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Button>
+                                                        <StackPanel Grid.Column="1" Margin="8,0,0,0" VerticalAlignment="Center">
+                                                            <TextBlock Text="CHƯA TẢI VỀ" FontSize="9" FontWeight="Bold" Foreground="#64748B" />
+                                                            <TextBlock Text="{Binding Version, StringFormat='v{0}'}" FontSize="11" Foreground="#94A3B8" />
+                                                        </StackPanel>
+                                                        <Button Grid.Column="2" Tag="{Binding}" Click="BtnCardOptions_Click" Style="{StaticResource OutlineBtn}" Padding="6,2" Height="26" Content="⋮" ToolTip="Tùy chọn" />
+                                                    </Grid>
+
+                                                    <!-- C. State: DOWNLOADING (PROGRESS BAR) -->
+                                                    <Grid Visibility="{Binding IsDownloadingVisible}">
+                                                        <StackPanel VerticalAlignment="Center">
+                                                            <Grid Margin="0,0,0,4">
+                                                                <TextBlock Text="ĐANG TẢI..." FontSize="9" FontWeight="Bold" Foreground="{StaticResource PrimaryBrush}" />
+                                                                <TextBlock Text="{Binding DownloadProgressText}" FontSize="10" FontWeight="Bold" Foreground="White" HorizontalAlignment="Right" />
+                                                            </Grid>
+                                                            <ProgressBar Value="{Binding DownloadPercent}" Height="6" Background="#262B3A" Foreground="{StaticResource PrimaryBrush}" />
+                                                        </StackPanel>
+                                                    </Grid>
+
+                                                </Grid>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+
+            <!-- FOOTER BAR (Bottom status) -->
+            <Border Grid.Row="2" Background="#0C0E12" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="16,0">
+                <Grid>
+                    <TextBlock Text="🔒 GameVault DRM: Game bản quyền được bảo vệ và khởi chạy qua Launcher" FontSize="10" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="Connected" FontSize="10" Foreground="#10B981" HorizontalAlignment="Right" VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+        </Grid>
+
+    </Grid>
+</Window>

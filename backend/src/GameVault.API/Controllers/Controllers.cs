@@ -540,85 +540,104 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
     }
 
     [HttpPost("games/{id:guid}/upload")]
-    [RequestSizeLimit(524_288_000)]
+    [RequestSizeLimit(1_073_741_824)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 1_073_741_824)]
     public async Task<ActionResult<ApiResponse<object>>> Upload(Guid id, [FromForm] string type, IFormFile file, CancellationToken ct)
     {
-        var game = await db.Games.FindAsync([id], ct);
-        if (game is null) return NotFound(ApiResponse<object>.Fail("GAME_NOT_FOUND", "Game not found"));
-        string gameFolder = string.IsNullOrEmpty(game.Slug) ? id.ToString() : game.Slug;
-
-        await using var stream = file.OpenReadStream();
-        var (fileId, url) = await drive.UploadAsync(stream, file.FileName, file.ContentType, $"games/{gameFolder}/{type}", ct);
-        
-        string buildUrl = url;
-        string buildPath = url;
-
-        switch (type.ToLowerInvariant())
+        try
         {
-            case "image":
-                var existingImages = await db.GameImages.Where(i => i.GameId == id).ToListAsync(ct);
-                foreach (var img in existingImages)
-                {
-                    img.IsPrimary = false;
-                }
-                db.GameImages.Add(new Domain.Entities.GameImage { GameId = id, GoogleDriveFileId = fileId, Url = url, IsPrimary = true });
-                break;
-            case "trailer":
-                db.GameVideos.Add(new Domain.Entities.GameVideo { GameId = id, GoogleDriveFileId = fileId, Url = url, Title = file.FileName });
-                break;
-            case "installer":
-                db.GameFiles.Add(new Domain.Entities.GameFile { GameId = id, GoogleDriveFileId = fileId, FileName = file.FileName, FileSizeBytes = file.Length, MimeType = file.ContentType, DownloadUrl = url });
-                break;
-            case "demo":
-                if (Path.GetExtension(file.FileName).Equals(".zip", StringComparison.OrdinalIgnoreCase))
-                {
-                    try
+            var game = await db.Games.FindAsync([id], ct);
+            if (game is null) return NotFound(ApiResponse<object>.Fail("GAME_NOT_FOUND", "Game not found"));
+            string gameFolder = string.IsNullOrEmpty(game.Slug) ? id.ToString() : game.Slug;
+
+            await using var stream = file.OpenReadStream();
+            var (fileId, url) = await drive.UploadAsync(stream, file.FileName, file.ContentType, $"games/{gameFolder}/{type}", ct);
+            
+            string buildUrl = url;
+            string buildPath = url;
+
+            switch (type.ToLowerInvariant())
+            {
+                case "image":
+                    var existingImages = await db.GameImages.Where(i => i.GameId == id).ToListAsync(ct);
+                    foreach (var img in existingImages)
                     {
-                        var demoDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", gameFolder, "demo");
-                        var extractDir = Path.Combine(demoDir, "extracted");
-
-                        if (Directory.Exists(extractDir))
+                        img.IsPrimary = false;
+                    }
+                    db.GameImages.Add(new Domain.Entities.GameImage { GameId = id, GoogleDriveFileId = fileId, Url = url, IsPrimary = true });
+                    break;
+                case "trailer":
+                    db.GameVideos.Add(new Domain.Entities.GameVideo { GameId = id, GoogleDriveFileId = fileId, Url = url, Title = file.FileName });
+                    break;
+                case "installer":
+                    var existingFiles = await db.GameFiles.Where(f => f.GameId == id).ToListAsync(ct);
+                    foreach (var ef in existingFiles) ef.IsActive = false;
+                    db.GameFiles.Add(new Domain.Entities.GameFile { 
+                        GameId = id, 
+                        GoogleDriveFileId = fileId, 
+                        FileName = file.FileName, 
+                        FileSizeBytes = file.Length, 
+                        MimeType = string.IsNullOrEmpty(file.ContentType) ? "application/zip" : file.ContentType, 
+                        DownloadUrl = url,
+                        IsActive = true
+                    });
+                    break;
+                case "demo":
+                    if (Path.GetExtension(file.FileName).Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                    {
+                        try
                         {
-                            try { Directory.Delete(extractDir, true); } catch {}
-                        }
-                        Directory.CreateDirectory(extractDir);
+                            var demoDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", gameFolder, "demo");
+                            var extractDir = Path.Combine(demoDir, "extracted");
 
-                        using (var ms = new MemoryStream())
-                        {
-                            await file.CopyToAsync(ms, ct);
-                            ms.Position = 0;
-                            using (var archive = new System.IO.Compression.ZipArchive(ms))
+                            if (Directory.Exists(extractDir))
                             {
-                                archive.ExtractToDirectory(extractDir, overwriteFiles: true);
+                                try { Directory.Delete(extractDir, true); } catch {}
+                            }
+                            Directory.CreateDirectory(extractDir);
+
+                            using (var ms = new MemoryStream())
+                            {
+                                await file.CopyToAsync(ms, ct);
+                                ms.Position = 0;
+                                using (var archive = new System.IO.Compression.ZipArchive(ms))
+                                {
+                                    archive.ExtractToDirectory(extractDir, overwriteFiles: true);
+                                }
+                            }
+
+                            var indexFiles = Directory.GetFiles(extractDir, "index.html", SearchOption.AllDirectories);
+                            if (indexFiles.Length > 0)
+                            {
+                                var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                                buildUrl = indexFiles[0].Replace(wwwrootPath, "").Replace('\\', '/');
+                                buildPath = indexFiles[0];
+                            }
+                            else
+                            {
+                                buildUrl = $"/uploads/games/{gameFolder}/demo/extracted/index.html";
+                                buildPath = Path.Combine(extractDir, "index.html");
                             }
                         }
-
-                        var indexFiles = Directory.GetFiles(extractDir, "index.html", SearchOption.AllDirectories);
-                        if (indexFiles.Length > 0)
+                        catch (Exception ex)
                         {
-                            var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-                            buildUrl = indexFiles[0].Replace(wwwrootPath, "").Replace('\\', '/');
-                            buildPath = indexFiles[0];
-                        }
-                        else
-                        {
-                            buildUrl = $"/uploads/games/{gameFolder}/demo/extracted/index.html";
-                            buildPath = Path.Combine(extractDir, "index.html");
+                            Console.WriteLine($"Error extracting Unity WebGL demo zip: {ex.Message}");
                         }
                     }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"Error extracting Unity WebGL demo zip: {ex.Message}");
-                    }
-                }
 
-                var demo = await db.UnityDemos.FirstOrDefaultAsync(d => d.GameId == id, ct);
-                if (demo is null) db.UnityDemos.Add(new Domain.Entities.UnityDemo { GameId = id, GoogleDriveFileId = fileId, BuildUrl = buildUrl, BuildPath = buildPath });
-                else { demo.BuildUrl = buildUrl; demo.BuildPath = buildPath; demo.GoogleDriveFileId = fileId; demo.IsActive = true; }
-                break;
+                    var demo = await db.UnityDemos.FirstOrDefaultAsync(d => d.GameId == id, ct);
+                    if (demo is null) db.UnityDemos.Add(new Domain.Entities.UnityDemo { GameId = id, GoogleDriveFileId = fileId, BuildUrl = buildUrl, BuildPath = buildPath });
+                    else { demo.BuildUrl = buildUrl; demo.BuildPath = buildPath; demo.GoogleDriveFileId = fileId; demo.IsActive = true; }
+                    break;
+            }
+            await db.SaveChangesAsync(ct);
+            return Ok(ApiResponse<object>.Ok(new { fileId, url }));
         }
-        await db.SaveChangesAsync(ct);
-        return Ok(ApiResponse<object>.Ok(new { fileId, url }));
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[AdminController.Upload Error]: {ex}");
+            return StatusCode(500, ApiResponse<object>.Fail("UPLOAD_ERROR", ex.Message));
+        }
     }
 
 

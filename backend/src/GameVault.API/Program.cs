@@ -13,6 +13,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
+// Allow large uploads for game zip / installer (up to 1GB)
+builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
+{
+    o.ValueLengthLimit = int.MaxValue;
+    o.MultipartBodyLengthLimit = 1_073_741_824;
+    o.MemoryBufferThreshold = 104_857_600;
+});
+
+builder.WebHost.ConfigureKestrel(options =>
+{
+    options.Limits.MaxRequestBodySize = 1_073_741_824;
+});
+
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
@@ -56,6 +69,8 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
 
 builder.Services.AddRateLimiter(o =>
 {
+    o.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
     o.AddPolicy("ai", http => RateLimitPartition.GetFixedWindowLimiter(
         http.User.Identity?.IsAuthenticated == true ? http.User.FindFirstValue(ClaimTypes.NameIdentifier)! : http.Connection.RemoteIpAddress?.ToString() ?? "anon",
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 20, Window = TimeSpan.FromMinutes(1) }));
@@ -64,7 +79,7 @@ builder.Services.AddRateLimiter(o =>
         http.Connection.RemoteIpAddress?.ToString() ?? "anon",
         _ => new FixedWindowRateLimiterOptions
         {
-            PermitLimit = 5,
+            PermitLimit = 30,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         }));
