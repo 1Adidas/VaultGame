@@ -10,6 +10,7 @@ dist/
 out/
 bin/
 obj/
+publish/
 *.user
 *.suo
 

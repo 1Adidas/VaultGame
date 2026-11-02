@@ -25,7 +25,8 @@ import {
   Dices,
   Shuffle,
   RefreshCw,
-  ArrowRight
+  ArrowRight,
+  Download
 } from "lucide-react";
 
 interface AppSidebarProps {
@@ -187,6 +188,21 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
                 SALE
               </span>
             </Link>
+
+            <a
+              href="/download/GameVault-Launcher.exe"
+              download="GameVault-Launcher.exe"
+              className={navItemClass(false)}
+              title={isVi ? "Tải GameVault Launcher Client cho Windows (.exe)" : "Download GameVault Launcher Client (.exe)"}
+            >
+              <div className="flex items-center gap-2.5">
+                <Download className={iconClass(false)} />
+                <span>{isVi ? "Tải Game Launcher" : isZh ? "下载游戏启动器" : "Download Launcher"}</span>
+              </div>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                .EXE
+              </span>
+            </a>
           </div>
 
           {/* Section 2: Personal Vault (Hidden for Admin) */}
