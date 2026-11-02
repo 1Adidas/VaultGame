@@ -710,7 +710,7 @@ public partial class MainWindow : Window
 
     private void BtnOpenRegisterWeb_Click(object sender, RoutedEventArgs e)
     {
-        var registerUrl = $"{_session.WebUrl.TrimEnd('/')}/auth/register";
+        var registerUrl = $"{_session.WebUrl.TrimEnd('/')}/vi/register";
         try
         {
             Process.Start(new ProcessStartInfo

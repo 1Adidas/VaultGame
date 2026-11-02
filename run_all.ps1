@@ -8,10 +8,17 @@ Write-Host "==========================================================" -Foregro
 # 1. Terminate old processes on ports 5000 and 3000
 $ports = @(5000, 3000)
 foreach ($port in $ports) {
-    $proc = (Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue).OwningProcess
-    if ($proc) {
-        Write-Host " -> Giai phong port $port (PID: $proc)..." -ForegroundColor DarkGray
-        Stop-Process -Id $proc -Force -ErrorAction SilentlyContinue
+    try {
+        $conns = Get-NetTCPConnection -LocalPort $port -ErrorAction SilentlyContinue
+        if ($conns) {
+            $pids = ($conns | Select-Object -ExpandProperty OwningProcess -Unique) | Where-Object { $_ -gt 0 }
+            foreach ($p in $pids) {
+                Write-Host " -> Giai phong port $port (PID: $p)..." -ForegroundColor DarkGray
+                Stop-Process -Id $p -Force -ErrorAction SilentlyContinue
+            }
+        }
+    } catch {
+        # Ignore port release error
     }
 }
 
@@ -22,7 +29,7 @@ Remove-Job -Name "gv-backend", "gv-frontend" -ErrorAction SilentlyContinue
 # 2. Check and start Docker MySQL if docker is running
 Write-Host " -> Dang kiem tra MySQL Database Container..." -ForegroundColor Yellow
 try {
-    docker compose up -d 2>$null
+    $null = docker compose up -d 2>&1
     Write-Host " -> MySQL Docker Container: Ready." -ForegroundColor Green
 } catch {
     Write-Host " -> Bo qua Docker (neu da chay MySQL local san tren may)." -ForegroundColor DarkGray

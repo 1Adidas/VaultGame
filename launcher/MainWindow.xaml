@@ -41,15 +41,8 @@
                     <!-- Center: Draggable Spacer -->
                     <Grid Grid.Column="1" Background="Transparent" />
 
-                    <!-- Right: Online Badge + Window Buttons -->
+                    <!-- Right: Window Chrome Buttons -->
                     <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="#0C1E18" BorderBrush="#164E3A" BorderThickness="1" CornerRadius="10" Padding="8,3" Margin="0,0,12,0">
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                <Ellipse Width="6" Height="6" Fill="#10B981" Margin="0,0,6,0" />
-                                <TextBlock Text="DRM ONLINE" FontSize="9" FontWeight="Black" Foreground="#34D399" />
-                            </StackPanel>
-                        </Border>
-
                         <Button Style="{StaticResource WindowCtrlBtn}" Content="─" Click="BtnMinimize_Click" ToolTip="Thu nhỏ" />
                         <Button Style="{StaticResource WindowCtrlBtn}" Content="□" Click="BtnMaximize_Click" ToolTip="Phóng to" Margin="2,0" />
                         <Button Style="{StaticResource WindowCloseBtn}" Content="✕" Click="BtnClose_Click" ToolTip="Đóng ứng dụng" />
@@ -143,22 +136,25 @@
                             </Button>
                         </StackPanel>
 
-                        <!-- Center: Omni-Search Bar in Header -->
-                        <Border Grid.Column="1" HorizontalAlignment="Center" Width="360" Background="#0C101A" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="20" Padding="12,4">
+                        <!-- Center: Omni-Search Bar in Header (Compact) -->
+                        <Border Grid.Column="1" HorizontalAlignment="Center" Width="200" Background="#0C101A" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="16" Padding="10,3">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="22" />
+                                    <ColumnDefinition Width="20" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock Grid.Column="0" Text="🔍" FontSize="11" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
-                                <TextBox Grid.Column="1" x:Name="txtSearchGame" Background="Transparent" BorderThickness="0" Padding="4,2" FontSize="12" TextChanged="TxtSearchGame_TextChanged" CaretBrush="#00E5FF" />
+                                <TextBox Grid.Column="1" x:Name="txtSearchGame" Background="Transparent" BorderThickness="0" Padding="2,1" FontSize="12" TextChanged="TxtSearchGame_TextChanged" CaretBrush="#00E5FF" />
                             </Grid>
                         </Border>
 
                         <!-- Right: User Profile & Actions -->
                         <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                            <!-- User Avatar -->
-                            <Border Width="34" Height="34" CornerRadius="17" Background="{StaticResource PrimaryGradient}" Margin="0,0,10,0" ClipToBounds="True" BorderBrush="#00E5FF" BorderThickness="1.5">
+                            <!-- User Avatar (Perfect Circle) -->
+                            <Border Width="34" Height="34" CornerRadius="17" Background="{StaticResource PrimaryGradient}" Margin="0,0,10,0" BorderBrush="#00E5FF" BorderThickness="1.5">
+                                <Border.Clip>
+                                    <EllipseGeometry Center="17,17" RadiusX="17" RadiusY="17" />
+                                </Border.Clip>
                                 <Grid>
                                     <TextBlock x:Name="txtUserAvatarInitial" Text="U" FontWeight="Black" FontSize="14" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                     <Image x:Name="imgUserAvatar" Stretch="UniformToFill" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
@@ -277,7 +273,7 @@
                                     <TextBlock Text="KHO TRÒ CHƠI BẢN QUYỀN" FontSize="18" FontWeight="Black" Foreground="White" />
                                     <TextBlock x:Name="txtShelfCount" Text=" (Đang đồng bộ...)" FontSize="12" Foreground="{StaticResource TextSecondaryBrush}" VerticalAlignment="Center" Margin="8,2,0,0" />
                                 </StackPanel>
-                                <Button Style="{StaticResource OutlineBtn}" Content="🔄 Làm mới thư viện" Click="BtnRefreshLibrary_Click" HorizontalAlignment="Right" Padding="12,6" />
+                                <Button Style="{StaticResource OutlineBtn}" Content="🔄" ToolTip="Làm mới thư viện" Click="BtnRefreshLibrary_Click" HorizontalAlignment="Right" Padding="8,4" Width="36" Height="34" FontSize="13" />
                             </Grid>
 
                             <!-- Empty State Card -->
@@ -407,10 +403,6 @@
                 <Border Grid.Row="2" Background="#06080E" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,1,0,0" Padding="18,0">
                     <Grid>
                         <TextBlock Text="🛡️ GameVault DRM Engine Active: Bản quyền game được mã hóa và xác thực trực tiếp" FontSize="10" Foreground="{StaticResource TextMutedBrush}" VerticalAlignment="Center" />
-                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                            <Ellipse Width="6" Height="6" Fill="#10B981" Margin="0,0,6,0" />
-                            <TextBlock Text="HỆ THỐNG HOẠT ĐỘNG TỐT" FontSize="10" FontWeight="Bold" Foreground="#34D399" />
-                        </StackPanel>
                     </Grid>
                 </Border>
             </Grid>
