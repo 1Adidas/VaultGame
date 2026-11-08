@@ -36,8 +36,10 @@ TestResults/
 *.sqlite
 
 # Secrets & Local configurations
-appsettings.Development.json
-appsettings.local.json
+appsetting*.Development.json
+appsettings*.Development.json
+appsetting*.local.json
+appsettings*.local.json
 .env.local
 .env.*.local
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useLocale } from "next-intl";
 import { useGames, useCategories } from "@/hooks/useGames";
@@ -46,17 +46,52 @@ export default function HomePage() {
 
   const currentHero = heroGames[activeHeroIndex] ?? heroGames[0];
 
-  // Auto-advance hero carousel with a reliable JavaScript timer
+  const progressBarRef = useRef<HTMLDivElement>(null);
+
+  // Smooth, frame-accurate progress bar animation & slide rotation
   useEffect(() => {
-    if (isPaused || heroGames.length <= 1) return;
+    if (heroGames.length <= 1) return;
 
-    const timer = setInterval(() => {
-      setActiveHeroIndex((prev) => (prev + 1) % heroGames.length);
-      setRotationKey((k) => k + 1);
-    }, HERO_AUTOPLAY_INTERVAL);
+    let animationFrameId: number;
+    let startTime: number | null = null;
+    let elapsedBeforePause = 0;
 
-    return () => clearInterval(timer);
-  }, [isPaused, heroGames.length, rotationKey]);
+    const step = (timestamp: number) => {
+      if (isPaused) {
+        startTime = null;
+        animationFrameId = requestAnimationFrame(step);
+        return;
+      }
+
+      if (startTime === null) {
+        startTime = timestamp - elapsedBeforePause;
+      }
+
+      const elapsed = timestamp - startTime;
+      elapsedBeforePause = elapsed;
+      const progress = Math.min(elapsed / HERO_AUTOPLAY_INTERVAL, 1);
+
+      if (progressBarRef.current) {
+        progressBarRef.current.style.transform = `scaleX(${progress})`;
+      }
+
+      if (progress < 1) {
+        animationFrameId = requestAnimationFrame(step);
+      } else {
+        setActiveHeroIndex((prev) => (prev + 1) % heroGames.length);
+        setRotationKey((k) => k + 1);
+      }
+    };
+
+    animationFrameId = requestAnimationFrame(step);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+      if (progressBarRef.current) {
+        progressBarRef.current.style.transform = "scaleX(0)";
+      }
+    };
+  }, [activeHeroIndex, isPaused, heroGames.length]);
 
   // Keep active index in bounds if heroGames change dynamically
   useEffect(() => {
@@ -102,11 +137,6 @@ export default function HomePage() {
 
           <section
             className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[#0A0D15] shadow-2xl"
-            onMouseEnter={() => setIsPaused(true)}
-            onMouseLeave={() => {
-              setIsPaused(false);
-              setRotationKey((k) => k + 1);
-            }}
           >
             {/* Cinematic Optical Flare Wipe Sweep on Slide Change */}
             <div
@@ -119,12 +149,9 @@ export default function HomePage() {
             {/* Bottom Edge Master Progress Bar */}
             <div className="absolute bottom-0 left-0 right-0 h-1 sm:h-1.5 bg-white/10 z-20 overflow-hidden pointer-events-none">
               <div
-                key={`master-bar-${activeHeroIndex}-${rotationKey}`}
-                style={{
-                  animationPlayState: isPaused ? "paused" : "running",
-                  animationDuration: `${HERO_AUTOPLAY_INTERVAL}ms`,
-                }}
-                className="h-full bg-gradient-to-r from-cyan-400 via-indigo-500 to-violet-500 shadow-[0_0_12px_rgba(0,242,254,0.9)] animate-gv-progress"
+                ref={progressBarRef}
+                style={{ transform: "scaleX(0)", transformOrigin: "left" }}
+                className="h-full w-full bg-gradient-to-r from-cyan-400 via-indigo-500 to-violet-500 shadow-[0_0_12px_rgba(0,242,254,0.9)] will-change-transform"
               />
             </div>
 
@@ -283,7 +310,11 @@ export default function HomePage() {
               </div>
 
               {/* Right 4 Columns: Live Interactive Queue Rail */}
-              <div className="lg:col-span-4 p-6 lg:p-8 flex flex-col justify-end border-t lg:border-t-0 lg:border-l border-white/[0.06] bg-[#070A11]/60 backdrop-blur-md relative z-10">
+              <div
+                className="lg:col-span-4 p-6 lg:p-8 flex flex-col justify-end border-t lg:border-t-0 lg:border-l border-white/[0.06] bg-[#070A11]/60 backdrop-blur-md relative z-10"
+                onMouseEnter={() => setIsPaused(true)}
+                onMouseLeave={() => setIsPaused(false)}
+              >
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
