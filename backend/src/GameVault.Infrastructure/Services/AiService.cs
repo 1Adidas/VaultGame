@@ -300,13 +300,15 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         string? customAnswer = null;
         List<GameListDto>? customGames = null;
 
-        if ((q.Contains("danh gia") || q.Contains("binh luan") || q.Contains("review") || q.Contains("comment")) && 
-            (q.Contains("toi") || q.Contains("cua toi") || q.Contains("viet") || q.Contains("da viet") || q.Contains("my") || q.Contains("i wrote") || q.Contains("i review")))
+        if ((q.Contains("danh gia") || q.Contains("binh luan") || q.Contains("review") || q.Contains("comment") || q.Contains("评价") || q.Contains("评论")) && 
+            (q.Contains("toi") || q.Contains("cua toi") || q.Contains("viet") || q.Contains("da viet") || q.Contains("my") || q.Contains("i wrote") || q.Contains("i review") || q.Contains("我的") || q.Contains("我写的")))
         {
             if (!userId.HasValue)
             {
                 customAnswer = request.Locale == "vi"
                     ? "Bạn cần đăng nhập để xem các đánh giá và bình luận đã viết nhé!"
+                    : (request.Locale?.StartsWith("zh") == true)
+                    ? "您需要登录后才能查看已撰写的游戏评价与评论！"
                     : "You need to log in to view the reviews and comments you have written!";
             }
             else
@@ -321,6 +323,8 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                     var reviewLines = reviewsList.Select(r => $"- **{r.Game.Title}**: {r.Rating}/5 sao - \"{r.Comment}\"");
                     customAnswer = request.Locale == "vi"
                         ? $"Dạ, mình thấy bạn đã viết {reviewsList.Count} đánh giá:\n" + string.Join("\n", reviewLines)
+                        : (request.Locale?.StartsWith("zh") == true)
+                        ? $"您已撰写 {reviewsList.Count} 条游戏评价：\n" + string.Join("\n", reviewLines)
                         : $"You have written {reviewsList.Count} review(s):\n" + string.Join("\n", reviewLines);
                     
                     var customGameIds = reviewsList.Select(r => r.GameId).ToList();
@@ -330,17 +334,21 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                 {
                     customAnswer = request.Locale == "vi"
                         ? "Bạn chưa viết đánh giá hay bình luận nào cho các tựa game trên cửa hàng cả. Hãy trải nghiệm game và để lại cảm nhận của mình nhé!"
+                        : (request.Locale?.StartsWith("zh") == true)
+                        ? "您尚未对商城中的任何游戏发表过评价。去体验游戏并分享您的游玩心得吧！"
                         : "You haven't written any reviews or comments yet. Play some games and share your thoughts!";
                 }
             }
         }
-        else if ((q.Contains("da mua") || q.Contains("purchased") || q.Contains("bought") || q.Contains("so huu") || q.Contains("owned")) && 
-                 (q.Contains("bao nhieu") || q.Contains("how many") || q.Contains("so luong") || q.Contains("count") || q.Contains("thu vien") || q.Contains("library")))
+        else if ((q.Contains("da mua") || q.Contains("purchased") || q.Contains("bought") || q.Contains("so huu") || q.Contains("owned") || q.Contains("已购") || q.Contains("已买") || q.Contains("拥有")) && 
+                 (q.Contains("bao nhieu") || q.Contains("how many") || q.Contains("so luong") || q.Contains("count") || q.Contains("thu vien") || q.Contains("library") || q.Contains("多少") || q.Contains("数量") || q.Contains("游戏库")))
         {
             if (!userId.HasValue)
             {
                 customAnswer = request.Locale == "vi"
                     ? "Bạn cần đăng nhập để xem thư viện game đã mua nhé!"
+                    : (request.Locale?.StartsWith("zh") == true)
+                    ? "您需要登录后才能查看已购买的游戏库！"
                     : "You need to log in to view your purchased games library!";
             }
             else
@@ -353,7 +361,9 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                 if (userGames.Count > 0)
                 {
                     customAnswer = request.Locale == "vi"
-                        ? $"Bạn đã mua thành công {userGames.Count} tựa game trên GameVault. Bạn có thể tham lai danh sách bên dưới nhé!"
+                        ? $"Bạn đã mua thành công {userGames.Count} tựa game trên GameVault. Bạn có thể tham khảo danh sách bên dưới nhé!"
+                        : (request.Locale?.StartsWith("zh") == true)
+                        ? $"您已在 GameVault 成功拥有 {userGames.Count} 款正版游戏，可在下方直接查看！"
                         : $"You have purchased {userGames.Count} games on GameVault. You can see them below!";
                     
                     var customGameIds = userGames.Select(ug => ug.GameId).ToList();
@@ -363,16 +373,20 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                 {
                     customAnswer = request.Locale == "vi"
                         ? "Bạn chưa sở hữu tựa game nào trên GameVault cả. Hãy ghé qua cửa hàng để rinh về những tựa game hấp dẫn nhé!"
+                        : (request.Locale?.StartsWith("zh") == true)
+                        ? "您在 GameVault 尚未拥有任何游戏。欢迎前往商城探索精品大作！"
                         : "You don't own any games on GameVault yet. Visit our store to find some amazing titles!";
                 }
             }
         }
-        else if (q.Contains("wishlist") || q.Contains("yeu thich") || q.Contains("muon mua") || q.Contains("mong muon"))
+        else if (q.Contains("wishlist") || q.Contains("yeu thich") || q.Contains("muon mua") || q.Contains("mong muon") || q.Contains("愿望单") || q.Contains("心愿单") || q.Contains("想要"))
         {
             if (!userId.HasValue)
             {
                 customAnswer = request.Locale == "vi"
                     ? "Bạn cần đăng nhập để xem danh sách yêu thích nhé!"
+                    : (request.Locale?.StartsWith("zh") == true)
+                    ? "您需要登录后才能查看愿望单！"
                     : "You need to log in to view your wishlist!";
             }
             else
@@ -386,6 +400,8 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                 {
                     customAnswer = request.Locale == "vi"
                         ? $"Danh sách yêu thích của bạn hiện có {wishlisted.Count} tựa game nè! Bạn có thể xem chi tiết bên dưới nhé."
+                        : (request.Locale?.StartsWith("zh") == true)
+                        ? $"您的愿望单中共有 {wishlisted.Count} 款游戏！您可以在下方查看详情。"
                         : $"Your wishlist has {wishlisted.Count} games! You can check them out below.";
                     
                     var customGameIds = wishlisted.Select(w => w.GameId).ToList();
@@ -395,26 +411,34 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                 {
                     customAnswer = request.Locale == "vi"
                         ? "Danh sách yêu thích của bạn hiện đang trống. Hãy nhấn biểu tượng trái tim ở trang chi tiết game để lưu lại các game bạn thích nhé!"
+                        : (request.Locale?.StartsWith("zh") == true)
+                        ? "您的愿望单当前为空。点击游戏页面上的心形图标即可收藏感兴趣的游戏！"
                         : "Your wishlist is currently empty. Click the heart icon on any game page to add it here!";
                 }
             }
         }
-        else if (q.Contains("webgl") || (q.Contains("choi thu") && q.Contains("demo")))
+        else if (q.Contains("webgl") || (q.Contains("choi thu") && q.Contains("demo")) || q.Contains("试玩") || q.Contains("网页试玩"))
         {
             customAnswer = request.Locale == "vi"
                 ? "Để chơi thử game WebGL trên GameVault, bạn chỉ cần chọn một tựa game có hỗ trợ bản chơi thử (nhãn 'WebGL Demo'), bấm vào trang chi tiết game và nhấn nút 'Chơi thử WebGL' ngay trên trình duyệt mà không cần cài đặt gì thêm nhé!"
+                : (request.Locale?.StartsWith("zh") == true)
+                ? "在 GameVault 体验 WebGL 试玩非常简单：只需选择标有“WebGL Demo”的游戏，进入详情页点击“WebGL 试玩”即可直接在浏览器畅玩，无需下载安装！"
                 : "To play WebGL demos on GameVault, simply select a game that supports WebGL Demo, navigate to its detail page, and click the 'Play WebGL Demo' button to run it directly in your browser without any installation!";
         }
-        else if (q.Contains("tai game") || q.Contains("download") || q.Contains("cai dat") || q.Contains("installer"))
+        else if (q.Contains("tai game") || q.Contains("download") || q.Contains("cai dat") || q.Contains("installer") || q.Contains("下载") || q.Contains("安装包"))
         {
             customAnswer = request.Locale == "vi"
                 ? "Đối với các game bạn đã mua, hãy đăng nhập và truy cập vào trang Thư viện của bạn. Tại đây, bạn sẽ thấy nút 'Tải game' để tải tệp cài đặt về máy tính của mình nhé!"
+                : (request.Locale?.StartsWith("zh") == true)
+                ? "对于您已购买的正版游戏，登录后进入“我的游戏库”，即可点击“下载”按钮获取 PC 安装包！"
                 : "For games you have purchased, log in and head over to your Library. There, you'll find a 'Download' button next to each owned game to download the installer to your computer!";
         }
         else if (IsGreetingOnly(q))
         {
             customAnswer = request.Locale == "vi"
                 ? "Dạ em xin chào! Em có thể giúp gì cho bạn trong việc tìm kiếm game hay giải đáp thắc mắc về GameVault không ạ?"
+                : (request.Locale?.StartsWith("zh") == true)
+                ? "您好！我是 THE VOID 智能助手。今天有什么关于游戏推荐或 GameVault 平台的问题需要我协助吗？"
                 : "Hello! How can I help you find games or answer your questions about GameVault today?";
         }
 
@@ -533,14 +557,18 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                 if (isAboutSystem)
                 {
                     sqlRaw = "SELECT Id, Title, Slug, Price, DiscountPrice, Currency, AvgRating, MinAge FROM Games WHERE Status='Published' LIMIT 0";
-                    aiTemplate = request.Locale == "vi" 
+                    aiTemplate = request.Locale?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true
+                        ? "GameVault 是领先的正版数字游戏分发与零售平台，汇聚海量 3A 大作与独立精品。平台支持 AI 智能推荐找游戏、浏览器即时 WebGL 免下载试玩、高速下载客户端安装包以及便捷的个人游戏库管理。我很乐意协助您挑选最适合的游戏！"
+                        : request.Locale == "vi" 
                         ? "Dạ, GameVault là một nền tảng trực tuyến phân phối và bán lẻ trò chơi điện tử hàng đầu, nơi bạn có thể tìm thấy rất nhiều tựa game bom tấn và game độc lập hấp dẫn. Hệ thống hỗ trợ tìm kiếm game thông minh bằng AI, chơi thử các bản demo WebGL trực tiếp trên trình duyệt, tải game bản cài đặt về máy và quản lý thư viện game cá nhân một cách tiện lợi. Em sẵn sàng hỗ trợ bạn tìm game phù hợp nhé!"
                         : "GameVault is a premier online game distribution and retail platform. The system supports intelligent AI game search, browser-playable WebGL demos, game installer downloads, and convenient game library management. I am here to help you find the perfect games!";
                 }
                 else
                 {
                     sqlRaw = FallbackSql(request.Message);
-                    aiTemplate = request.Locale == "vi" 
+                    aiTemplate = request.Locale?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true
+                        ? "为您找到 {count} 款符合条件的正版游戏！"
+                        : request.Locale == "vi" 
                         ? "Dạ em tìm thấy {count} game phù hợp với yêu cầu của bạn nè!" 
                         : "I found {count} matching games for you!";
                 }
@@ -553,14 +581,18 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
             if (isAboutSystem)
             {
                 sqlRaw = "SELECT Id, Title, Slug, Price, DiscountPrice, Currency, AvgRating, MinAge FROM Games WHERE Status='Published' LIMIT 0";
-                aiTemplate = request.Locale == "vi" 
+                aiTemplate = request.Locale?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true
+                    ? "GameVault 是领先的正版数字游戏分发与零售平台，汇聚海量 3A 大作与独立精品。平台支持 AI 智能推荐找游戏、浏览器即时 WebGL 免下载试玩、高速下载客户端安装包以及便捷的个人游戏库管理。我很乐意协助您挑选最适合的游戏！"
+                    : request.Locale == "vi" 
                     ? "Dạ, GameVault là một nền tảng trực tuyến phân phối và bán lẻ trò chơi điện tử hàng đầu, nơi bạn có thể tìm thấy rất nhiều tựa game bom tấn và game độc lập hấp dẫn. Hệ thống hỗ trợ tìm kiếm game thông minh bằng AI, chơi thử các bản demo WebGL trực tiếp trên trình duyệt, tải game bản cài đặt về máy và quản lý thư viện game cá nhân một cách tiện lợi. Em sẵn sàng hỗ trợ bạn tìm game phù hợp nhé!"
                     : "GameVault is a premier online game distribution and retail platform. The system supports intelligent AI game search, browser-playable WebGL demos, game installer downloads, and convenient game library management. I am here to help you find the perfect games!";
             }
             else
             {
                 sqlRaw = FallbackSql(request.Message);
-                aiTemplate = request.Locale == "vi" ? "Dạ em tìm thấy {count} game phù hợp với yêu cầu của bạn nè!" : "I found {count} matching games for you!";
+                aiTemplate = request.Locale?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true
+                    ? "为您找到 {count} 款符合条件的正版游戏！"
+                    : request.Locale == "vi" ? "Dạ em tìm thấy {count} game phù hợp với yêu cầu của bạn nè!" : "I found {count} matching games for you!";
             }
             Console.WriteLine("SQL GENERATED:");
             Console.WriteLine(sqlRaw);
@@ -725,6 +757,8 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
 
     private static string GetNoGamesMessage(string locale)
     {
+        if (locale?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true)
+            return "很抱歉，目前游戏库中暂无完全符合该条件的优质游戏。建议您尝试搜索其他关键词或不同游戏类别哦！";
         return locale == "vi"
             ? "Tiếc quá, hiện tại kho game của tụi mình chưa có tựa game nào phù hợp với yêu cầu này rồi. Bạn thử tìm đầy đủ tên game hoặc tìm thể loại khác xem sao nha!"
             : "Oops, we couldn't find any games matching that description right now. Maybe try another search?";
@@ -732,11 +766,15 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
 
     private async Task<string> FormatAnswer(string question, List<Dictionary<string, object?>> rows, string locale, CancellationToken ct, string? apiKey = null)
     {
-
         var count = rows.Count;
         var gameTitles = count > 0 ? string.Join(", ", rows.Take(5).Select(r => r["Title"])) : "không có game nào";
 
-        var prompt = locale == "vi"
+        var isZh = locale?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true;
+        var isVi = locale == "vi";
+
+        var prompt = isZh
+            ? $"用户提问：\"{question}\"\n系统找到 {count} 款相关游戏{(count > 0 ? $" (例如: {gameTitles})" : "")}。\n请扮演一位热情、专业的游戏商城 AI 导购助手。回答自然亲切、简洁（2-3句话）。不要使用 markdown 加粗格式（如 **）。切勿列举每一款游戏（因为界面已自动展示游戏卡片）。只需热情地总结搜索结果，若无结果则礼貌致歉并建议其他分类。"
+            : isVi
             ? $"Khách hàng hỏi: \"{question}\"\nHệ thống tìm được {count} game phù hợp{(count > 0 ? $" (ví dụ: {gameTitles})" : "")}.\nHãy đóng vai một nhân viên bán game thân thiện, xưng là 'mình' hoặc 'em', gọi khách là 'bạn' hoặc 'anh/chị'. Trả lời tự nhiên, nhiệt tình như người thật đang chat (ngắn gọn 2-3 câu). Không dùng định dạng markdown như **. KHÔNG liệt kê chi tiết từng game (vì giao diện đã hiển thị sẵn thẻ game rồi). Chỉ cần tóm tắt kết quả vui vẻ, hoặc an ủi nếu không tìm thấy game."
             : $"User asked: \"{question}\"\nSystem found {count} matching games{(count > 0 ? $" (e.g., {gameTitles})" : "")}.\nAct as a friendly, enthusiastic game store assistant. Answer naturally and conversationally (short, 2-3 sentences). Do not use markdown like **. DO NOT list the games (the UI will display game cards automatically). Just summarize the results cheerfully, or apologize if no games were found.";
         
@@ -753,7 +791,12 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
 
         if (!string.IsNullOrWhiteSpace(text)) return text;
 
-        if (locale == "vi")
+        if (isZh)
+        {
+            if (count > 0) return $"太棒了！为您找到了 {count} 款契合需求的正版游戏，您可以点击下方卡片立即查看详情或试玩！";
+            return "很抱歉，目前游戏库中暂无完全符合该条件的游戏。建议您尝试搜索其他关键词或不同游戏类别哦！";
+        }
+        if (isVi)
         {
             if (count > 0) return $"Tuyệt vời! Mình tìm thấy {count} tựa game rất hợp với yêu cầu của bạn nè. Bạn tham khảo các game bên dưới nhé, ưng ý thì múc luôn nha!";
             return "Tiếc quá, hiện tại kho game của tụi mình chưa có tựa game nào phù hợp với yêu cầu này. Bạn thử tìm đầy đủ tên hoặc tìm thể loại khác xem sao nha!";
@@ -790,11 +833,20 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         return validGames
             .Select(g => {
                 var primaryImage = imageDictionary.GetValueOrDefault(g.Id);
+                var isZh = locale?.StartsWith("zh", StringComparison.OrdinalIgnoreCase) == true;
+                var isEn = locale?.StartsWith("en", StringComparison.OrdinalIgnoreCase) == true;
+                var title = isZh && !string.IsNullOrWhiteSpace(g.TitleZh) ? g.TitleZh
+                          : isEn && !string.IsNullOrWhiteSpace(g.TitleEn) ? g.TitleEn
+                          : g.Title;
+                var shortDesc = isZh && !string.IsNullOrWhiteSpace(g.ShortDescriptionZh) ? g.ShortDescriptionZh
+                              : isEn && !string.IsNullOrWhiteSpace(g.ShortDescriptionEn) ? g.ShortDescriptionEn
+                              : (g.ShortDescription ?? "");
+
                 return new GameListDto(
                     g.Id,
-                    g.Title,
+                    title,
                     g.Slug,
-                    "",
+                    shortDesc,
                     g.Price,
                     g.DiscountPrice,
                     g.Currency,
@@ -822,11 +874,11 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         var q = Regex.Replace(question.ToLowerInvariant().Normalize(), @"[^\p{L}\p{N}\s]", "").Trim();
         Console.WriteLine($"Fallback input: {q}");
 
-        bool isComingSoon = q.Contains("sap ra mat") || q.Contains("sắp ra mắt") || q.Contains("coming soon") || q.Contains("sap co") || q.Contains("sắp có") || q.Contains("chua ra mat") || q.Contains("chưa ra mắt") || q.Contains("upcoming") || q.Contains("soon");
+        bool isComingSoon = q.Contains("sap ra mat") || q.Contains("sắp ra mắt") || q.Contains("coming soon") || q.Contains("sap co") || q.Contains("sắp có") || q.Contains("chua ra mat") || q.Contains("chưa ra mắt") || q.Contains("upcoming") || q.Contains("soon") || q.Contains("即将推出") || q.Contains("预告") || q.Contains("敬请期待") || q.Contains("未发售");
 
         // ====================== ĐẾM SỐ LƯỢNG (COUNTING) ======================
         bool isCounting = false;
-        string[] countingIndicators = ["bao nhiêu", "bao nhieu", "số lượng", "so luong", "tổng số", "tong so", "bao nhiu", "how many", "count"];
+        string[] countingIndicators = ["bao nhiêu", "bao nhieu", "số lượng", "so luong", "tổng số", "tong so", "bao nhiu", "how many", "count", "多少", "几个", "数量", "总共"];
         if (countingIndicators.Any(indicator => q.Contains(indicator)))
         {
             isCounting = true;
@@ -840,12 +892,14 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         {
             {"action", "action"}, {"hành động", "action"}, {"hanh dong", "action"}, 
             {"ban sung", "action"}, {"chien dau", "action"}, {"đánh nhau", "action"},
-            {"rpg", "rpg"}, {"nhập vai", "rpg"}, {"nhap vai", "rpg"},
-            {"indie", "indie"},
+            {"动作", "action"}, {"射击", "action"}, {"格斗", "action"},
+            {"rpg", "rpg"}, {"nhập vai", "rpg"}, {"nhap vai", "rpg"}, {"角色扮演", "rpg"},
+            {"indie", "indie"}, {"独立", "indie"},
             {"simulation", "simulation"}, {"mô phỏng", "simulation"}, {"mo phong", "simulation"}, 
-            {"giả lập", "simulation"}, {"gia lap", "simulation"},
+            {"giả lập", "simulation"}, {"gia lap", "simulation"}, {"模拟", "simulation"},
             {"kids", "kids"}, {"trẻ em", "kids"}, {"tre em", "kids"}, 
             {"thiếu nhi", "kids"}, {"thieu nhi", "kids"}, {"con nit", "kids"}, {"con nít", "kids"},
+            {"儿童", "kids"}, {"亲子", "kids"},
         };
 
         var categorySlugs = new List<string>();
@@ -867,15 +921,15 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         {
             {"pixel 2d", "pixel-2d"}, {"pixel2d", "pixel-2d"},
             {"top down", "top-down"}, {"topdown", "top-down"},
-            {"pixel", "pixel"}, {"2d", "2d"},
-            {"multiplayer", "multiplayer"}, {"chơi nhiều người", "multiplayer"}, {"choi nhieu nguoi", "multiplayer"},
-            {"singleplayer", "single-player"}, {"chơi đơn", "single-player"}, {"choi don", "single-player"},
-            {"co-op", "co-op"}, {"coop", "co-op"},
-            {"action", "action"}, {"hành động", "action"}, {"hanh dong", "action"},
-            {"rpg", "rpg"}, {"nhập vai", "rpg"}, {"nhap vai", "rpg"},
-            {"indie", "indie"},
-            {"simulation", "simulation"}, {"mô phỏng", "simulation"}, {"mo phong", "simulation"}, {"giả lập", "simulation"}, {"gia lap", "simulation"},
-            {"kids", "kids"}, {"trẻ em", "kids"}, {"tre em", "kids"}, {"thiếu nhi", "kids"}, {"thieu nhi", "kids"},
+            {"pixel", "pixel"}, {"2d", "2d"}, {"像素", "pixel"},
+            {"multiplayer", "multiplayer"}, {"chơi nhiều người", "multiplayer"}, {"choi nhieu nguoi", "multiplayer"}, {"多人", "multiplayer"}, {"联机", "multiplayer"}, {"在线", "multiplayer"},
+            {"singleplayer", "single-player"}, {"chơi đơn", "single-player"}, {"choi don", "single-player"}, {"单人", "single-player"}, {"单机", "single-player"},
+            {"co-op", "co-op"}, {"coop", "co-op"}, {"合作", "co-op"},
+            {"action", "action"}, {"hành động", "action"}, {"hanh dong", "action"}, {"动作", "action"}, {"射击", "action"},
+            {"rpg", "rpg"}, {"nhập vai", "rpg"}, {"nhap vai", "rpg"}, {"角色扮演", "rpg"},
+            {"indie", "indie"}, {"独立", "indie"},
+            {"simulation", "simulation"}, {"mô phỏng", "simulation"}, {"mo phong", "simulation"}, {"giả lập", "simulation"}, {"gia lap", "simulation"}, {"模拟", "simulation"},
+            {"kids", "kids"}, {"trẻ em", "kids"}, {"tre em", "kids"}, {"thiếu nhi", "kids"}, {"thieu nhi", "kids"}, {"儿童", "kids"},
         };
 
         var tagSlugs = new List<string>();
@@ -892,10 +946,10 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         }
 
         // ====================== LỌC DEMO ======================
-        bool hasDemoKeyword = q.Contains("demo") || q.Contains("chơi thử") || q.Contains("choi thu");
+        bool hasDemoKeyword = q.Contains("demo") || q.Contains("chơi thử") || q.Contains("choi thu") || q.Contains("试玩") || q.Contains("网页试玩") || q.Contains("体验");
         if (hasDemoKeyword)
         {
-            bool isNegative = q.Contains("không có") || q.Contains("khong co") || q.Contains("không chơi") || q.Contains("khong choi") || q.Contains("chưa có") || q.Contains("chua co") || q.Contains("no demo") || q.Contains("without demo");
+            bool isNegative = q.Contains("không có") || q.Contains("khong co") || q.Contains("không chơi") || q.Contains("khong choi") || q.Contains("chưa có") || q.Contains("chua co") || q.Contains("no demo") || q.Contains("without demo") || q.Contains("无试玩") || q.Contains("没有试玩") || q.Contains("不可试玩");
             if (isNegative)
             {
                 filters.Add("(g.Id NOT IN (SELECT GameId FROM UnityDemos WHERE IsActive = 1))");
@@ -983,11 +1037,11 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         int maxBudget = 0;
         int minPrice = 0;
 
-        if (q.Contains("giam gia") || q.Contains("giảm giá") || q.Contains("khuyen mai") || q.Contains("khuyến mãi") || q.Contains("sale") || q.Contains("discount"))
+        if (q.Contains("giam gia") || q.Contains("giảm giá") || q.Contains("khuyen mai") || q.Contains("khuyến mãi") || q.Contains("sale") || q.Contains("discount") || q.Contains("打折") || q.Contains("特惠") || q.Contains("促销") || q.Contains("降价"))
         {
             filters.Add("g.DiscountPrice IS NOT NULL AND g.DiscountPrice < g.Price");
         }
-        else if (q.Contains("free") || q.Contains("miễn phí") || q.Contains("0đ") || q.Contains("mien phi"))
+        else if (q.Contains("free") || q.Contains("miễn phí") || q.Contains("0đ") || q.Contains("mien phi") || q.Contains("免费") || q.Contains("不要钱"))
         {
             filters.Add("COALESCE(g.DiscountPrice, g.Price) = 0");
         }
@@ -1001,14 +1055,14 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         }
 
         // ====================== LỌC THEO ĐÁNH GIÁ (RATING) ======================
-        var ratingMatch = Regex.Match(q, @"(\d+)\s*(sao|star)");
+        var ratingMatch = Regex.Match(q, @"(\d+)\s*(sao|star|星)");
         if (ratingMatch.Success && int.TryParse(ratingMatch.Groups[1].Value, out int stars))
         {
-            if (q.Contains("trở lên") || q.Contains("tro len") || q.Contains("or more") || q.Contains("từ") || q.Contains("tu"))
+            if (q.Contains("trở lên") || q.Contains("tro len") || q.Contains("or more") || q.Contains("từ") || q.Contains("tu") || q.Contains("以上"))
             {
                 filters.Add($"g.AvgRating >= {stars}");
             }
-            else if (q.Contains("trở xuống") || q.Contains("tro xuong") || q.Contains("or less"))
+            else if (q.Contains("trở xuống") || q.Contains("tro xuong") || q.Contains("or less") || q.Contains("以下"))
             {
                 filters.Add($"g.AvgRating <= {stars}");
             }
@@ -1017,13 +1071,13 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                 filters.Add($"g.AvgRating >= {Math.Max(0, stars - 0.5)} AND g.AvgRating <= {stars + 0.5}");
             }
         }
-        else if (q.Contains("hay nhất") || q.Contains("danh gia cao") || q.Contains("top rating"))
+        else if (q.Contains("hay nhất") || q.Contains("danh gia cao") || q.Contains("top rating") || q.Contains("好评") || q.Contains("高分") || q.Contains("评分最高"))
         {
             filters.Add("g.AvgRating >= 4.5");
         }
 
         // ====================== LỌC THEO ĐỘ NỔI BẬT ======================
-        if (q.Contains("nổi bật") || q.Contains("noi bat") || q.Contains("hot") || q.Contains("featured"))
+        if (q.Contains("nổi bật") || q.Contains("noi bat") || q.Contains("hot") || q.Contains("featured") || q.Contains("热门") || q.Contains("推荐") || q.Contains("精选"))
         {
             filters.Add("g.IsFeatured = 1");
         }
@@ -1106,7 +1160,7 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                 {
                     if (word.Length >= 2)
                     {
-                        wordFilters.Add($"(g.Title LIKE '%{word}%' OR g.Developer LIKE '%{word}%' OR g.Publisher LIKE '%{word}%' OR g.ShortDescription LIKE '%{word}%' OR g.Description LIKE '%{word}%')");
+                        wordFilters.Add($"(g.Title LIKE '%{word}%' OR g.TitleZh LIKE '%{word}%' OR g.TitleEn LIKE '%{word}%' OR g.Developer LIKE '%{word}%' OR g.Publisher LIKE '%{word}%' OR g.ShortDescription LIKE '%{word}%' OR g.ShortDescriptionZh LIKE '%{word}%' OR g.ShortDescriptionEn LIKE '%{word}%' OR g.Description LIKE '%{word}%' OR g.DescriptionZh LIKE '%{word}%' OR g.DescriptionEn LIKE '%{word}%')");
                     }
                 }
                 if (wordFilters.Count > 0)
@@ -1120,7 +1174,7 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         string orderBy;
         int limit = isCounting ? 50 : 20;
 
-        if (q.Contains("đắt nhất") || q.Contains("dat nhat") || q.Contains("cao nhất") || q.Contains("cao nhat") || q.Contains("expensive"))
+        if (q.Contains("đắt nhất") || q.Contains("dat nhat") || q.Contains("cao nhất") || q.Contains("cao nhat") || q.Contains("expensive") || q.Contains("最贵") || q.Contains("最高价格"))
         {
             orderBy = "COALESCE(g.DiscountPrice, g.Price) DESC";
             limit = 1;
@@ -1129,11 +1183,11 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         {
             orderBy = "COALESCE(g.DiscountPrice, g.Price) DESC";
         }
-        else if (q.Contains("mới nhất") || q.Contains("new") || q.Contains("moi nhat") || q.Contains("mới") || q.Contains("moi"))
+        else if (q.Contains("mới nhất") || q.Contains("new") || q.Contains("moi nhat") || q.Contains("mới") || q.Contains("moi") || q.Contains("最新"))
         {
             orderBy = "g.CreatedAt DESC";
         }
-        else if (q.Contains("5 sao") || q.Contains("hay nhất") || q.Contains("danh gia cao") || q.Contains("top rating"))
+        else if (q.Contains("5 sao") || q.Contains("hay nhất") || q.Contains("danh gia cao") || q.Contains("top rating") || q.Contains("好评") || q.Contains("高分") || q.Contains("评分最高"))
         {
             orderBy = "g.AvgRating DESC";
         }
@@ -1269,12 +1323,12 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
 
         if (lower.Contains("trẻ em") || lower.Contains("tre em") || lower.Contains("thieu nhi") || 
             lower.Contains("thiếu nhi") || lower.Contains("con nit") || lower.Contains("con nít") || 
-            lower.Contains("kids") || lower.Contains("child"))
+            lower.Contains("kids") || lower.Contains("child") || lower.Contains("儿童") || lower.Contains("少儿") || lower.Contains("孩子"))
         {
             return true;
         }
 
-        var matchAge = Regex.Match(text, @"\b(duoi|dưới|under)?\s*(\d+)\s*(tuổi|tuoi|age|years)\b", RegexOptions.IgnoreCase);
+        var matchAge = Regex.Match(text, @"\b(duoi|dưới|under)?\s*(\d+)\s*(tuổi|tuoi|age|years|岁|岁以下)\b", RegexOptions.IgnoreCase);
         if (matchAge.Success)
         {
             if (int.TryParse(matchAge.Groups[2].Value, out int age))
@@ -1303,13 +1357,17 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
         var q = RemoveAccents(question.ToLowerInvariant().Normalize());
 
         // If the question is asking for counting/quantity, it's not a generic question about the system.
-        string[] countingIndicators = ["bao nhieu", "so luong", "tong so", "bao nhiu", "how many", "count"];
+        string[] countingIndicators = ["bao nhieu", "so luong", "tong so", "bao nhiu", "how many", "count", "多少", "几个", "数量", "总共"];
         if (countingIndicators.Any(indicator => q.Contains(indicator))) return false;
 
+        var originalLower = question.ToLowerInvariant();
         return q.Contains("web nay") || q.Contains("website") || q.Contains("he thong") 
             || q.Contains("gamevault") || q.Contains("vaultgame") || q.Contains("trang web") || q.Contains("web gi") 
             || q.Contains("about this") || q.Contains("what is this") || q.Contains("introduce")
-            || (q.Contains("gioi thieu") && (q.Contains("web") || q.Contains("shop") || q.Contains("cua hang")));
+            || (q.Contains("gioi thieu") && (q.Contains("web") || q.Contains("shop") || q.Contains("cua hang")))
+            || originalLower.Contains("这是什么网站") || originalLower.Contains("这个网站") || originalLower.Contains("系统介绍")
+            || originalLower.Contains("介绍网站") || originalLower.Contains("平台介绍") || originalLower.Contains("关于平台")
+            || originalLower.Contains("关于gamevault") || originalLower.Contains("关于网站") || originalLower.Contains("网站是做什么的");
     }
 
     private static string RemoveAccents(string text)
@@ -1339,6 +1397,10 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
     private static bool IsGreetingOnly(string q)
     {
         if (string.IsNullOrWhiteSpace(q)) return false;
+
+        var clean = q.Trim();
+        if (clean == "你好" || clean == "您好" || clean == "嗨" || clean == "哈喽" || clean == "早安" || clean == "午安" || clean == "晚安" || clean == "你好啊")
+            return true;
         
         var words = q.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0 || words.Length > 4) return false;

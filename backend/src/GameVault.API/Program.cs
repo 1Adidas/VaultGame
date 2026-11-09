@@ -13,34 +13,23 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// Allow large uploads for game zip / installer (up to 1GB)
+// Allow large uploads for game zip / installer (up to 3GB)
 builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
 {
     o.ValueLengthLimit = int.MaxValue;
-    o.MultipartBodyLengthLimit = 1_073_741_824;
-    o.MemoryBufferThreshold = 104_857_600;
+    o.MultipartBodyLengthLimit = 3_221_225_472L; // 3GB
+    o.MultipartHeadersLengthLimit = int.MaxValue;
+    o.MemoryBufferThreshold = 104_857_600; // 100MB buffer before spooling to temp disk
 });
 
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.Limits.MaxRequestBodySize = 1_073_741_824;
+    options.Limits.MaxRequestBodySize = 3_221_225_472L; // 3GB
 });
 
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
-});
-
-builder.Services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(o =>
-{
-    o.MultipartBodyLengthLimit = 524_288_000;
-    o.ValueLengthLimit = int.MaxValue;
-    o.MultipartHeadersLengthLimit = int.MaxValue;
-});
-
-builder.WebHost.ConfigureKestrel(options =>
-{
-    options.Limits.MaxRequestBodySize = 524_288_000;
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c => c.SwaggerDoc("v1", new() { Title = "Game Vault API", Version = "v1" }));

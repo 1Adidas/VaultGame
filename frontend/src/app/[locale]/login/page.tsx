@@ -18,8 +18,17 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get("redirect");
+  const user = useAuthStore((s) => s.user);
   const login = useAuthStore((s) => s.login);
   const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
+
+  useEffect(() => {
+    if (user) {
+      const destination = redirectUrl ? decodeURIComponent(redirectUrl) : `/${locale}`;
+      const safeDestination = destination.startsWith("/") && !destination.startsWith("//") ? destination : `/${locale}`;
+      router.replace(safeDestination);
+    }
+  }, [user, redirectUrl, locale, router]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

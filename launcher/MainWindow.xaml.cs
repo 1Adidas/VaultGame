@@ -29,7 +29,7 @@ public partial class MainWindow : Window
         _storageService = new StorageService();
         _session = _storageService.LoadSession();
 
-        _apiService = new ApiService(_session.ApiUrl);
+        _apiService = new ApiService(_session.ApiUrl, _storageService);
         _gameManagerService = new GameManagerService(_storageService);
 
         lstSidebarGames.ItemsSource = _displayedGames;
@@ -350,6 +350,14 @@ public partial class MainWindow : Window
             txtShelfCount.Text = $"({_allGames.Count} trò chơi sở hữu)";
             pnlEmptyLibrary.Visibility = _allGames.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
+        catch (UnauthorizedAccessException)
+        {
+            if (!silent)
+            {
+                DarkMessageBoxWindow.ShowWarning(this, "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại vào Launcher.", "Hết hạn đăng nhập");
+                ShowLoginView();
+            }
+        }
         catch (Exception ex)
         {
             if (!silent)
@@ -529,6 +537,11 @@ public partial class MainWindow : Window
         catch (OperationCanceledException)
         {
             game.DownloadProgressText = "Đã hủy";
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            DarkMessageBoxWindow.ShowWarning(this, ex.Message, "Hết hạn đăng nhập");
+            ShowLoginView();
         }
         catch (Exception ex)
         {

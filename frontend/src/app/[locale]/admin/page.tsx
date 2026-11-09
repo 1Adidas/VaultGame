@@ -48,6 +48,7 @@ function DropzoneFileInput({
   label = "Nhấp để chọn tệp hoặc kéo thả vào đây",
   formatHint = "",
   disabled = false,
+  maxSize = 3 * 1024 * 1024 * 1024, // 3GB default limit
 }: {
   accept: string;
   multiple?: boolean;
@@ -57,16 +58,38 @@ function DropzoneFileInput({
   label?: string;
   formatHint?: string;
   disabled?: boolean;
+  maxSize?: number;
 }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes && bytes !== 0) return "";
+    if (bytes >= 1024 * 1024 * 1024) {
+      return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+    }
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  };
+
+  const validateAndSelect = (fileList: FileList | null) => {
+    if (!fileList || fileList.length === 0) return;
+    for (let i = 0; i < fileList.length; i++) {
+      if (fileList[i].size > maxSize) {
+        const sizeGb = (maxSize / (1024 * 1024 * 1024)).toFixed(0);
+        alert(`Tệp "${fileList[i].name}" (${formatFileSize(fileList[i].size)}) vượt quá dung lượng tối đa cho phép là ${sizeGb}GB! Vui lòng chọn tệp nhỏ hơn.`);
+        if (inputRef.current) inputRef.current.value = "";
+        return;
+      }
+    }
+    onSelect(fileList);
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragOver(false);
     if (disabled) return;
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      onSelect(e.dataTransfer.files);
+      validateAndSelect(e.dataTransfer.files);
     }
   };
 
@@ -83,7 +106,7 @@ function DropzoneFileInput({
         multiple={multiple}
         disabled={disabled}
         className="hidden"
-        onChange={(e) => onSelect(e.target.files)}
+        onChange={(e) => validateAndSelect(e.target.files)}
       />
 
       {!hasFiles ? (
@@ -130,7 +153,7 @@ function DropzoneFileInput({
                     className="flex items-center justify-between text-[10px] text-cyan-300 font-mono bg-cyan-500/10 border border-cyan-500/20 px-2.5 py-1 rounded-md"
                   >
                     <span className="truncate max-w-[200px]">{f.name}</span>
-                    <span className="text-zinc-500 ml-2">{(f.size / (1024 * 1024)).toFixed(2)} MB</span>
+                    <span className="text-zinc-500 ml-2">{formatFileSize(f.size)}</span>
                   </div>
                 ))}
               </div>
@@ -147,7 +170,7 @@ function DropzoneFileInput({
               <div className="flex items-center gap-1.5 truncate">
                 <span className="truncate max-w-[170px]">{files?.name}</span>
                 <span className="text-zinc-500 text-[10px] font-sans">
-                  {files?.size ? `(${(files.size / (1024 * 1024)).toFixed(2)} MB)` : ""}
+                  {files?.size ? `(${formatFileSize(files.size)})` : ""}
                 </span>
               </div>
               {onClear && (
@@ -565,10 +588,11 @@ function GamesTab() {
   const [uploadingType, setUploadingType] = useState<string | null>(null);
   const [assetFiles, setAssetFiles] = useState<{
     image: File | null;
+    screenshots: File[];
     trailer: File | null;
     demo: File | null;
     installer: File | null;
-  }>({ image: null, trailer: null, demo: null, installer: null });
+  }>({ image: null, screenshots: [], trailer: null, demo: null, installer: null });
 
   // Direct asset upload state during Create/Edit
   const [isSubmittingGame, setIsSubmittingGame] = useState(false);
@@ -580,6 +604,29 @@ function GamesTab() {
     demo: File | null;
     installer: File | null;
   }>({ cover: null, screenshots: [], trailer: null, demo: null, installer: null });
+
+  const openUploadModal = (g: any) => {
+    setSelectedGameForUpload(g);
+    setAssetFiles({ image: null, screenshots: [], trailer: null, demo: null, installer: null });
+    api.get(`/admin/games/${g.id}`).then((res) => {
+      const fullGame = res.data.data;
+      const primaryImage = fullGame.images?.find((i: any) => i.isPrimary) || fullGame.images?.[0];
+      const screenshots = fullGame.images?.filter((i: any) => !i.isPrimary && i.id !== primaryImage?.id) || [];
+      setSelectedGameForUpload((prev: any) => {
+        if (!prev || prev.id !== g.id) return prev;
+        return {
+          ...prev,
+          ...fullGame,
+          hasCover: !!primaryImage?.url,
+          coverUrl: primaryImage?.url,
+          screenshots: screenshots,
+          hasTrailer: g.hasTrailer ?? (fullGame.videos && fullGame.videos.length > 0),
+          hasDemo: g.hasDemo ?? (fullGame.demo != null),
+          hasFile: fullGame.hasFile ?? g.hasFile,
+        };
+      });
+    }).catch((err) => console.error("Failed to load game assets for modal:", err));
+  };
 
   const startEdit = (g: any) => {
     // Load full details via admin endpoint (works for any status)
@@ -670,18 +717,71 @@ function GamesTab() {
 
   const handleSaveGame = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    let curTitleEn = titleEn || title;
+    let curTitleZh = titleZh || title;
+    let curDescEn = descriptionEn;
+    let curDescZh = descriptionZh;
+    let curShortEn = shortDescriptionEn;
+    let curShortZh = shortDescriptionZh;
+
+    // Auto-translate before save if fields are missing
+    if (autoTranslateEnabled && (description.trim() || shortDescription.trim()) && (!curDescEn || !curDescZh || !curShortEn || !curShortZh)) {
+      setSubmittingProgress("Đang tự động dịch mô tả game sang Tiếng Anh & Tiếng Trung...");
+      try {
+        const { data } = await api.post<ApiResponse<{
+          vi: { title: string; description: string; shortDescription: string };
+          en: { title: string; description: string; shortDescription: string };
+          zh: { title: string; description: string; shortDescription: string };
+        }>>("/admin/games/translate", {
+          sourceLocale: "vi",
+          title,
+          description,
+          shortDescription
+        });
+        if (data?.data) {
+          const t = data.data;
+          if (!curDescEn && t.en?.description) curDescEn = t.en.description;
+          if (!curShortEn && t.en?.shortDescription) curShortEn = t.en.shortDescription;
+          if (!curDescZh && t.zh?.description) curDescZh = t.zh.description;
+          if (!curShortZh && t.zh?.shortDescription) curShortZh = t.zh.shortDescription;
+
+          if (t.en?.description) setDescriptionEn(t.en.description);
+          if (t.en?.shortDescription) setShortDescriptionEn(t.en.shortDescription);
+          if (t.zh?.description) setDescriptionZh(t.zh.description);
+          if (t.zh?.shortDescription) setShortDescriptionZh(t.zh.shortDescription);
+        }
+      } catch (err) {
+        console.warn("Auto translate pre-save error:", err);
+      }
+    }
+
     const reqJson = JSON.stringify({
       os, cpu, ram_gb: ram ? parseInt(ram) : null, gpu, storage_gb: storage ? parseInt(storage) : null
     });
 
     const payload = {
       title, slug, description, shortDescription,
-      titleEn: titleEn || null, descriptionEn: descriptionEn || null, shortDescriptionEn: shortDescriptionEn || null,
-      titleZh: titleZh || null, descriptionZh: descriptionZh || null, shortDescriptionZh: shortDescriptionZh || null,
+      titleEn: curTitleEn || null, descriptionEn: curDescEn || null, shortDescriptionEn: curShortEn || null,
+      titleZh: curTitleZh || null, descriptionZh: curDescZh || null, shortDescriptionZh: curShortZh || null,
       categoryIds: selectedCategoryIds, developer, publisher: publisher || null,
       releaseDate: releaseDate || null, price, discountPrice: discountPrice || null,
       minAge, isFeatured, status: status || "Draft", systemRequirements: reqJson, tagIds: selectedTagIds
     };
+
+    const MAX_GAME_FILE_SIZE = 3 * 1024 * 1024 * 1024; // 3GB
+    if (newGameAssets.installer && newGameAssets.installer.size > MAX_GAME_FILE_SIZE) {
+      alert(locale === "vi" 
+        ? `Tệp cài đặt game "${newGameAssets.installer.name}" vượt quá dung lượng tối đa cho phép là 3GB!` 
+        : `Game installer "${newGameAssets.installer.name}" exceeds 3GB limit!`);
+      return;
+    }
+    if (newGameAssets.demo && newGameAssets.demo.size > MAX_GAME_FILE_SIZE) {
+      alert(locale === "vi" 
+        ? `Tệp demo WebGL "${newGameAssets.demo.name}" vượt quá dung lượng tối đa cho phép là 3GB!` 
+        : `WebGL demo "${newGameAssets.demo.name}" exceeds 3GB limit!`);
+      return;
+    }
 
     setIsSubmittingGame(true);
     setSubmittingProgress("Đang lưu thông tin trò chơi...");
@@ -871,6 +971,14 @@ function GamesTab() {
       return;
     }
 
+    const MAX_GAME_FILE_SIZE = 3 * 1024 * 1024 * 1024; // 3GB
+    if (file.size > MAX_GAME_FILE_SIZE) {
+      alert(locale === "vi" 
+        ? `Tệp "${file.name}" vượt quá dung lượng tối đa cho phép là 3GB!` 
+        : `File "${file.name}" exceeds the 3GB limit!`);
+      return;
+    }
+
     setUploadingType(type);
     const form = new FormData();
     form.append("file", file);
@@ -905,6 +1013,46 @@ function GamesTab() {
       console.error("Upload asset error:", error);
       const msg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || "Lỗi tải tệp lên";
       alert(locale === "vi" ? `Lỗi tải lên tài nguyên: ${msg}` : `Error uploading asset: ${msg}`);
+    } finally {
+      setUploadingType(null);
+    }
+  };
+
+  const handleUploadScreenshots = async () => {
+    if (!assetFiles.screenshots || assetFiles.screenshots.length === 0 || !selectedGameForUpload) {
+      alert(locale === "vi" ? "Vui lòng chọn ít nhất một ảnh gameplay!" : "Please select at least one gameplay screenshot!");
+      return;
+    }
+
+    setUploadingType("screenshot");
+    try {
+      for (let i = 0; i < assetFiles.screenshots.length; i++) {
+        const file = assetFiles.screenshots[i];
+        const form = new FormData();
+        form.append("file", file);
+        form.append("type", "screenshot");
+        await api.post(`/admin/games/${selectedGameForUpload.id}/upload`, form);
+      }
+      alert(locale === "vi" ? `Đã tải lên thành công ${assetFiles.screenshots.length} ảnh gameplay!` : `Successfully uploaded ${assetFiles.screenshots.length} screenshots!`);
+      setAssetFiles(prev => ({ ...prev, screenshots: [] }));
+
+      // Reload screenshots list for modal
+      const res = await api.get(`/admin/games/${selectedGameForUpload.id}`);
+      const fullGame = res.data.data;
+      const primaryImage = fullGame.images?.find((i: any) => i.isPrimary) || fullGame.images?.[0];
+      const screenshots = fullGame.images?.filter((i: any) => !i.isPrimary && i.id !== primaryImage?.id) || [];
+      setSelectedGameForUpload((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          screenshots: screenshots,
+        };
+      });
+      refetchGames();
+    } catch (error: any) {
+      console.error("Upload screenshots error:", error);
+      const msg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || "Lỗi tải ảnh";
+      alert(locale === "vi" ? `Lỗi tải lên ảnh gameplay: ${msg}` : `Error uploading screenshots: ${msg}`);
     } finally {
       setUploadingType(null);
     }
@@ -1740,7 +1888,7 @@ function GamesTab() {
                     <DropzoneFileInput
                       accept=".zip,application/zip"
                       files={newGameAssets.demo}
-                      formatHint="ZIP build chứa index.html"
+                      formatHint="ZIP build chứa index.html (Tối đa 3GB)"
                       onSelect={(files) => setNewGameAssets(prev => ({ ...prev, demo: files?.[0] || null }))}
                       onClear={() => setNewGameAssets(prev => ({ ...prev, demo: null }))}
                     />
@@ -1752,7 +1900,7 @@ function GamesTab() {
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-zinc-200">Gói cài đặt game</span>
-                      <span className="text-[10px] text-zinc-500 font-mono">EXE, ZIP</span>
+                      <span className="text-[10px] text-zinc-500 font-mono">EXE, ZIP (Tối đa 3GB)</span>
                     </div>
 
                     {/* Existing Installer Info */}
@@ -1784,7 +1932,7 @@ function GamesTab() {
                     <DropzoneFileInput
                       accept=".zip,.exe,.rar,.7z"
                       files={newGameAssets.installer}
-                      formatHint="EXE, ZIP, RAR, 7Z"
+                      formatHint="EXE, ZIP, RAR, 7Z (Tối đa 3GB)"
                       onSelect={(files) => setNewGameAssets(prev => ({ ...prev, installer: files?.[0] || null }))}
                       onClear={() => setNewGameAssets(prev => ({ ...prev, installer: null }))}
                     />
@@ -2076,7 +2224,7 @@ function GamesTab() {
                 <DropzoneFileInput
                   accept=".zip"
                   files={assetFiles.demo}
-                  formatHint="ZIP build WebGL"
+                  formatHint="ZIP build WebGL (Tối đa 3GB)"
                   onSelect={(files) => setAssetFiles(prev => ({ ...prev, demo: files?.[0] ?? null }))}
                   onClear={() => setAssetFiles(prev => ({ ...prev, demo: null }))}
                 />
@@ -2104,7 +2252,7 @@ function GamesTab() {
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <h4 className="text-xs font-semibold text-zinc-200">Gói cài đặt game</h4>
-                    <p className="text-[11px] text-zinc-500 font-mono">ZIP, EXE, RAR, 7Z, MSI</p>
+                    <p className="text-[11px] text-zinc-500 font-mono">ZIP, EXE, RAR, 7Z, MSI (Tối đa 3GB)</p>
                   </div>
                   <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${
                     selectedGameForUpload.hasFile
@@ -2138,7 +2286,7 @@ function GamesTab() {
                 <DropzoneFileInput
                   accept=".zip,.exe,.rar,.7z,.msi"
                   files={assetFiles.installer}
-                  formatHint="EXE, ZIP, RAR, 7Z"
+                  formatHint="EXE, ZIP, RAR, 7Z (Tối đa 3GB)"
                   onSelect={(files) => setAssetFiles(prev => ({ ...prev, installer: files?.[0] ?? null }))}
                   onClear={() => setAssetFiles(prev => ({ ...prev, installer: null }))}
                 />
@@ -2155,6 +2303,91 @@ function GamesTab() {
                     </>
                   ) : (
                     <span>Tải lên gói cài đặt</span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* 5. Gameplay Screenshots (Steam Gallery) */}
+            <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.08] flex flex-col justify-between space-y-4 md:col-span-2">
+              <div>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/[0.06] pb-2.5 mb-3">
+                  <div>
+                    <h4 className="text-xs font-semibold text-zinc-200">
+                      Bộ sưu tập ảnh Gameplay (Steam Gallery)
+                    </h4>
+                    <p className="text-[11px] text-zinc-500 font-mono">
+                      PNG, JPG, WebP - Cho phép tải lên nhiều ảnh gameplay để tạo thanh trượt chuyển ảnh và dải thumbnail như Steam
+                    </p>
+                  </div>
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${
+                    selectedGameForUpload.screenshots && selectedGameForUpload.screenshots.length > 0
+                      ? "bg-white/[0.08] text-white/90 border border-white/[0.12]"
+                      : "text-zinc-600 bg-white/[0.02] border border-white/[0.04]"
+                  }`}>
+                    {selectedGameForUpload.screenshots?.length || 0} ảnh hiện có
+                  </span>
+                </div>
+
+                {/* Existing Screenshots Grid */}
+                {selectedGameForUpload.screenshots && selectedGameForUpload.screenshots.length > 0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2.5 pb-2">
+                    {selectedGameForUpload.screenshots.map((s: any, idx: number) => (
+                      <div
+                        key={s.id || idx}
+                        className="group relative aspect-video rounded-lg overflow-hidden border border-white/[0.08] bg-[#0E131E]"
+                      >
+                        <img
+                          src={resolveImageUrl(s.url)}
+                          alt={`Gameplay ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center p-1">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAsset(selectedGameForUpload.id, "screenshot", s.id)}
+                            className="px-2 py-1 rounded text-[10px] font-medium bg-red-600/90 hover:bg-red-600 text-white cursor-pointer transition shadow-md"
+                          >
+                            Gỡ ảnh
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-lg bg-white/[0.02] border border-dashed border-white/[0.06] text-center text-xs text-zinc-500 mb-2">
+                    Chưa có ảnh gameplay nào. Hãy chọn nhiều ảnh chụp trò chơi bên dưới để tạo thanh trượt ảnh giống Steam!
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2 pt-3 border-t border-white/[0.06]">
+                <DropzoneFileInput
+                  accept="image/png,image/jpeg,image/webp"
+                  multiple={true}
+                  files={assetFiles.screenshots}
+                  label="Nhấp hoặc kéo thả nhiều ảnh gameplay vào đây (chọn nhiều ảnh cùng lúc)"
+                  formatHint="PNG, JPG, WebP"
+                  onSelect={(files) => {
+                    if (!files) return;
+                    const arr = Array.from(files);
+                    setAssetFiles(prev => ({ ...prev, screenshots: [...prev.screenshots, ...arr] }));
+                  }}
+                  onClear={() => setAssetFiles(prev => ({ ...prev, screenshots: [] }))}
+                />
+                <button
+                  type="button"
+                  onClick={handleUploadScreenshots}
+                  disabled={uploadingType === "screenshot" || !assetFiles.screenshots || assetFiles.screenshots.length === 0}
+                  className="w-full py-2.5 rounded-xl text-xs font-medium text-white bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:hover:bg-violet-600 border border-violet-500/30 transition active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-violet-600/20"
+                >
+                  {uploadingType === "screenshot" ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" />
+                      <span>Đang tải ảnh gameplay lên...</span>
+                    </>
+                  ) : (
+                    <span>Tải lên {assetFiles.screenshots?.length ? `${assetFiles.screenshots.length} ảnh gameplay đã chọn` : "ảnh gameplay"}</span>
                   )}
                 </button>
               </div>
@@ -2275,8 +2508,8 @@ function GamesTab() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setSelectedGameForUpload(g)}
-                          title="Tải lên tài nguyên (Ảnh bìa, Demo, Installer)"
+                          onClick={() => openUploadModal(g)}
+                          title="Tải lên tài nguyên (Ảnh bìa, Ảnh gameplay, Demo, Installer)"
                           className="hover:bg-violet-500/10 hover:text-violet-400 p-2"
                         >
                           <Upload className="size-4" />

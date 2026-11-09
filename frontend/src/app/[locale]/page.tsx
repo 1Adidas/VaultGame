@@ -72,7 +72,7 @@ export default function HomePage() {
       const progress = Math.min(elapsed / HERO_AUTOPLAY_INTERVAL, 1);
 
       if (progressBarRef.current) {
-        progressBarRef.current.style.transform = `scaleX(${progress})`;
+        progressBarRef.current.style.left = `${progress * 100}%`;
       }
 
       if (progress < 1) {
@@ -88,7 +88,7 @@ export default function HomePage() {
     return () => {
       cancelAnimationFrame(animationFrameId);
       if (progressBarRef.current) {
-        progressBarRef.current.style.transform = "scaleX(0)";
+        progressBarRef.current.style.left = "0%";
       }
     };
   }, [activeHeroIndex, isPaused, heroGames.length]);
@@ -146,13 +146,16 @@ export default function HomePage() {
               <div className="absolute inset-y-0 w-64 bg-gradient-to-r from-transparent via-cyan-400/35 via-violet-500/20 to-transparent blur-2xl animate-hero-flare" />
             </div>
 
-            {/* Bottom Edge Master Progress Bar */}
-            <div className="absolute bottom-0 left-0 right-0 h-1 sm:h-1.5 bg-white/10 z-20 overflow-hidden pointer-events-none">
+            {/* Bottom Edge Master Meteor / Comet Laser (Bolder, thicker beam gliding left-to-right with fading tail) */}
+            <div className="absolute bottom-0 left-0 right-0 h-[6px] sm:h-[7px] bg-white/[0.06] backdrop-blur-md z-30 overflow-hidden pointer-events-none">
               <div
                 ref={progressBarRef}
-                style={{ transform: "scaleX(0)", transformOrigin: "left" }}
-                className="h-full w-full bg-gradient-to-r from-cyan-400 via-indigo-500 to-violet-500 shadow-[0_0_12px_rgba(0,242,254,0.9)] will-change-transform"
-              />
+                style={{ left: "0%", transform: "translateX(-100%)" }}
+                className="absolute top-0 bottom-0 w-48 sm:w-72 md:w-96 rounded-full rainbow-glow-bar rainbow-glow-aura comet-fading-tail will-change-[left]"
+              >
+                {/* Luminous laser spark head leading the beam */}
+                <div className="absolute right-0 top-1/2 -translate-y-1/2 size-3 sm:size-3.5 bg-white rounded-full blur-[0.5px] shadow-[0_0_14px_#fff,0_0_24px_#00f2fe]" />
+              </div>
             </div>
 
             {/* Hardware-Accelerated Sliding Carousel Artwork Stage */}
@@ -341,7 +344,10 @@ export default function HomePage() {
                         >
                           {/* Active Neon Accent Left Indicator */}
                           {isCurrent && (
-                            <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-gradient-to-b from-cyan-400 via-indigo-500 to-violet-500 shadow-[0_0_12px_rgba(0,242,254,0.7)]" />
+                            <>
+                              <span className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full rainbow-glow-bar rainbow-glow-aura shadow-[0_0_12px_rgba(0,242,254,0.7)]" />
+                              <span className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full rainbow-glow-bar opacity-80" />
+                            </>
                           )}
 
                           <span className={`text-[10px] font-mono font-bold shrink-0 transition-colors ${
@@ -455,23 +461,25 @@ export default function HomePage() {
                     {heroGames[0].title}
                   </h3>
                   <p className="text-xs sm:text-sm text-zinc-400 line-clamp-2 leading-relaxed">
-                    {heroGames[0].shortDescription || "Khám phá tựa game đỉnh cao với công nghệ đồ họa mới nhất."}
+                    {heroGames[0].shortDescription || (isVi ? "Khám phá tựa game đỉnh cao với công nghệ đồ họa mới nhất." : isZh ? "探索拥有顶尖图形技术的绝佳游戏。" : "Explore the top-tier game with cutting-edge graphics technology.")}
                   </p>
                 </div>
               </div>
 
               <div className="relative z-10 pt-6 mt-4 border-t border-white/[0.06] flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">Giá bán</span>
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
+                    {isVi ? "Giá bán" : isZh ? "售价" : "Price"}
+                  </span>
                   <span className="text-lg font-bold text-white">
                     {heroGames[0].price === 0
-                      ? (isVi ? "Miễn Phí" : "Free")
+                      ? (isVi ? "Miễn Phí" : isZh ? "免费" : "Free")
                       : formatPrice(heroGames[0].discountPrice ?? heroGames[0].price, heroGames[0].currency)}
                   </span>
                 </div>
                 <Link href={`/${locale}/game/${heroGames[0].slug}`}>
                   <button className="h-10 px-5 rounded-full bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition active:scale-[0.98] cursor-pointer">
-                    {isVi ? "Xem Chi Tiết →" : "View Details →"}
+                    {isVi ? "Xem Chi Tiết →" : isZh ? "查看详情 →" : "View Details →"}
                   </button>
                 </Link>
               </div>

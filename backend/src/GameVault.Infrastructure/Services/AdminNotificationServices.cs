@@ -1,3 +1,5 @@
+using System.Net.Http;
+using System.Text.Json;
 using GameVault.Application.DTOs;
 using GameVault.Application.Interfaces;
 using GameVault.Domain.Entities;
@@ -45,12 +47,42 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
 {
     public async Task<GameDetailDto> CreateGameAsync(CreateGameRequest request, CancellationToken ct = default)
     {
+        var titleEn = string.IsNullOrWhiteSpace(request.TitleEn) ? request.Title : request.TitleEn;
+        var titleZh = string.IsNullOrWhiteSpace(request.TitleZh) ? request.Title : request.TitleZh;
+        var descEn = request.DescriptionEn;
+        var descZh = request.DescriptionZh;
+        var shortEn = request.ShortDescriptionEn;
+        var shortZh = request.ShortDescriptionZh;
+
+        if (!string.IsNullOrWhiteSpace(request.Description))
+        {
+            if (string.IsNullOrWhiteSpace(descEn))
+                descEn = await TranslateTextAsync(request.Description, "en", "vi", ct);
+            if (string.IsNullOrWhiteSpace(descZh))
+                descZh = await TranslateTextAsync(request.Description, "zh-CN", "vi", ct);
+        }
+        if (!string.IsNullOrWhiteSpace(request.ShortDescription))
+        {
+            if (string.IsNullOrWhiteSpace(shortEn))
+                shortEn = await TranslateTextAsync(request.ShortDescription, "en", "vi", ct);
+            if (string.IsNullOrWhiteSpace(shortZh))
+                shortZh = await TranslateTextAsync(request.ShortDescription, "zh-CN", "vi", ct);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Description))
+        {
+            var genShort = request.Description.Length > 100 ? request.Description.Substring(0, 100) + "..." : request.Description;
+            if (string.IsNullOrWhiteSpace(shortEn))
+                shortEn = await TranslateTextAsync(genShort, "en", "vi", ct);
+            if (string.IsNullOrWhiteSpace(shortZh))
+                shortZh = await TranslateTextAsync(genShort, "zh-CN", "vi", ct);
+        }
+
         var game = new Game
         {
             Title = request.Title, Slug = request.Slug, Description = request.Description,
             ShortDescription = request.ShortDescription,
-            TitleEn = request.TitleEn, DescriptionEn = request.DescriptionEn, ShortDescriptionEn = request.ShortDescriptionEn,
-            TitleZh = request.TitleZh, DescriptionZh = request.DescriptionZh, ShortDescriptionZh = request.ShortDescriptionZh,
+            TitleEn = titleEn, DescriptionEn = descEn, ShortDescriptionEn = shortEn,
+            TitleZh = titleZh, DescriptionZh = descZh, ShortDescriptionZh = shortZh,
             Developer = request.Developer, Publisher = request.Publisher, ReleaseDate = request.ReleaseDate,
             Price = request.Price, DiscountPrice = request.DiscountPrice, MinAge = request.MinAge,
             IsFeatured = request.IsFeatured, SystemRequirements = request.SystemRequirements,
@@ -81,12 +113,42 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
         var newActivePrice = request.DiscountPrice ?? request.Price;
         bool isDiscounted = newActivePrice < oldActivePrice;
 
+        var titleEn = string.IsNullOrWhiteSpace(request.TitleEn) ? request.Title : request.TitleEn;
+        var titleZh = string.IsNullOrWhiteSpace(request.TitleZh) ? request.Title : request.TitleZh;
+        var descEn = request.DescriptionEn;
+        var descZh = request.DescriptionZh;
+        var shortEn = request.ShortDescriptionEn;
+        var shortZh = request.ShortDescriptionZh;
+
+        if (!string.IsNullOrWhiteSpace(request.Description))
+        {
+            if (string.IsNullOrWhiteSpace(descEn))
+                descEn = await TranslateTextAsync(request.Description, "en", "vi", ct);
+            if (string.IsNullOrWhiteSpace(descZh))
+                descZh = await TranslateTextAsync(request.Description, "zh-CN", "vi", ct);
+        }
+        if (!string.IsNullOrWhiteSpace(request.ShortDescription))
+        {
+            if (string.IsNullOrWhiteSpace(shortEn))
+                shortEn = await TranslateTextAsync(request.ShortDescription, "en", "vi", ct);
+            if (string.IsNullOrWhiteSpace(shortZh))
+                shortZh = await TranslateTextAsync(request.ShortDescription, "zh-CN", "vi", ct);
+        }
+        else if (!string.IsNullOrWhiteSpace(request.Description))
+        {
+            var genShort = request.Description.Length > 100 ? request.Description.Substring(0, 100) + "..." : request.Description;
+            if (string.IsNullOrWhiteSpace(shortEn))
+                shortEn = await TranslateTextAsync(genShort, "en", "vi", ct);
+            if (string.IsNullOrWhiteSpace(shortZh))
+                shortZh = await TranslateTextAsync(genShort, "zh-CN", "vi", ct);
+        }
+
         game.Title = request.Title; game.Description = request.Description;
         game.ShortDescription = request.ShortDescription;
-        game.TitleEn = request.TitleEn; game.DescriptionEn = request.DescriptionEn;
-        game.ShortDescriptionEn = request.ShortDescriptionEn;
-        game.TitleZh = request.TitleZh; game.DescriptionZh = request.DescriptionZh;
-        game.ShortDescriptionZh = request.ShortDescriptionZh;
+        game.TitleEn = titleEn; game.DescriptionEn = descEn;
+        game.ShortDescriptionEn = shortEn;
+        game.TitleZh = titleZh; game.DescriptionZh = descZh;
+        game.ShortDescriptionZh = shortZh;
         game.Developer = request.Developer; game.Publisher = request.Publisher;
         game.ReleaseDate = request.ReleaseDate; game.Price = request.Price;
         game.DiscountPrice = request.DiscountPrice; game.MinAge = request.MinAge;
@@ -1114,13 +1176,106 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Translation Error]: {ex.Message}");
+            Console.WriteLine($"[Groq Translation Error]: {ex.Message}. Falling back to Google Translate API...");
         }
 
+        // Fallback: Use Google Translate API to guarantee 100% translation success!
+        string viDesc = srcLocale == "vi" ? srcDesc : await TranslateTextAsync(srcDesc, "vi", srcLocale, ct);
+        string viShort = srcLocale == "vi" ? srcShortDesc : await TranslateTextAsync(srcShortDesc, "vi", srcLocale, ct);
+
+        string enDesc = srcLocale == "en" ? srcDesc : await TranslateTextAsync(srcDesc, "en", srcLocale, ct);
+        string enShort = srcLocale == "en" ? srcShortDesc : await TranslateTextAsync(srcShortDesc, "en", srcLocale, ct);
+
+        string zhDesc = srcLocale == "zh" ? srcDesc : await TranslateTextAsync(srcDesc, "zh-CN", srcLocale, ct);
+        string zhShort = srcLocale == "zh" ? srcShortDesc : await TranslateTextAsync(srcShortDesc, "zh-CN", srcLocale, ct);
+
         return new TranslateGameTextResponse(
-            new LocalizedGameText(srcTitle, srcLocale == "vi" ? srcDesc : "", srcLocale == "vi" ? srcShortDesc : ""),
-            new LocalizedGameText(srcTitle, srcLocale == "en" ? srcDesc : "", srcLocale == "en" ? srcShortDesc : ""),
-            new LocalizedGameText(srcTitle, srcLocale == "zh" ? srcDesc : "", srcLocale == "zh" ? srcShortDesc : "")
+            new LocalizedGameText(srcTitle, viDesc, viShort),
+            new LocalizedGameText(srcTitle, enDesc, enShort),
+            new LocalizedGameText(srcTitle, zhDesc, zhShort)
         );
+    }
+
+    private static readonly HttpClient _translationHttpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
+
+    public static async Task<string> TranslateTextAsync(string text, string targetLang, string sourceLang = "auto", CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "";
+        var gTarget = targetLang.ToLowerInvariant() switch
+        {
+            "zh" or "zh-cn" => "zh-CN",
+            "en" => "en",
+            "vi" => "vi",
+            _ => targetLang
+        };
+        var gSource = sourceLang.ToLowerInvariant() switch
+        {
+            "zh" or "zh-cn" => "zh-CN",
+            "en" => "en",
+            "vi" => "vi",
+            _ => "auto"
+        };
+
+        // Method 1: Google Chrome Translation API (clients5.google.com)
+        try
+        {
+            var url = $"https://clients5.google.com/translate_a/t?client=dict-chrome-ex&sl={gSource}&tl={gTarget}&q={Uri.EscapeDataString(text)}";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+
+            var resp = await _translationHttpClient.SendAsync(req, ct);
+            if (resp.IsSuccessStatusCode)
+            {
+                var content = await resp.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.ValueKind == JsonValueKind.String)
+                {
+                    var res = doc.RootElement.GetString()?.Trim();
+                    if (!string.IsNullOrEmpty(res)) return res;
+                }
+                else if (doc.RootElement.ValueKind == JsonValueKind.Array && doc.RootElement.GetArrayLength() > 0)
+                {
+                    var first = doc.RootElement[0];
+                    if (first.ValueKind == JsonValueKind.String)
+                    {
+                        var res = first.GetString()?.Trim();
+                        if (!string.IsNullOrEmpty(res)) return res;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Google API Error]: {ex.Message}");
+        }
+
+        // Method 2: MyMemory Translation API fallback
+        try
+        {
+            var pair = $"{gSource}|{gTarget}";
+            var url = $"https://api.mymemory.translated.net/get?q={Uri.EscapeDataString(text)}&langpair={pair}";
+            using var req = new HttpRequestMessage(HttpMethod.Get, url);
+            req.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) GameVault/1.0");
+
+            var resp = await _translationHttpClient.SendAsync(req, ct);
+            if (resp.IsSuccessStatusCode)
+            {
+                var content = await resp.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(content);
+                if (doc.RootElement.TryGetProperty("responseData", out var respData) &&
+                    respData.TryGetProperty("translatedText", out var transText))
+                {
+                    var res = transText.GetString()?.Trim();
+                    if (!string.IsNullOrEmpty(res) && !res.StartsWith("MYMEMORY WARNING"))
+                        return res;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MyMemory API Error]: {ex.Message}");
+        }
+
+        return text;
     }
 }

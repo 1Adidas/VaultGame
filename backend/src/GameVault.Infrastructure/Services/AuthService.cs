@@ -278,7 +278,8 @@ public class AuthService(AppDbContext db, IJwtTokenService jwt, IEmailService em
         user.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
         var access = jwt.GenerateAccessToken(dto);
-        return new AuthResponse(access, refresh, DateTime.UtcNow.AddMinutes(15), dto);
+        var accessExpiryMinutes = int.Parse(config["JWT:AccessTokenExpirationMinutes"] ?? "1440");
+        return new AuthResponse(access, refresh, DateTime.UtcNow.AddMinutes(accessExpiryMinutes), dto);
     }
 
     public async Task ResendVerificationEmailAsync(ResendVerificationRequest request, CancellationToken ct = default)

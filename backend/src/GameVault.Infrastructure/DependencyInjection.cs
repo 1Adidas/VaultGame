@@ -323,6 +323,28 @@ public static class DependencyInjection
             await db.SaveChangesAsync();
         }
 
+        // Automatically grant all games to the admin user for testing / dev mode
+        var allGames = await db.Games.ToListAsync();
+        var existingUserGameIds = await db.UserGames
+            .Where(ug => ug.UserId == adminUser.Id)
+            .Select(ug => ug.GameId)
+            .ToListAsync();
+
+        var missingGames = allGames.Where(g => !existingUserGameIds.Contains(g.Id)).ToList();
+        if (missingGames.Any())
+        {
+            foreach (var g in missingGames)
+            {
+                db.UserGames.Add(new UserGame
+                {
+                    UserId = adminUser.Id,
+                    GameId = g.Id,
+                    AcquiredAt = DateTime.UtcNow
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+
 
         // Seed categories if not present
         if (!await db.Categories.AnyAsync())
@@ -441,6 +463,55 @@ public static class DependencyInjection
         catch (Exception ex)
         {
             Console.WriteLine($"Failed to cleanup mock assets: {ex.Message}");
+        }
+
+        // Auto-translate any games that have missing English or Chinese descriptions
+        try
+        {
+            var gamesToTranslate = await db.Games
+                .Where(g => string.IsNullOrEmpty(g.DescriptionZh) || string.IsNullOrEmpty(g.DescriptionEn) || (string.IsNullOrEmpty(g.ShortDescriptionZh) && !string.IsNullOrEmpty(g.ShortDescription)))
+                .ToListAsync();
+
+            if (gamesToTranslate.Any())
+            {
+                Console.WriteLine($"[Translation Seeding] Translating {gamesToTranslate.Count} games missing multilingual descriptions...");
+                foreach (var g in gamesToTranslate)
+                {
+                    if (string.IsNullOrWhiteSpace(g.TitleEn)) g.TitleEn = g.Title;
+                    if (string.IsNullOrWhiteSpace(g.TitleZh)) g.TitleZh = g.Title;
+
+                    if (!string.IsNullOrWhiteSpace(g.Description))
+                    {
+                        if (string.IsNullOrWhiteSpace(g.DescriptionEn))
+                            g.DescriptionEn = await AdminService.TranslateTextAsync(g.Description, "en", "vi");
+                        if (string.IsNullOrWhiteSpace(g.DescriptionZh))
+                            g.DescriptionZh = await AdminService.TranslateTextAsync(g.Description, "zh-CN", "vi");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(g.ShortDescription))
+                    {
+                        if (string.IsNullOrWhiteSpace(g.ShortDescriptionEn))
+                            g.ShortDescriptionEn = await AdminService.TranslateTextAsync(g.ShortDescription, "en", "vi");
+                        if (string.IsNullOrWhiteSpace(g.ShortDescriptionZh))
+                            g.ShortDescriptionZh = await AdminService.TranslateTextAsync(g.ShortDescription, "zh-CN", "vi");
+                    }
+                    else if (!string.IsNullOrWhiteSpace(g.Description))
+                    {
+                        var shortText = g.Description.Length > 100 ? g.Description.Substring(0, 100) + "..." : g.Description;
+                        if (string.IsNullOrWhiteSpace(g.ShortDescription)) g.ShortDescription = shortText;
+                        if (string.IsNullOrWhiteSpace(g.ShortDescriptionEn))
+                            g.ShortDescriptionEn = await AdminService.TranslateTextAsync(shortText, "en", "vi");
+                        if (string.IsNullOrWhiteSpace(g.ShortDescriptionZh))
+                            g.ShortDescriptionZh = await AdminService.TranslateTextAsync(shortText, "zh-CN", "vi");
+                    }
+                }
+                await db.SaveChangesAsync();
+                Console.WriteLine("-> All games successfully translated into English and Chinese!");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to auto-translate games: {ex.Message}");
         }
     }
 

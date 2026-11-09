@@ -93,7 +93,8 @@ export default function OrdersPage() {
   };
 
   useEffect(() => {
-    if (!user) {
+    const token = typeof window !== "undefined" ? (localStorage.getItem("gv_access") || sessionStorage.getItem("gv_access")) : null;
+    if (!token && !user) {
       router.replace(`/${locale}/login`);
     } else if (user?.roles.includes("Admin")) {
       router.replace(`/${locale}/admin`);

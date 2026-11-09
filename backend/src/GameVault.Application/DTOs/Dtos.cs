@@ -68,21 +68,52 @@ public record UpdateGameRequest(
 
 public record UpdateGameStatusRequest(string Status);
 
-public record TranslateGameTextRequest(
-    string SourceLocale,
-    string? Title,
-    string? Description,
-    string? ShortDescription);
+public class TranslateGameTextRequest
+{
+    public string SourceLocale { get; set; } = "vi";
+    public string? Title { get; set; }
+    public string? Description { get; set; }
+    public string? ShortDescription { get; set; }
 
-public record LocalizedGameText(
-    string Title,
-    string Description,
-    string ShortDescription);
+    public TranslateGameTextRequest() { }
+    public TranslateGameTextRequest(string sourceLocale, string? title, string? description, string? shortDescription)
+    {
+        SourceLocale = sourceLocale;
+        Title = title;
+        Description = description;
+        ShortDescription = shortDescription;
+    }
+}
 
-public record TranslateGameTextResponse(
-    LocalizedGameText Vi,
-    LocalizedGameText En,
-    LocalizedGameText Zh);
+public class LocalizedGameText
+{
+    public string Title { get; set; } = "";
+    public string Description { get; set; } = "";
+    public string ShortDescription { get; set; } = "";
+
+    public LocalizedGameText() { }
+    public LocalizedGameText(string title, string description, string shortDescription)
+    {
+        Title = title;
+        Description = description;
+        ShortDescription = shortDescription;
+    }
+}
+
+public class TranslateGameTextResponse
+{
+    public LocalizedGameText Vi { get; set; } = new();
+    public LocalizedGameText En { get; set; } = new();
+    public LocalizedGameText Zh { get; set; } = new();
+
+    public TranslateGameTextResponse() { }
+    public TranslateGameTextResponse(LocalizedGameText vi, LocalizedGameText en, LocalizedGameText zh)
+    {
+        Vi = vi;
+        En = en;
+        Zh = zh;
+    }
+}
 
 public record CreateReviewRequest(byte? Rating, string? Title, string Comment, Guid? ParentId = null);
 public record UpdateReviewRequest(byte? Rating, string Comment);

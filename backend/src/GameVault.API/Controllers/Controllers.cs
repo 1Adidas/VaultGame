@@ -587,8 +587,8 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
         => Ok(ApiResponse<TranslateGameTextResponse>.Ok(await admin.TranslateGameTextAsync(request, ct)));
 
     [HttpPost("games/{id:guid}/upload")]
-    [RequestSizeLimit(1_073_741_824)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 1_073_741_824)]
+    [RequestSizeLimit(3_221_225_472L)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 3_221_225_472L)]
     public async Task<ActionResult<ApiResponse<object>>> Upload(Guid id, [FromForm] string type, IFormFile file, CancellationToken ct)
     {
         try
@@ -596,6 +596,10 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
             if (file == null || file.Length == 0)
             {
                 return BadRequest(ApiResponse<object>.Fail("FILE_EMPTY", "Tệp tải lên không được để trống."));
+            }
+            if (file.Length > 3_221_225_472L)
+            {
+                return BadRequest(ApiResponse<object>.Fail("FILE_TOO_LARGE", "Dung lượng tệp vượt quá giới hạn tối đa là 3GB."));
             }
             var game = await db.Games.FindAsync([id], ct);
             if (game is null) return NotFound(ApiResponse<object>.Fail("GAME_NOT_FOUND", "Game not found"));

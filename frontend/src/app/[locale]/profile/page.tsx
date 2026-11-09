@@ -2,12 +2,16 @@
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useAuthStore } from "@/lib/auth/store";
 import { api } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
-import { UserCircle, Mail, Calendar, Settings, Gamepad2, Camera, Loader2, CheckCircle } from "lucide-react";
+import {
+  UserCircle, Mail, Calendar, Settings, Gamepad2, Camera, Loader2, CheckCircle,
+  Shield, LayoutDashboard, DollarSign, ShoppingBag, Users, ArrowUpRight
+} from "lucide-react";
 import { useLocale } from "next-intl";
-import { formatDate, resolveImageUrl } from "@/lib/utils";
+import { formatDate, formatPrice, resolveImageUrl } from "@/lib/utils";
 
 interface UserProfile {
   id: string;
@@ -63,6 +67,12 @@ function ProfileContent() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [games, setGames] = useState<LibraryGame[]>([]);
+  const [adminStats, setAdminStats] = useState<{
+    totalRevenue?: number;
+    totalOrders?: number;
+    totalUsers?: number;
+    totalGames?: number;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -214,7 +224,8 @@ function ProfileContent() {
   };
 
   useEffect(() => {
-    if (!user) {
+    const token = typeof window !== "undefined" ? (localStorage.getItem("gv_access") || sessionStorage.getItem("gv_access")) : null;
+    if (!token && !user) {
       router.push(`/${locale}/login`);
       return;
     }
@@ -234,7 +245,16 @@ function ProfileContent() {
           setPreviewAvatar(resolveUrl(p.avatarUrl));
           setIsLibraryPublic(p.isLibraryPublic);
           setIsPurchaseHistoryPublic(p.isPurchaseHistoryPublic);
-          setGames(libraryRes.data.data);
+          setGames(Array.isArray(libraryRes.data?.data) ? libraryRes.data.data : []);
+
+          if (p.roles?.includes("Admin")) {
+            try {
+              const statsRes = await api.get("/admin/dashboard/stats");
+              setAdminStats(statsRes.data?.data || null);
+            } catch (err) {
+              console.error("Failed to load admin stats for profile page:", err);
+            }
+          }
         } else {
           const profileRes = await api.get(profileUrl);
           const p = profileRes.data.data as UserProfile;
@@ -246,13 +266,16 @@ function ProfileContent() {
           setIsPurchaseHistoryPublic(p.isPurchaseHistoryPublic);
           if (p.isLibraryPublic) {
             const libraryRes = await api.get(`/library?userId=${targetId}`);
-            setGames(libraryRes.data.data);
+            setGames(Array.isArray(libraryRes.data?.data) ? libraryRes.data.data : []);
           } else {
             setGames([]);
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to fetch profile", error);
+        if (error?.response?.status === 401) {
+          router.push(`/${locale}/login`);
+        }
       } finally {
         setLoading(false);
       }
@@ -401,6 +424,18 @@ function ProfileContent() {
                 <Settings className="size-4 text-violet-400 shrink-0" />
                 <span>Role: {profile.roles.join(", ")}</span>
               </div>
+              {profile.roles.includes("Admin") && (
+                <div className="pt-1">
+                  <Link
+                    href={`/${locale}/admin`}
+                    className="w-full py-2 px-3 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
+                  >
+                    <Shield className="size-3.5 text-violet-400" />
+                    <span>{locale === "vi" ? "Vào Trang Quản Trị" : isZh ? "进入管理控制台" : "Go to Admin Panel"}</span>
+                    <ArrowUpRight className="size-3.5" />
+                  </Link>
+                </div>
+              )}
             </div>
 
             {saveSuccess && (
@@ -519,64 +554,254 @@ function ProfileContent() {
             </div>
           )}
 
-          {/* Library Section */}
-          <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-4 md:p-6 backdrop-blur shadow-xl">
-            <h2 className="mb-6 text-xl font-semibold text-white">
-              {locale === "vi" ? "Lịch sử mua & Thư viện game" : isZh ? "购买记录与游戏库" : "Purchase History & Library"}
-            </h2>
+          {/* Admin Dashboard Overview OR Normal User Library */}
+          {profile.roles.includes("Admin") ? (
+            <div className="space-y-6">
+              {/* Admin Hero Capsule Card */}
+              <div className="relative overflow-hidden rounded-2xl border border-violet-500/25 bg-gradient-to-br from-[#0F1422] via-[#13192B] to-[#0A0D16] p-5 sm:p-6 shadow-2xl backdrop-blur">
+                {/* Decorative ambient glow */}
+                <div className="absolute -top-16 -right-16 size-48 rounded-full bg-violet-600/15 blur-3xl pointer-events-none" />
+                <div className="absolute -bottom-16 -left-16 size-48 rounded-full bg-cyan-600/10 blur-3xl pointer-events-none" />
 
-            {!isOwnProfile && !profile.isLibraryPublic ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
-                <Gamepad2 className="mb-4 size-12 opacity-20" />
-                <p>{locale === "vi" ? `Thư viện game của ${profile.fullName} đang để chế độ riêng tư.` : isZh ? `${profile.fullName} 的游戏库已设为私密。` : `${profile.fullName}'s library is private.`}</p>
-              </div>
-            ) : games.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
-                <Gamepad2 className="mb-4 size-12 opacity-20" />
-                <p>{locale === "vi" ? "Bạn chưa có game nào trong thư viện." : isZh ? "您的游戏库中暂无游戏。" : "No games in your library yet."}</p>
-                <Button
-                  variant="ghost"
-                  className="mt-2 text-violet-400"
-                  onClick={() => router.push(`/${locale}/games`)}
-                >
-                  {locale === "vi" ? "Khám phá cửa hàng" : isZh ? "浏览商城" : "Browse Store"}
-                </Button>
-              </div>
-            ) : (
-              <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3">
-                {games.map(game => (
-                  <div
-                    key={game.gameId}
-                    className="group relative overflow-hidden rounded-xl border border-white/5 bg-zinc-950 transition-colors hover:border-violet-500/50 cursor-pointer"
-                    onClick={() => router.push(`/${locale}/game/${game.slug}`)}
-                  >
-                    <div className="aspect-video w-full overflow-hidden bg-zinc-900">
-                      {game.coverUrl ? (
-                        <img
-                          src={resolveUrl(game.coverUrl) ?? ""}
-                          alt={game.title}
-                          className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-                        />
-                      ) : (
-                        <div className="flex size-full items-center justify-center">
-                          <Gamepad2 className="size-10 text-zinc-700" />
-                        </div>
-                      )}
+                <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-5">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-violet-500/15 text-violet-300 border border-violet-500/30">
+                        <Shield className="size-3 text-violet-400" />
+                        {locale === "vi" ? "Đặc Quyền Quản Trị Viên" : isZh ? "最高管理员特权" : "Super Administrator"}
+                      </span>
                     </div>
-                    <div className="p-4">
-                      <h3 className="truncate font-semibold text-zinc-200">{game.title}</h3>
-                      {(isOwnProfile || profile.isPurchaseHistoryPublic) && (
-                        <p className="mt-1 text-xs text-zinc-500">
-                          {locale === "vi" ? "Mua lúc: " : isZh ? "购买时间：" : "Acquired: "}
-                          {formatDate(game.acquiredAt)}
-                        </p>
-                      )}
+                    <h2 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center gap-2">
+                      <LayoutDashboard className="size-6 text-violet-400" />
+                      {locale === "vi" ? "Bảng Điều Khiển Quản Trị Hệ Thống" : isZh ? "系统管理总控制台" : "System Admin Control Center"}
+                    </h2>
+                    <p className="text-xs text-zinc-400">
+                      {locale === "vi"
+                        ? "Bạn có toàn quyền quản lý trò chơi, đơn hàng, doanh thu và người dùng trên sàn GameVault."
+                        : isZh
+                          ? "您对 GameVault 平台上的游戏、订单、收入和用户拥有全部管理权限。"
+                          : "Full management authority over games, orders, revenue, and users across GameVault."}
+                    </p>
+                  </div>
+
+                  <Link
+                    href={`/${locale}/admin`}
+                    className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs transition active:scale-[0.98] shadow-lg shadow-violet-600/25 cursor-pointer whitespace-nowrap"
+                  >
+                    <span>{locale === "vi" ? "Mở Trang Quản Trị Toàn Diện" : isZh ? "打开全功能管理后台" : "Open Full Admin Console"}</span>
+                    <ArrowUpRight className="size-4" />
+                  </Link>
+                </div>
+
+                {/* Admin Fast Stats Metrics */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-5">
+                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-violet-500/30 transition">
+                    <div className="flex items-center justify-between text-zinc-400 text-xs mb-1.5">
+                      <span>{locale === "vi" ? "Tổng Doanh Thu" : isZh ? "平台总营业额" : "Total Revenue"}</span>
+                      <DollarSign className="size-3.5 text-violet-400" />
+                    </div>
+                    <div className="text-lg md:text-xl font-black text-violet-300 truncate">
+                      {formatPrice(adminStats?.totalRevenue ?? 0)}
                     </div>
                   </div>
-                ))}
+
+                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-emerald-500/30 transition">
+                    <div className="flex items-center justify-between text-zinc-400 text-xs mb-1.5">
+                      <span>{locale === "vi" ? "Đơn Hàng Đã Xử Lý" : isZh ? "已完成订单数" : "Completed Orders"}</span>
+                      <ShoppingBag className="size-3.5 text-emerald-400" />
+                    </div>
+                    <div className="text-lg md:text-xl font-black text-emerald-300">
+                      {adminStats?.totalOrders ?? 0}
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-blue-500/30 transition">
+                    <div className="flex items-center justify-between text-zinc-400 text-xs mb-1.5">
+                      <span>{locale === "vi" ? "Người Dùng Đăng Ký" : isZh ? "注册玩家总数" : "Registered Users"}</span>
+                      <Users className="size-3.5 text-blue-400" />
+                    </div>
+                    <div className="text-lg md:text-xl font-black text-blue-300">
+                      {adminStats?.totalUsers ?? 0}
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-amber-500/30 transition">
+                    <div className="flex items-center justify-between text-zinc-400 text-xs mb-1.5">
+                      <span>{locale === "vi" ? "Trò Chơi Trên Sàn" : isZh ? "平台收录游戏" : "Published Games"}</span>
+                      <Gamepad2 className="size-3.5 text-amber-400" />
+                    </div>
+                    <div className="text-lg md:text-xl font-black text-amber-300">
+                      {adminStats?.totalGames ?? 0}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quick Action Shortcuts for Admin */}
+                <div className="mt-5 pt-4 border-t border-white/[0.06] flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] text-zinc-400 font-medium mr-1">
+                    {locale === "vi" ? "Lối tắt quản lý:" : isZh ? "快捷通道：" : "Quick shortcuts:"}
+                  </span>
+                  <Link
+                    href={`/${locale}/admin?tab=games`}
+                    className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-zinc-300 hover:text-white border border-white/[0.06] transition flex items-center gap-1.5"
+                  >
+                    <Gamepad2 className="size-3.5 text-amber-400" />
+                    <span>{locale === "vi" ? "Quản lý trò chơi" : "Manage Games"}</span>
+                  </Link>
+                  <Link
+                    href={`/${locale}/admin?tab=orders`}
+                    className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-zinc-300 hover:text-white border border-white/[0.06] transition flex items-center gap-1.5"
+                  >
+                    <ShoppingBag className="size-3.5 text-emerald-400" />
+                    <span>{locale === "vi" ? "Xem đơn hàng" : "Orders"}</span>
+                  </Link>
+                  <Link
+                    href={`/${locale}/admin?tab=users`}
+                    className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-zinc-300 hover:text-white border border-white/[0.06] transition flex items-center gap-1.5"
+                  >
+                    <Users className="size-3.5 text-blue-400" />
+                    <span>{locale === "vi" ? "Người dùng" : "Users"}</span>
+                  </Link>
+                  <Link
+                    href={`/${locale}/admin?tab=revenue`}
+                    className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-zinc-300 hover:text-white border border-white/[0.06] transition flex items-center gap-1.5"
+                  >
+                    <DollarSign className="size-3.5 text-violet-400" />
+                    <span>{locale === "vi" ? "Báo cáo doanh thu" : "Revenue"}</span>
+                  </Link>
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Admin Test Library (collapsible / compact) */}
+              <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-4 md:p-6 backdrop-blur shadow-xl">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-white/[0.06] pb-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-white flex items-center gap-2">
+                      <Gamepad2 className="size-4 text-violet-400" />
+                      {locale === "vi" ? "Thư viện game cá nhân (Tài khoản thử nghiệm)" : isZh ? "个人测试游戏库" : "Personal Test Library"}
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      {locale === "vi"
+                        ? "Các tựa game đã được mua hoặc kích hoạt riêng cho tài khoản Admin này để chơi thử nghiệm."
+                        : "Games directly activated for this Admin account for testing purposes."}
+                    </p>
+                  </div>
+                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-white/[0.04] text-zinc-400 self-start sm:self-auto">
+                    {games.length} game
+                  </span>
+                </div>
+
+                {games.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-6 text-center text-zinc-500">
+                    <Gamepad2 className="mb-2 size-8 opacity-20" />
+                    <p className="text-xs">
+                      {locale === "vi"
+                        ? "Tài khoản Admin chưa mua game nào để test. Bạn có thể mở Store để thử nghiệm quy trình mua game."
+                        : "No games in personal test library."}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-2 text-violet-400 text-xs"
+                      onClick={() => router.push(`/${locale}/games`)}
+                    >
+                      {locale === "vi" ? "Thử nghiệm mua game tại Store" : "Test Store"}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {games.map(game => (
+                      <div
+                        key={game.gameId}
+                        className="group relative overflow-hidden rounded-xl border border-white/5 bg-zinc-950 transition-colors hover:border-violet-500/50 cursor-pointer"
+                        onClick={() => router.push(`/${locale}/game/${game.slug}`)}
+                      >
+                        <div className="aspect-video w-full overflow-hidden bg-zinc-900">
+                          {game.coverUrl ? (
+                            <img
+                              src={resolveUrl(game.coverUrl) ?? ""}
+                              alt={game.title}
+                              className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            />
+                          ) : (
+                            <div className="flex size-full items-center justify-center">
+                              <Gamepad2 className="size-10 text-zinc-700" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-4">
+                          <h3 className="truncate font-semibold text-zinc-200">{game.title}</h3>
+                          <p className="mt-1 text-xs text-zinc-500">
+                            {locale === "vi" ? "Mua lúc: " : isZh ? "购买时间：" : "Acquired: "}
+                            {formatDate(game.acquiredAt)}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* Normal User Library */
+            <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-4 md:p-6 backdrop-blur shadow-xl">
+              <h2 className="mb-6 text-xl font-semibold text-white">
+                {locale === "vi" ? "Lịch sử mua & Thư viện game" : isZh ? "购买记录与游戏库" : "Purchase History & Library"}
+              </h2>
+
+              {!isOwnProfile && !profile.isLibraryPublic ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
+                  <Gamepad2 className="mb-4 size-12 opacity-20" />
+                  <p>{locale === "vi" ? `Thư viện game của ${profile.fullName} đang để chế độ riêng tư.` : isZh ? `${profile.fullName} 的游戏库已设为私密。` : `${profile.fullName}'s library is private.`}</p>
+                </div>
+              ) : games.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
+                  <Gamepad2 className="mb-4 size-12 opacity-20" />
+                  <p>{locale === "vi" ? "Bạn chưa có game nào trong thư viện." : isZh ? "您的游戏库中暂无游戏。" : "No games in your library yet."}</p>
+                  <Button
+                    variant="ghost"
+                    className="mt-2 text-violet-400"
+                    onClick={() => router.push(`/${locale}/games`)}
+                  >
+                    {locale === "vi" ? "Khám phá cửa hàng" : isZh ? "浏览商城" : "Browse Store"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {games.map(game => (
+                    <div
+                      key={game.gameId}
+                      className="group relative overflow-hidden rounded-xl border border-white/5 bg-zinc-950 transition-colors hover:border-violet-500/50 cursor-pointer"
+                      onClick={() => router.push(`/${locale}/game/${game.slug}`)}
+                    >
+                      <div className="aspect-video w-full overflow-hidden bg-zinc-900">
+                        {game.coverUrl ? (
+                          <img
+                            src={resolveUrl(game.coverUrl) ?? ""}
+                            alt={game.title}
+                            className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          />
+                        ) : (
+                          <div className="flex size-full items-center justify-center">
+                            <Gamepad2 className="size-10 text-zinc-700" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="p-4">
+                        <h3 className="truncate font-semibold text-zinc-200">{game.title}</h3>
+                        {(isOwnProfile || profile.isPurchaseHistoryPublic) && (
+                          <p className="mt-1 text-xs text-zinc-500">
+                            {locale === "vi" ? "Mua lúc: " : isZh ? "购买时间：" : "Acquired: "}
+                            {formatDate(game.acquiredAt)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       </div>

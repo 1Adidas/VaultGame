@@ -67,7 +67,10 @@ public class GameService(AppDbContext db) : IGameService
             .FirstOrDefaultAsync(g => g.Slug == slug && (g.Status == GameStatus.Published || g.Status == GameStatus.Archived), ct);
         if (game is null) return null;
 
-        var owned = userId.HasValue && await db.UserGames.AnyAsync(ug => ug.UserId == userId && ug.GameId == game.Id, ct);
+        var owned = userId.HasValue && (
+            await db.UserGames.AnyAsync(ug => ug.UserId == userId && ug.GameId == game.Id, ct)
+            || await db.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.Role.Name == RoleNames.Admin, ct)
+        );
         var wished = userId.HasValue && await db.Wishlists.AnyAsync(w => w.UserId == userId && w.GameId == game.Id, ct);
         return MapDetail(game, owned, wished, locale);
     }

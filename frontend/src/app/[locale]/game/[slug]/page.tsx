@@ -532,11 +532,11 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
       <div className="w-full">
         <nav className="flex items-center gap-2 text-xs text-zinc-400">
           <Link href={`/${locale}`} className="hover:text-white transition-colors">
-            {isVi ? "Trang chủ" : "Home"}
+            {isVi ? "Trang chủ" : isZh ? "首页" : "Home"}
           </Link>
           <ChevronRight className="size-3 text-zinc-600" />
           <Link href={`/${locale}/games`} className="hover:text-white transition-colors">
-            {isVi ? "Tất cả trò chơi" : "Store"}
+            {isVi ? "Tất cả trò chơi" : isZh ? "所有游戏" : "Store"}
           </Link>
           {g.categoryName && (
             <>

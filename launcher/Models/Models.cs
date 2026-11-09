@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 namespace GameVault.Launcher.Models;
 
 public record LoginRequest(string Email, string Password);
+public record RefreshTokenRequest(string RefreshToken);
 
 public record UserDto(
     Guid Id,

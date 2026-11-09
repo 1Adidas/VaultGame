@@ -10,6 +10,7 @@ public partial class App : Application
 {
     public static string? LaunchArgument { get; private set; }
     private static Mutex? _mutex;
+    private static Mutex? _drmMutex;
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -55,6 +56,13 @@ public partial class App : Application
         }
 
         base.OnStartup(e);
+
+        // GameVault DRM: Hold local mutex to authenticate launched games
+        try
+        {
+            _drmMutex = new Mutex(true, "Local\\GameVault_Launcher_Running");
+        }
+        catch { }
 
         if (e.Args.Length > 0)
         {

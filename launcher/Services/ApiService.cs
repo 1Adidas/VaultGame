@@ -9,6 +9,7 @@ namespace GameVault.Launcher.Services;
 public class ApiService
 {
     private HttpClient _httpClient;
+    private readonly StorageService? _storageService;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -16,8 +17,9 @@ public class ApiService
 
     public string BaseUrl { get; private set; }
 
-    public ApiService(string baseUrl = "http://127.0.0.1:5000")
+    public ApiService(string baseUrl = "http://127.0.0.1:5000", StorageService? storageService = null)
     {
+        _storageService = storageService;
         // Convert localhost to 127.0.0.1 to avoid Windows IPv6 resolution issues
         if (baseUrl.Contains("localhost:5000"))
         {
@@ -131,13 +133,63 @@ public class ApiService
         throw new Exception(result?.Message ?? "Không thể xác thực thông tin tài khoản.");
     }
 
+    public async Task<bool> TryRefreshTokenAsync(CancellationToken ct = default)
+    {
+        if (_storageService == null) return false;
+        var session = _storageService.LoadSession();
+        if (string.IsNullOrEmpty(session.RefreshToken)) return false;
+
+        try
+        {
+            var payload = new RefreshTokenRequest(session.RefreshToken);
+            var json = JsonSerializer.Serialize(payload, JsonOptions);
+            var content = new StringContent(json, Encoding.UTF8, MediaTypeHeaderValue.Parse("application/json"));
+
+            var response = await _httpClient.PostAsync("/api/v1/auth/refresh", content, ct);
+            if (!response.IsSuccessStatusCode) return false;
+
+            var responseString = await response.Content.ReadAsStringAsync(ct);
+            var result = JsonSerializer.Deserialize<ApiResponse<AuthResponse>>(responseString, JsonOptions);
+            if (result?.Success == true && result.Data != null)
+            {
+                SetAuthToken(result.Data.AccessToken);
+                session.AccessToken = result.Data.AccessToken;
+                session.RefreshToken = result.Data.RefreshToken;
+                if (result.Data.User != null) session.User = result.Data.User;
+                _storageService.SaveSession(session);
+                return true;
+            }
+        }
+        catch { }
+
+        return false;
+    }
+
+    private async Task<HttpResponseMessage> SendWithRetryAsync(Func<Task<HttpResponseMessage>> sendFunc, CancellationToken ct = default)
+    {
+        var response = await sendFunc();
+        if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+        {
+            var refreshed = await TryRefreshTokenAsync(ct);
+            if (refreshed)
+            {
+                response = await sendFunc();
+            }
+        }
+        return response;
+    }
+
     public async Task<IReadOnlyList<LibraryGameDto>> GetLibraryAsync(CancellationToken ct = default)
     {
-        var response = await _httpClient.GetAsync("/api/v1/library", ct);
+        var response = await SendWithRetryAsync(() => _httpClient.GetAsync("/api/v1/library", ct), ct);
         var responseString = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
         {
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                throw new UnauthorizedAccessException("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại tài khoản trên Launcher.");
+            }
             throw new Exception($"Không thể tải thư viện game ({response.StatusCode})");
         }
 
@@ -152,11 +204,19 @@ public class ApiService
 
     public async Task<DownloadLinkDto> GetDownloadLinkAsync(Guid gameId, CancellationToken ct = default)
     {
-        var response = await _httpClient.GetAsync($"/api/v1/library/{gameId}/download", ct);
+        var response = await SendWithRetryAsync(() => _httpClient.GetAsync($"/api/v1/library/{gameId}/download", ct), ct);
         var responseString = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
         {
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                throw new UnauthorizedAccessException("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại tài khoản trên Launcher.");
+            }
+            if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
+            {
+                throw new Exception("Tài khoản chưa sở hữu trò chơi này. Vui lòng mua game trên Website trước khi tải.");
+            }
             throw new Exception($"Không thể lấy link tải game ({response.StatusCode})");
         }
 
@@ -171,7 +231,7 @@ public class ApiService
 
     public async Task RemoveFromLibraryAsync(Guid gameId, CancellationToken ct = default)
     {
-        var response = await _httpClient.DeleteAsync($"/api/v1/library/{gameId}", ct);
+        var response = await SendWithRetryAsync(() => _httpClient.DeleteAsync($"/api/v1/library/{gameId}", ct), ct);
         if (!response.IsSuccessStatusCode)
         {
             var responseString = await response.Content.ReadAsStringAsync(ct);

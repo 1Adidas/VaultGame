@@ -54,6 +54,15 @@ export function FloatingAiDock() {
   const [messages, setMessages] = useState<MiniMessage[]>([initialGreeting]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    setMessages((prev) => {
+      if (prev.length === 1 && prev[0].role === "assistant") {
+        return [initialGreeting];
+      }
+      return prev;
+    });
+  }, [locale]);
+
   const quickPrompts = isVi
     ? [
         "Game hành động kịch tính",
@@ -280,7 +289,7 @@ export function FloatingAiDock() {
               <button
                 onClick={() => setIsOpen(false)}
                 className="size-8 flex items-center justify-center text-zinc-300 hover:text-white rounded-xl hover:bg-white/10 transition-colors cursor-pointer"
-                title={isVi ? "Đóng cửa sổ" : "Close window"}
+                title={isVi ? "Đóng cửa sổ" : isZh ? "关闭窗口" : "Close window"}
               >
                 <X className="size-4" />
               </button>
@@ -385,7 +394,9 @@ export function FloatingAiDock() {
                                   )}
                                 </span>
                               ) : (
-                                <span className="text-zinc-400">Mới cập nhật</span>
+                                <span className="text-zinc-400">
+                                  {isVi ? "Mới cập nhật" : isZh ? "最新上架" : "Recently added"}
+                                </span>
                               )}
                             </div>
 

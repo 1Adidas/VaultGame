@@ -444,6 +444,27 @@ public class LibraryService(AppDbContext db, IGoogleDriveService drive) : ILibra
 {
     public async Task<IReadOnlyList<LibraryGameDto>> GetLibraryAsync(Guid userId, CancellationToken ct = default)
     {
+        var isAdmin = await db.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.Role.Name == RoleNames.Admin, ct);
+        if (isAdmin)
+        {
+            var allGameIds = await db.Games.Select(g => g.Id).ToListAsync(ct);
+            var ownedGameIds = await db.UserGames.Where(ug => ug.UserId == userId).Select(ug => ug.GameId).ToListAsync(ct);
+            var missing = allGameIds.Except(ownedGameIds).ToList();
+            if (missing.Any())
+            {
+                foreach (var gId in missing)
+                {
+                    db.UserGames.Add(new UserGame
+                    {
+                        UserId = userId,
+                        GameId = gId,
+                        AcquiredAt = DateTime.UtcNow
+                    });
+                }
+                await db.SaveChangesAsync(ct);
+            }
+        }
+
         return await db.UserGames.AsNoTracking()
             .Include(ug => ug.Game).ThenInclude(g => g.Images)
             .Include(ug => ug.Game).ThenInclude(g => g.Files)
@@ -460,8 +481,22 @@ public class LibraryService(AppDbContext db, IGoogleDriveService drive) : ILibra
 
     public async Task<DownloadLinkDto> GetDownloadLinkAsync(Guid userId, Guid gameId, CancellationToken ct = default)
     {
-        var owned = await db.UserGames.FirstOrDefaultAsync(ug => ug.UserId == userId && ug.GameId == gameId, ct)
-            ?? throw new AppException("NOT_OWNED", "Game not in library", 403);
+        var owned = await db.UserGames.FirstOrDefaultAsync(ug => ug.UserId == userId && ug.GameId == gameId, ct);
+        if (owned == null)
+        {
+            var isAdmin = await db.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.Role.Name == RoleNames.Admin, ct);
+            if (isAdmin)
+            {
+                owned = new UserGame { UserId = userId, GameId = gameId, AcquiredAt = DateTime.UtcNow };
+                db.UserGames.Add(owned);
+                await db.SaveChangesAsync(ct);
+            }
+            else
+            {
+                throw new AppException("NOT_OWNED", "Game not in library", 403);
+            }
+        }
+
         var file = await db.GameFiles.Where(f => f.GameId == gameId && f.IsActive).OrderByDescending(f => f.CreatedAt).FirstOrDefaultAsync(ct)
             ?? throw new AppException("FILE_NOT_FOUND", "No download file available", 404);
 
