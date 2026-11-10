@@ -108,17 +108,37 @@ app.UseMiddleware<ExceptionMiddleware>();
 
 var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
 provider.Mappings[".wasm"] = "application/wasm";
+provider.Mappings[".pck"] = "application/octet-stream";
 provider.Mappings[".data"] = "application/octet-stream";
+provider.Mappings[".pak"] = "application/octet-stream";
+provider.Mappings[".mem"] = "application/octet-stream";
+provider.Mappings[".bin"] = "application/octet-stream";
+provider.Mappings[".unityweb"] = "application/octet-stream";
+provider.Mappings[".br"] = "application/octet-stream";
+provider.Mappings[".gz"] = "application/octet-stream";
 provider.Mappings[".symbols.json"] = "application/json";
+provider.Mappings[".mjs"] = "text/javascript";
+provider.Mappings[".ogg"] = "audio/ogg";
+provider.Mappings[".opus"] = "audio/opus";
 
 app.UseStaticFiles(new StaticFileOptions
 {
     ContentTypeProvider = provider,
+    ServeUnknownFileTypes = true,
+    DefaultContentType = "application/octet-stream",
     OnPrepareResponse = ctx =>
     {
-        ctx.Context.Response.Headers.Append("Access-Control-Allow-Origin", "*");
-        ctx.Context.Response.Headers.Append("Access-Control-Allow-Headers", "*");
-        ctx.Context.Response.Headers.Append("Access-Control-Allow-Methods", "*");
+        ctx.Context.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        ctx.Context.Response.Headers["Access-Control-Allow-Headers"] = "*";
+        ctx.Context.Response.Headers["Access-Control-Allow-Methods"] = "*";
+        ctx.Context.Response.Headers["Cross-Origin-Resource-Policy"] = "cross-origin";
+
+        var reqPath = ctx.Context.Request.Path.Value ?? string.Empty;
+        if (reqPath.Contains("/demo/", StringComparison.OrdinalIgnoreCase))
+        {
+            ctx.Context.Response.Headers["Cross-Origin-Opener-Policy"] = "same-origin";
+            ctx.Context.Response.Headers["Cross-Origin-Embedder-Policy"] = "credentialless";
+        }
     }
 });
 

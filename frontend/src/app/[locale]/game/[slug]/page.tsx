@@ -230,6 +230,43 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
     };
   }, []);
 
+  const playDemo = async () => {
+    try {
+      const { data } = await api.post<ApiResponse<{ historyId: string }>>(`/games/${slug}/demo-play`);
+      const historyId = data.data.historyId;
+      demoHistoryIdRef.current = historyId;
+      startTimeRef.current = Date.now();
+      accumulatedDurationRef.current = 0;
+      isPlayingDemoRef.current = true;
+    } catch (err) {
+      console.error("Failed to record play demo start:", err);
+    }
+  };
+
+  const stopDemo = async () => {
+    setIsPlayingDemo(false);
+    isPlayingDemoRef.current = false;
+    await updateDemoDuration(true);
+    demoHistoryIdRef.current = null;
+  };
+
+  const autoPlayedRef = useRef(false);
+  useEffect(() => {
+    if (!game || autoPlayedRef.current) return;
+    const gObj = game as Record<string, any>;
+    if (!gObj?.demo?.buildUrl) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("autoplay") === "demo") {
+      autoPlayedRef.current = true;
+      params.delete("autoplay");
+      const nextSearch = params.toString();
+      const nextUrl = window.location.pathname + (nextSearch ? `?${nextSearch}` : "") + window.location.hash;
+      window.history.replaceState({}, "", nextUrl);
+      setIsPlayingDemo(true);
+      void playDemo();
+    }
+  }, [game]);
+
   const renderCommentText = (text: string, review: any, repliesList: any[]) => {
     if (!text.includes("@")) return text;
 
@@ -395,26 +432,6 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
       setIsWishlisted(previous);
       alert(isVi ? "Thao tác thất bại. Vui lòng thử lại!" : "Action failed. Please try again!");
     }
-  };
-
-  const playDemo = async () => {
-    try {
-      const { data } = await api.post<ApiResponse<{ historyId: string }>>(`/games/${slug}/demo-play`);
-      const historyId = data.data.historyId;
-      demoHistoryIdRef.current = historyId;
-      startTimeRef.current = Date.now();
-      accumulatedDurationRef.current = 0;
-      isPlayingDemoRef.current = true;
-    } catch (err) {
-      console.error("Failed to record play demo start:", err);
-    }
-  };
-
-  const stopDemo = async () => {
-    setIsPlayingDemo(false);
-    isPlayingDemoRef.current = false;
-    await updateDemoDuration(true);
-    demoHistoryIdRef.current = null;
   };
 
   const submitReview = async (e: React.FormEvent) => {
@@ -789,6 +806,12 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
                       <button
                         type="button"
                         onClick={async () => {
+                          if (typeof window !== "undefined" && window.isSecureContext && !window.crossOriginIsolated) {
+                            const url = new URL(window.location.href);
+                            url.searchParams.set("autoplay", "demo");
+                            window.location.replace(url.toString());
+                            return;
+                          }
                           setIsPlayingDemo(true);
                           await playDemo();
                         }}

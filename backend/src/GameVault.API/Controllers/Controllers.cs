@@ -685,18 +685,17 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
                                 }
                             }
 
-                            var indexFiles = Directory.GetFiles(extractDir, "index.html", SearchOption.AllDirectories);
-                            if (indexFiles.Length > 0)
+                            var entryHtml = ResolveDemoEntryHtml(extractDir);
+                            if (!string.IsNullOrEmpty(entryHtml))
                             {
-                                var wwwrootPath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
-                                var relativePath = indexFiles[0];
-                                if (relativePath.StartsWith(wwwrootPath, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    relativePath = relativePath.Substring(wwwrootPath.Length);
-                                }
+                                var wwwrootPath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"));
+                                var fullEntryPath = Path.GetFullPath(entryHtml);
+                                var relativePath = fullEntryPath.StartsWith(wwwrootPath, StringComparison.OrdinalIgnoreCase)
+                                    ? fullEntryPath.Substring(wwwrootPath.Length)
+                                    : fullEntryPath;
                                 buildUrl = relativePath.Replace('\\', '/');
                                 if (!buildUrl.StartsWith('/')) buildUrl = "/" + buildUrl;
-                                buildPath = indexFiles[0];
+                                buildPath = fullEntryPath;
                             }
                             else
                             {
@@ -1288,12 +1287,18 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
                         try
                         {
                             System.IO.Compression.ZipFile.ExtractToDirectory(destPath, extractDir, overwriteFiles: true);
-                            var indexFiles = Directory.GetFiles(extractDir, "index.html", SearchOption.AllDirectories);
-                            if (indexFiles.Length > 0)
+                            var entryHtml = ResolveDemoEntryHtml(extractDir);
+                            if (!string.IsNullOrEmpty(entryHtml))
                             {
-                                var buildUrl = indexFiles[0].Replace(env.WebRootPath, "").Replace('\\', '/');
+                                var wwwrootPath = Path.GetFullPath(env.WebRootPath);
+                                var fullEntryPath = Path.GetFullPath(entryHtml);
+                                var relativePath = fullEntryPath.StartsWith(wwwrootPath, StringComparison.OrdinalIgnoreCase)
+                                    ? fullEntryPath.Substring(wwwrootPath.Length)
+                                    : fullEntryPath;
+                                var buildUrl = relativePath.Replace('\\', '/');
+                                if (!buildUrl.StartsWith('/')) buildUrl = "/" + buildUrl;
                                 demo.BuildUrl = buildUrl;
-                                demo.BuildPath = indexFiles[0];
+                                demo.BuildPath = fullEntryPath;
                             }
                         }
                         catch (Exception ex) { details.Add($"Failed to extract demo zip: {ex.Message}"); }
@@ -1446,6 +1451,54 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
     public async Task<ActionResult<ApiResponse<IReadOnlyList<AdminGameListDto>>>> GetGames(CancellationToken ct)
         => Ok(ApiResponse<IReadOnlyList<AdminGameListDto>>.Ok(await admin.GetAdminGamesAsync(ct)));
 
+    private static string? ResolveDemoEntryHtml(string extractDir)
+    {
+        if (!Directory.Exists(extractDir)) return null;
+
+        var htmlFiles = Directory.GetFiles(extractDir, "*.html", SearchOption.AllDirectories)
+            .Concat(Directory.GetFiles(extractDir, "*.htm", SearchOption.AllDirectories))
+            .Where(f => !f.Contains("__MACOSX", StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (htmlFiles.Count == 0) return null;
+
+        int GetDepth(string path) => path.Substring(extractDir.Length)
+            .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries)
+            .Length;
+
+        int GetPriority(string path)
+        {
+            var fileName = Path.GetFileName(path);
+            var baseName = Path.GetFileNameWithoutExtension(path);
+            var dir = Path.GetDirectoryName(path) ?? extractDir;
+
+            if (fileName.Equals("index.html", StringComparison.OrdinalIgnoreCase))
+                return 0;
+
+            bool hasMatchingEngineFiles =
+                System.IO.File.Exists(Path.Combine(dir, baseName + ".pck")) ||
+                System.IO.File.Exists(Path.Combine(dir, baseName + ".wasm")) ||
+                System.IO.File.Exists(Path.Combine(dir, baseName + ".js"));
+
+            if (hasMatchingEngineFiles)
+                return 1;
+
+            if (fileName.Equals("game.html", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Equals("play.html", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Equals("main.html", StringComparison.OrdinalIgnoreCase))
+                return 2;
+
+            return 3;
+        }
+
+        return htmlFiles
+            .OrderBy(GetPriority)
+            .ThenBy(GetDepth)
+            .ThenBy(f => f.Length)
+            .FirstOrDefault();
+    }
 }
 
 [ApiController]

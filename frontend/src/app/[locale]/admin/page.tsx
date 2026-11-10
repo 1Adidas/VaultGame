@@ -2190,7 +2190,7 @@ function GamesTab() {
                 <div className="flex items-center justify-between mb-2">
                   <div>
                     <h4 className="text-xs font-semibold text-zinc-200">Bản chơi thử WebGL</h4>
-                    <p className="text-[11px] text-zinc-500 font-mono">ZIP (chứa build WebGL có index.html)</p>
+                    <p className="text-[11px] text-zinc-500 font-mono">ZIP build WebGL (Unity, Godot, HTML5 — index.html hoặc *.html)</p>
                   </div>
                   <span className={`text-[11px] font-medium px-2 py-0.5 rounded-md ${
                     selectedGameForUpload.hasDemo
@@ -3962,7 +3962,7 @@ function HelpTab() {
             </div>
             <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-white/5">
               <span className="font-semibold text-white block mb-0.5">{locale === "vi" ? "3. WebGL Demo (.zip):" : "3. WebGL Demo (.zip):"}</span>
-              <p className="text-zinc-400">{locale === "vi" ? "Tệp nén .zip chứa sản phẩm xuất WebGL (chứa file index.html). Hệ thống tự giải nén để người chơi click 'Chơi thử ngay' trên trình duyệt mà không cần cài đặt." : "ZIP package containing exported WebGL build (index.html). System unzips automatically for instant browser demo plays."}</p>
+              <p className="text-zinc-400">{locale === "vi" ? "Tệp nén .zip chứa sản phẩm xuất WebGL đa engine (Unity, Godot, HTML5 — index.html hoặc *.html). Hệ thống tự giải nén để người chơi click 'Chơi thử ngay' trên trình duyệt mà không cần cài đặt." : "ZIP package containing multi-engine WebGL build (Unity, Godot, HTML5 — index.html or *.html). System unzips automatically for instant browser demo plays."}</p>
             </div>
             <div className="p-2.5 rounded-lg bg-zinc-950/60 border border-white/5">
               <span className="font-semibold text-white block mb-0.5">{locale === "vi" ? "4. Gói Cài Đặt Game (Installer):" : "4. Game Installer:"}</span>
