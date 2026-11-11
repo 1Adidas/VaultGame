@@ -4,7 +4,7 @@ import { use, useState, useEffect, useRef } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useGame } from "@/hooks/useGames";
+import { useGame, useCategories } from "@/hooks/useGames";
 import { api, type ApiResponse } from "@/lib/api/client";
 import { formatPrice, formatDate, formatDateTimeShort, resolveImageUrl as resolveUrl, resolveVideoUrl } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -51,6 +51,7 @@ function CommentAvatar({
   return (
     <img
       src={resolved}
+      referrerPolicy="no-referrer"
       alt=""
       onError={() => setHasError(true)}
       className={`${sizeClass} rounded-full object-cover ring-1 ring-white/10 shrink-0`}
@@ -115,6 +116,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
   const isZh = locale === "zh";
   const router = useRouter();
   const { data: game, isLoading, refetch } = useGame(slug);
+  const { data: categories } = useCategories();
   const { user } = useAuthStore();
   const isAdmin = !!user?.roles?.includes("Admin");
   const prefix = `/${locale}`;
@@ -185,12 +187,15 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
       const payload = JSON.stringify({ durationSeconds: totalSeconds });
 
       if (typeof window !== "undefined" && window.fetch) {
+        const remember = localStorage.getItem("gv_remember") !== "false";
+        const token = remember ? localStorage.getItem("gv_access") : sessionStorage.getItem("gv_access");
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
         await window.fetch(url, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: (api.defaults.headers.common["Authorization"] as string) || ""
-          },
+          headers,
           body: payload,
           keepalive: true
         });
@@ -541,6 +546,10 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
   const totalCommentsCount = reviewItems.filter((r: any) => !r.parentId).length;
 
   const activeImage = images[selectedImageIndex] ?? images[0];
+  const primaryCategoryName = typeof g.categoryName === "string" ? g.categoryName.split(",")[0]?.trim() : "";
+  const resolvedCategoryId =
+    (g.categoryId as string | undefined) ||
+    categories?.find((c) => c.name.toLowerCase() === primaryCategoryName.toLowerCase())?.id;
 
   return (
     <div className="min-h-screen pb-24 space-y-10">
@@ -558,7 +567,10 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
           {g.categoryName && (
             <>
               <ChevronRight className="size-3 text-zinc-600" />
-              <Link href={`/${locale}/games?category=${g.categoryId || ""}`} className="hover:text-white transition-colors">
+              <Link
+                href={resolvedCategoryId ? `/${locale}/games?categoryId=${resolvedCategoryId}` : `/${locale}/games`}
+                className="hover:text-white transition-colors"
+              >
                 {g.categoryName as string}
               </Link>
             </>
@@ -575,7 +587,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
           <div className="absolute inset-0 pointer-events-none select-none overflow-hidden">
             <img
               src={resolveUrl(images[0].url)}
-              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
               alt=""
               className="w-full h-full object-cover filter blur-3xl opacity-20 scale-125 transform-gpu"
             />
@@ -671,7 +683,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
                 {activeImage?.url ? (
                   <img
                     src={resolveUrl(activeImage.url)}
-                    crossOrigin="anonymous"
+                    referrerPolicy="no-referrer"
                     alt={g.title as string}
                     className="w-full h-full object-cover transition duration-300"
                   />
@@ -738,7 +750,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
                       >
                         <img
                           src={resolveUrl(img.url)}
-                          crossOrigin="anonymous"
+                          referrerPolicy="no-referrer"
                           alt={`Screenshot ${i + 1}`}
                           className="w-full h-full object-cover"
                         />
@@ -795,7 +807,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
                     {images[0]?.url && (
                       <img
                         src={resolveUrl(images[0].url)}
-                        crossOrigin="anonymous"
+                        referrerPolicy="no-referrer"
                         alt="Demo background"
                         className="absolute inset-0 w-full h-full object-cover opacity-15 filter blur-sm transition duration-500 group-hover:scale-105"
                       />

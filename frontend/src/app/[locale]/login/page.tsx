@@ -232,29 +232,37 @@ export default function LoginPage() {
     }
   }, [loginWithGoogle, locale, router, redirectUrl, isVi, isZh]);
 
+  const envGoogleClientId = (process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "").trim();
+  const isGoogleAuthConfigured =
+    Boolean(envGoogleClientId) && !/^your([_\s]|$)/i.test(envGoogleClientId);
+
   const isGoogleInitialized = useRef(false);
 
   const initGoogle = useCallback(() => {
+    if (!isGoogleAuthConfigured) return;
     const google = (window as any).google;
     if (google && !isGoogleInitialized.current) {
       const buttonWidth = typeof window !== "undefined" ? Math.min(360, window.innerWidth - 64).toString() : "360";
       google.accounts.id.initialize({
-        client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "395896003561-qamgn8n2ja2ijrfndj6947629fsaqacc.apps.googleusercontent.com",
+        client_id: envGoogleClientId,
         callback: handleGoogleResponse,
       });
-      google.accounts.id.renderButton(
-        document.getElementById("google-signin-btn"),
-        { theme: "outline", size: "large", width: buttonWidth }
-      );
-      isGoogleInitialized.current = true;
+      const btnContainer = document.getElementById("google-signin-btn");
+      if (btnContainer) {
+        google.accounts.id.renderButton(
+          btnContainer,
+          { theme: "outline", size: "large", width: buttonWidth }
+        );
+        isGoogleInitialized.current = true;
+      }
     }
-  }, [handleGoogleResponse]);
+  }, [envGoogleClientId, isGoogleAuthConfigured, handleGoogleResponse]);
 
   useEffect(() => {
-    if ((window as any).google) {
+    if (isGoogleAuthConfigured && (window as any).google) {
       initGoogle();
     }
-  }, [initGoogle]);
+  }, [isGoogleAuthConfigured, initGoogle]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -282,11 +290,13 @@ export default function LoginPage() {
 
   return (
     <>
-      <Script
-        src="https://accounts.google.com/gsi/client"
-        strategy="afterInteractive"
-        onLoad={initGoogle}
-      />
+      {isGoogleAuthConfigured && (
+        <Script
+          src="https://accounts.google.com/gsi/client"
+          strategy="afterInteractive"
+          onLoad={initGoogle}
+        />
+      )}
 
       <div className="min-h-[80vh] flex items-center justify-center py-12 px-4">
         <div className="w-full max-w-md space-y-8">
@@ -394,20 +404,24 @@ export default function LoginPage() {
               </div>
             </form>
 
-            {/* Divider */}
-            <div className="relative my-4 flex items-center justify-center">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-white/[0.08]" />
-              </div>
-              <span className="relative bg-[#0E131E] px-3 text-[10px] uppercase font-bold tracking-wider text-zinc-500 select-none">
-                {isVi ? "Hoặc" : isZh ? "或者" : "Or"}
-              </span>
-            </div>
+            {isGoogleAuthConfigured && (
+              <>
+                {/* Divider */}
+                <div className="relative my-4 flex items-center justify-center">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t border-white/[0.08]" />
+                  </div>
+                  <span className="relative bg-[#0E131E] px-3 text-[10px] uppercase font-bold tracking-wider text-zinc-500 select-none">
+                    {isVi ? "Hoặc" : isZh ? "或者" : "Or"}
+                  </span>
+                </div>
 
-            {/* Google OAuth container */}
-            <div className="flex justify-center w-full min-h-[44px]">
-              <div id="google-signin-btn" />
-            </div>
+                {/* Google OAuth container */}
+                <div className="flex justify-center w-full min-h-[44px]">
+                  <div id="google-signin-btn" />
+                </div>
+              </>
+            )}
 
             {/* Switch to Register */}
             <div className="border-t border-white/[0.06] pt-5 text-center text-xs text-zinc-400">

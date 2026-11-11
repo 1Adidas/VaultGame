@@ -42,10 +42,10 @@ export default function SupportHubPage() {
           ? "WebGL 网页试玩版是如何运行的？"
           : "How does the WebGL Demo work?",
       a: isVi 
-        ? "Game Vault tích hợp công nghệ Unity WebGL trực tiếp trên trình duyệt. Bạn có thể chơi thử trò chơi ngay trên trang chi tiết mà không cần tải hay cài đặt bất kỳ file nào." 
+        ? "Game Vault tích hợp công nghệ WebGL đa nền tảng (Unity, Godot, HTML5) trực tiếp trên trình duyệt. Bạn có thể chơi thử trò chơi ngay trên trang chi tiết mà không cần tải hay cài đặt bất kỳ file nào." 
         : isZh
-          ? "Game Vault 直接在浏览器中集成了 Unity WebGL 技术。您可以在游戏详情页直接免下载试玩，无需安装任何额外文件。"
-          : "Game Vault embeds Unity WebGL directly in your browser. You can play game demos right on the game page without downloading or installing anything."
+          ? "Game Vault 直接在浏览器中集成了多引擎 WebGL 技术（Unity、Godot、HTML5）。您可以在游戏详情页直接免下载试玩，无需安装任何额外文件。"
+          : "Game Vault embeds multi-engine WebGL (Unity, Godot, HTML5) directly in your browser. You can play game demos right on the game page without downloading or installing anything."
     },
     {
       q: isVi

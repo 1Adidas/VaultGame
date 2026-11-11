@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useLocale } from "next-intl";
 import { useAuthStore } from "@/lib/auth/store";
@@ -37,16 +37,30 @@ interface AppSidebarProps {
 export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
   const locale = useLocale();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { user } = useAuthStore();
   const prefix = `/${locale}`;
   const isVi = locale === "vi";
   const isZh = locale === "zh";
+
+  const isGamesPath = pathname === `${prefix}/games`;
+  const hasDemoParam = searchParams.get("hasDemo") === "true";
+  const discountedParam = searchParams.get("discounted") === "true";
+  const categoryIdParam = searchParams.get("categoryId");
 
   const { data: categories } = useCategories();
   const { data: allGamesData } = useGames({ pageSize: 50 });
 
   const [rolledGame, setRolledGame] = useState<GameListItem | null>(null);
   const [isRolling, setIsRolling] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const effectiveUser = mounted ? user : null;
+  const visibleCategories = mounted ? categories : undefined;
 
   const handleRollRoulette = () => {
     const pool = allGamesData?.games;
@@ -153,10 +167,10 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
             <Link
               href={`${prefix}/games`}
               onClick={onClose}
-              className={navItemClass(pathname === `${prefix}/games` && !pathname.includes("?"))}
+              className={navItemClass(isGamesPath && !hasDemoParam && !discountedParam && !categoryIdParam)}
             >
               <div className="flex items-center gap-2.5">
-                <Layers className={iconClass(pathname === `${prefix}/games` && !pathname.includes("?"))} />
+                <Layers className={iconClass(isGamesPath && !hasDemoParam && !discountedParam && !categoryIdParam)} />
                 <span>{isVi ? "Tất Cả Trò Chơi" : isZh ? "全部游戏库" : "All Games"}</span>
               </div>
             </Link>
@@ -164,10 +178,10 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
             <Link
               href={`${prefix}/games?hasDemo=true`}
               onClick={onClose}
-              className={navItemClass(pathname.includes("hasDemo=true"))}
+              className={navItemClass(isGamesPath && hasDemoParam)}
             >
               <div className="flex items-center gap-2.5">
-                <Play className={iconClass(pathname.includes("hasDemo=true"))} />
+                <Play className={iconClass(isGamesPath && hasDemoParam)} />
                 <span>{isVi ? "Chơi Thử WebGL" : isZh ? "WebGL 试玩" : "Instant Demos"}</span>
               </div>
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
@@ -178,10 +192,10 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
             <Link
               href={`${prefix}/games?discounted=true`}
               onClick={onClose}
-              className={navItemClass(pathname.includes("discounted=true"))}
+              className={navItemClass(isGamesPath && discountedParam)}
             >
               <div className="flex items-center gap-2.5">
-                <Tag className={iconClass(pathname.includes("discounted=true"))} />
+                <Tag className={iconClass(isGamesPath && discountedParam)} />
                 <span>{isVi ? "Ưu Đãi Tuần Này" : isZh ? "本周特惠" : "Special Deals"}</span>
               </div>
               <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-rose-500/20 text-rose-400 border border-rose-500/30">
@@ -206,13 +220,13 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
           </div>
 
           {/* Section 2: Personal Vault (Hidden for Admin) */}
-          {!user?.roles?.includes("Admin") && (
+          {!effectiveUser?.roles?.includes("Admin") && (
             <div className="space-y-1">
               <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
                 {isVi ? "Bộ Sưu Tập Của Bạn" : isZh ? "个人空间" : "My Vault"}
               </span>
 
-              {user ? (
+              {effectiveUser ? (
                 <>
                   <Link
                     href={`${prefix}/library`}
@@ -269,7 +283,7 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
           )}
 
           {/* Section 3: Admin Console (if Admin) */}
-          {user?.roles?.includes("Admin") && (
+          {effectiveUser?.roles?.includes("Admin") && (
             <div className="space-y-1">
               <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-violet-400">
                 {isVi ? "Quản Trị Hệ Thống" : isZh ? "系统管理" : "Administration"}
@@ -296,15 +310,15 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
           )}
 
           {/* Section 4: Hot Categories List */}
-          {categories && categories.length > 0 && (
+          {visibleCategories && visibleCategories.length > 0 && (
             <div className="space-y-1">
               <span className="px-3 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
                 {isVi ? "Thể Loại Nổi Bật" : isZh ? "热门分类" : "Top Genres"}
               </span>
 
               <div className="space-y-0.5 pt-1">
-                {categories.slice(0, 6).map((cat) => {
-                  const catActive = pathname.includes(`categoryId=${cat.id}`);
+                {visibleCategories.slice(0, 6).map((cat) => {
+                  const catActive = isGamesPath && categoryIdParam === String(cat.id);
                   return (
                     <Link
                       key={cat.id}
@@ -358,6 +372,7 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
                     {rolledGame.primaryImageUrl ? (
                       <img
                         src={resolveImageUrl(rolledGame.primaryImageUrl)}
+                        referrerPolicy="no-referrer"
                         alt={rolledGame.title}
                         className="size-full object-cover"
                       />

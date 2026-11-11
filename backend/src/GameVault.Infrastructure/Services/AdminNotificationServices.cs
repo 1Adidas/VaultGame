@@ -153,6 +153,10 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
         game.ReleaseDate = request.ReleaseDate; game.Price = request.Price;
         game.DiscountPrice = request.DiscountPrice; game.MinAge = request.MinAge;
         game.IsFeatured = request.IsFeatured; game.Status = request.Status;
+        if (request.Status == GameStatus.Published && game.PublishedAt is null)
+        {
+            game.PublishedAt = DateTime.UtcNow;
+        }
         game.SystemRequirements = request.SystemRequirements; game.UpdatedAt = DateTime.UtcNow;
 
         if (request.CategoryIds is not null)
@@ -308,16 +312,22 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
         await db.SaveChangesAsync(ct);
 
         // 7. Xóa thư mục chứa tệp vật lý của game trong wwwroot
-        var gameFolder = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", id.ToString());
-        if (Directory.Exists(gameFolder))
+        var uploadsRoot = GoogleDriveService.ResolveLocalUploadsRoot();
+        var gameFolders = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { id.ToString() };
+        if (!string.IsNullOrWhiteSpace(game.Slug)) gameFolders.Add(game.Slug);
+        foreach (var folder in gameFolders)
         {
-            try
+            var physicalFolder = Path.Combine(uploadsRoot, "games", folder);
+            if (Directory.Exists(physicalFolder))
             {
-                Directory.Delete(gameFolder, recursive: true);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Failed to delete physical game folder: {ex.Message}");
+                try
+                {
+                    Directory.Delete(physicalFolder, recursive: true);
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Failed to delete physical game folder {folder}: {ex.Message}");
+                }
             }
         }
 

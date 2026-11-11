@@ -7,6 +7,7 @@ export const api = axios.create({ baseURL: `${API_URL}/api/v1` });
 let accessToken: string | null = null;
 let refreshToken: string | null = null;
 let rememberSession = true;
+let refreshPromise: Promise<string | null> | null = null;
 
 export const setTokens = (access: string | null, refresh: string | null, remember: boolean = true) => {
   accessToken = access;
@@ -76,13 +77,44 @@ api.interceptors.response.use(
   (r) => r,
   async (error) => {
     const original = error.config;
-    if (error.response?.status === 401 && refreshToken && !original._retry) {
+    const requestUrl = String(original?.url ?? "");
+    const isAuthAttempt =
+      requestUrl.includes("/auth/login") ||
+      requestUrl.includes("/auth/register") ||
+      requestUrl.includes("/auth/google") ||
+      requestUrl.includes("/auth/refresh");
+
+    if (error.response?.status === 401 && refreshToken && !original?._retry && !isAuthAttempt) {
       original._retry = true;
       try {
-        const { data } = await axios.post(`${API_URL}/api/v1/auth/refresh`, { refreshToken });
-        setTokens(data.data.accessToken, data.data.refreshToken, rememberSession);
-        original.headers.Authorization = `Bearer ${data.data.accessToken}`;
-        return api(original);
+        if (!refreshPromise) {
+          refreshPromise = axios
+            .post(`${API_URL}/api/v1/auth/refresh`, { refreshToken })
+            .then(({ data }) => {
+              const newAccess = data?.data?.accessToken ?? null;
+              const newRefresh = data?.data?.refreshToken ?? null;
+              if (newAccess && newRefresh) {
+                setTokens(newAccess, newRefresh, rememberSession);
+                return newAccess as string;
+              }
+              setTokens(null, null);
+              return null;
+            })
+            .catch(() => {
+              setTokens(null, null);
+              return null;
+            })
+            .finally(() => {
+              refreshPromise = null;
+            });
+        }
+
+        const nextToken = await refreshPromise;
+        if (nextToken) {
+          original.headers = original.headers ?? {};
+          original.headers.Authorization = `Bearer ${nextToken}`;
+          return api(original);
+        }
       } catch {
         setTokens(null, null);
       }

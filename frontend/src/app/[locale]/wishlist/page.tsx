@@ -16,14 +16,14 @@ export default function WishlistPage() {
   const isZh = locale === "zh";
   const { data, isLoading, refetch } = useWishlist();
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, isHydrated } = useAuthStore();
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? (localStorage.getItem("gv_access") || sessionStorage.getItem("gv_access")) : null;
-    if (!token && !user) {
+    if (!isHydrated) return;
+    if (!user) {
       router.replace(`/${locale}/login`);
     }
-  }, [user, locale, router]);
+  }, [user, isHydrated, locale, router]);
 
   const removeFromWishlist = async (gameId: string) => {
     try {
@@ -34,7 +34,7 @@ export default function WishlistPage() {
     }
   };
 
-  if (isLoading) {
+  if (!isHydrated || !user || isLoading) {
     return (
       <div className="w-full space-y-8 animate-pulse">
         <div className="h-10 w-64 rounded-xl bg-[#0E131E]" />
@@ -117,6 +117,7 @@ export default function WishlistPage() {
                     {imageUrl ? (
                       <img
                         src={imageUrl}
+                        referrerPolicy="no-referrer"
                         alt={game.title}
                         className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />

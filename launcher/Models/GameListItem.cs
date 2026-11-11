@@ -89,13 +89,24 @@ public class GameListItem : INotifyPropertyChanged
         }
     }
 
+    private static readonly SolidColorBrush DownloadingBrush = CreateFrozenBrush(99, 102, 241); // Indigo
+    private static readonly SolidColorBrush InstalledBrush = CreateFrozenBrush(16, 185, 129);   // Green
+    private static readonly SolidColorBrush NotInstalledBrush = CreateFrozenBrush(148, 163, 184); // Gray
+
+    private static SolidColorBrush CreateFrozenBrush(byte r, byte g, byte b)
+    {
+        var brush = new SolidColorBrush(Color.FromRgb(r, g, b));
+        brush.Freeze();
+        return brush;
+    }
+
     public Brush StatusColorBrush
     {
         get
         {
-            if (IsDownloading) return new SolidColorBrush(Color.FromRgb(99, 102, 241)); // Indigo
-            if (IsInstalled) return new SolidColorBrush(Color.FromRgb(16, 185, 129)); // Green
-            return new SolidColorBrush(Color.FromRgb(148, 163, 184)); // Gray
+            if (IsDownloading) return DownloadingBrush;
+            if (IsInstalled) return InstalledBrush;
+            return NotInstalledBrush;
         }
     }
 

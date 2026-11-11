@@ -28,7 +28,14 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
   const [showDropdown, setShowDropdown] = useState(false);
   const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
   const [avatarError, setAvatarError] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const isAdminPage = pathname.includes("/admin");
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const effectiveUser = mounted ? user : null;
 
   // OmniSearch State
   const [searchQuery, setSearchQuery] = useState("");
@@ -137,11 +144,11 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
   };
 
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUser) return;
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 20000);
     return () => clearInterval(interval);
-  }, [user]);
+  }, [effectiveUser]);
 
   const markAsRead = async (id: string) => {
     try {
@@ -276,6 +283,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
                         {game.primaryImageUrl && (
                           <img
                             src={resolveImageUrl(game.primaryImageUrl)}
+                            referrerPolicy="no-referrer"
                             alt={game.title}
                             className="size-full object-cover group-hover:scale-105 transition-transform"
                           />
@@ -376,7 +384,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
           )}
 
           {/* Notifications Center */}
-          {user && (
+          {effectiveUser && (
             <div className="relative">
               <button
                 onClick={() => setShowDropdown(!showDropdown)}
@@ -460,16 +468,16 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
           )}
 
           {/* User Profile Capsule or Login */}
-          {user ? (
+          {effectiveUser ? (
             <div className="flex items-center gap-2 pl-1 border-l border-white/[0.06]">
               <Link
                 href={`${prefix}/profile`}
                 className="flex items-center gap-2 p-1 pr-2 rounded-full hover:bg-white/[0.06] transition"
               >
-                {user.avatarUrl && !avatarError ? (
+                {effectiveUser.avatarUrl && !avatarError ? (
                   <img
-                    src={resolveImageUrl(user.avatarUrl)}
-                    alt={user.fullName}
+                    src={resolveImageUrl(effectiveUser.avatarUrl)}
+                    alt={effectiveUser.fullName}
                     className="size-7 rounded-full object-cover border border-white/10"
                     referrerPolicy="no-referrer"
                     onError={() => setAvatarError(true)}
@@ -478,7 +486,7 @@ export function Navbar({ onToggleSidebar }: NavbarProps) {
                   <UserCircle className="size-6 text-zinc-400" />
                 )}
                 <span className="text-xs font-semibold text-zinc-200 hidden sm:inline truncate max-w-[110px]">
-                  {user.fullName || "Gamer"}
+                  {effectiveUser.fullName || "Gamer"}
                 </span>
               </Link>
               <button

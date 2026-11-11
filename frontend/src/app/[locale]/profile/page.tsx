@@ -720,6 +720,7 @@ function ProfileContent() {
                           {game.coverUrl ? (
                             <img
                               src={resolveUrl(game.coverUrl) ?? ""}
+                              referrerPolicy="no-referrer"
                               alt={game.title}
                               className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
                             />
@@ -778,6 +779,7 @@ function ProfileContent() {
                         {game.coverUrl ? (
                           <img
                             src={resolveUrl(game.coverUrl) ?? ""}
+                            referrerPolicy="no-referrer"
                             alt={game.title}
                             className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />

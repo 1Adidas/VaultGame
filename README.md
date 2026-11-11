@@ -61,6 +61,7 @@ VaultGame/
 │   └── GameVault.sln
 │
 ├── frontend/                             # Frontend Next.js 15 (App Router + Turbopack)
+│   ├── public/download/                  # Tệp GameVault-Launcher.exe đóng gói sẵn
 │   ├── src/
 │   │   ├── app/[locale]/                 # Routing đa ngôn ngữ (vi / en / zh)
 │   │   │   ├── admin/                    # Trang quản trị dành cho Admin
@@ -72,13 +73,20 @@ VaultGame/
 │   ├── .env.example                      # File mẫu biến môi trường Frontend
 │   └── package.json
 │
+├── launcher/                             # GameVault Desktop Launcher (.NET 9 WPF + DRM)
+│   ├── Services/                         # ApiService, GameManagerService, StorageService
+│   ├── Resources/GameVault_DRM/          # Mã nguồn DRM kiểm tra tiến trình Launcher
+│   └── GameVault.Launcher.csproj
+│
 ├── database/                             # Kịch bản cơ sở dữ liệu
 │   ├── schema/001_init.sql               # File DDL tạo toàn bộ bảng và quan hệ mới nhất
 │   └── seeds/002_seed_data.sql           # File nạp dữ liệu mẫu mới nhất (Game, User, Review...)
 │
 ├── pull_db.ps1                           # Script 1-Click: Tự động khởi động DB & nạp dữ liệu mẫu
 ├── push_db.ps1                           # Script đóng gói dữ liệu DB mới nhất lên schema & seed
-├── run.ps1                               # Script 1-Click: Tự động khởi chạy cả Backend & Frontend
+├── run.ps1                               # Script 1-Click: Khởi chạy Backend & Frontend (hỗ trợ Ngrok)
+├── run_all.ps1                           # Script 1-Click: Khởi chạy Docker DB + Backend + Frontend + Launcher
+├── run_launcher.ps1                      # Script 1-Click: Build và chạy GameVault Launcher (.exe)
 ├── docker-compose.yml                    # Cấu hình MySQL 8.0 Container
 └── README.md                             # Hướng dẫn chi tiết này
 ```
@@ -113,11 +121,20 @@ Nếu bạn sử dụng **Windows** và muốn chạy ngay lập tức mà khôn
    Copy-Item frontend\.env.example frontend\.env.local
    ```
 
-3. **Khởi chạy đồng thời cả Backend và Frontend**:
-   ```powershell
-   .\run.ps1
-   ```
-   *Script sẽ tự động phát hiện IP Wi-Fi, khởi chạy Backend (port 5000), Frontend (port 3000) và mở link truy cập `http://localhost:3000/vi`.*
+3. **Khởi chạy đồng thời cả hệ thống**:
+   - **Chỉ Web (Backend + Frontend, có tùy chọn Ngrok)**:
+     ```powershell
+     .\run.ps1
+     ```
+   - **Toàn bộ hệ thống (MySQL + Backend + Frontend + Desktop Launcher)**:
+     ```powershell
+     .\run_all.ps1
+     ```
+   - **Chỉ chạy Desktop Launcher**:
+     ```powershell
+     .\run_launcher.ps1
+     ```
+   *Mở trình duyệt truy cập `http://localhost:3000/vi`. Khi tải game qua Desktop Launcher, người dùng chọn thư mục/ổ đĩa đích trên hộp thoại (mặc định gợi ý `D:\` hoặc `%LocalAppData%\GameVault\Games`), game sẽ được giải nén vào `<Thư_mục_đã_chọn>\<slug-game>\`.*
 
 ---
 

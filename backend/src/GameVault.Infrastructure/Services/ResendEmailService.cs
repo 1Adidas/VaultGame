@@ -14,7 +14,9 @@ public class ResendEmailService(IConfiguration config) : IEmailService
         var fromEmail = config["Resend:FromEmail"] ?? "noreply@gamevault.com";
         var fromName = config["Resend:FromName"] ?? "GameVault";
 
-        if (string.IsNullOrWhiteSpace(apiKey) || apiKey == "YOUR_RESEND_KEY")
+        if (string.IsNullOrWhiteSpace(apiKey) ||
+            apiKey.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase) ||
+            apiKey.Contains("your_resend", StringComparison.OrdinalIgnoreCase))
         {
             Console.WriteLine($"📧 [EMAIL SKIP] Resend API key not configured. Would send to: {to} | Subject: {subject}");
             return;

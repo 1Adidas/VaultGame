@@ -51,21 +51,50 @@ $apiUrl = "http://$($wifiIp):5000"
 $webUrl = "http://$($wifiIp):3000"
 
 if ($isNgrok) {
-    $staticDomain = "slam-evacuee-pentagram.ngrok-free.dev"
-    Write-Host " -> Starting Ngrok tunnel for Frontend (port 3000) in background..." -ForegroundColor Green
-    $ngrokJob = Start-Job -Name "gv-ngrok" -ArgumentList $staticDomain -ScriptBlock {
-        param($domain)
-        ngrok http --url=$domain 3000 2>&1
+    $staticDomain = $env:NGROK_DOMAIN
+    if ([string]::IsNullOrWhiteSpace($staticDomain)) {
+        $staticDomain = Read-Host "Nhap Ngrok static domain (de trong neu dung URL ngau nhien cua Ngrok)"
     }
-    
-    # Wait for Ngrok agent to start
-    Write-Host " -> Waiting for Ngrok tunnel to initialize..." -ForegroundColor Yellow
-    Start-Sleep -Seconds 3
-    
-    $apiUrl = "https://$staticDomain"
-    $webUrl = "https://$staticDomain"
+
+    Write-Host " -> Starting Ngrok tunnel for Frontend (port 3000) in background..." -ForegroundColor Green
+    if (-not [string]::IsNullOrWhiteSpace($staticDomain)) {
+        $ngrokJob = Start-Job -Name "gv-ngrok" -ArgumentList $staticDomain.Trim() -ScriptBlock {
+            param($domain)
+            ngrok http --url=$domain 3000 2>&1
+        }
+        Start-Sleep -Seconds 3
+        $apiUrl = "https://$($staticDomain.Trim())"
+        $webUrl = "https://$($staticDomain.Trim())"
+    } else {
+        $ngrokJob = Start-Job -Name "gv-ngrok" -ScriptBlock {
+            ngrok http 3000 2>&1
+        }
+        Write-Host " -> Waiting for Ngrok tunnel to initialize..." -ForegroundColor Yellow
+        Start-Sleep -Seconds 4
+        try {
+            $tunnels = Invoke-RestMethod -Uri "http://127.0.0.1:4040/api/tunnels" -TimeoutSec 5
+            $httpsTunnel = $tunnels.tunnels | Where-Object { $_.public_url -like "https://*" } | Select-Object -First 1
+            if ($httpsTunnel) {
+                $apiUrl = $httpsTunnel.public_url.TrimEnd('/')
+                $webUrl = $httpsTunnel.public_url.TrimEnd('/')
+            } else {
+                Write-Warning "Khong doc duoc public_url tu Ngrok API (http://127.0.0.1:4040). Tam giu URL LAN."
+            }
+        } catch {
+            Write-Warning "Khong the ket noi Ngrok local API (4040). Hay kiem tra 'ngrok config check' hoac token Ngrok."
+        }
+    }
+
     Write-Host " -> [Ngrok Proxy] Both Frontend and Backend (proxied) will use: $webUrl" -ForegroundColor Green
     Write-Host " -> [Webhook SePay] Please set your webhook URL in SePay to: $apiUrl/api/v1/payments/webhooks/sepay" -ForegroundColor Cyan
+}
+
+# Warn if frontend/.env.local overrides NEXT_PUBLIC_API_URL from .env.development
+if (Test-Path "frontend\.env.local") {
+    $localEnv = Get-Content "frontend\.env.local" -Raw -ErrorAction SilentlyContinue
+    if ($localEnv -match "(?m)^\s*NEXT_PUBLIC_API_URL=") {
+        Write-Warning "frontend/.env.local dang chua NEXT_PUBLIC_API_URL (uu tien cao hon .env.development)."
+    }
 }
 
 # Update frontend/.env.development

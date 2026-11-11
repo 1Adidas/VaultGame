@@ -13,7 +13,6 @@ public class JwtTokenService(IConfiguration config) : IJwtTokenService
 {
     public string GenerateAccessToken(UserDto user)
     {
-        Console.WriteLine($"JWT Secret = {config["JWT:Secret"]}");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(config["JWT:Secret"]!));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
         var claims = new List<Claim>

@@ -83,6 +83,8 @@ public class InstalledGameMetadata
     public DateTime InstalledAt { get; set; } = DateTime.UtcNow;
 }
 
+public class ApiSessionExpiredException(string message) : Exception(message);
+
 public class AppSession
 {
     public string ApiUrl { get; set; } = "http://127.0.0.1:5000";

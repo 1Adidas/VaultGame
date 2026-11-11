@@ -406,36 +406,50 @@ public static class DependencyInjection
             await db.SaveChangesAsync();
         }
 
-        // 11. Self-healing for Unity WebGL Demos: Auto-extract demo zip files if missing
+        // 11. Self-healing for Unity/WebGL Demos: Auto-extract demo zip files if target entry HTML is missing
         try
         {
+            var uploadsRoot = GoogleDriveService.ResolveLocalUploadsRoot();
+            var wwwrootRoot = Directory.GetParent(uploadsRoot)?.FullName ?? Directory.GetCurrentDirectory();
             var demos = await db.UnityDemos.ToListAsync();
             foreach (var d in demos)
             {
                 if (string.IsNullOrEmpty(d.BuildUrl) || !d.BuildUrl.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                var extractDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", d.GameId.ToString(), "demo", "extracted");
-                var buildDir = Path.Combine(extractDir, "Build");
+                var targetEntryPath = Path.Combine(wwwrootRoot, d.BuildUrl.TrimStart('/').Replace('/', Path.DirectorySeparatorChar));
+                if (System.IO.File.Exists(targetEntryPath))
+                    continue;
 
-                if (!Directory.Exists(extractDir) || !Directory.Exists(buildDir) || !System.IO.File.Exists(Path.Combine(extractDir, "index.html")))
+                var candidateFolders = new List<string>();
+                var urlParts = d.BuildUrl.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                if (urlParts.Length >= 3 &&
+                    urlParts[0].Equals("uploads", StringComparison.OrdinalIgnoreCase) &&
+                    urlParts[1].Equals("games", StringComparison.OrdinalIgnoreCase))
                 {
-                    var demoDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", d.GameId.ToString(), "demo");
-                    if (Directory.Exists(demoDir))
-                    {
-                        var zipFiles = Directory.GetFiles(demoDir, "*.zip");
-                        if (zipFiles.Length > 0)
-                        {
-                            Console.WriteLine($"Auto-extracting demo zip for Game {d.GameId}: {zipFiles[0]}");
-                            if (Directory.Exists(extractDir))
-                            {
-                                try { Directory.Delete(extractDir, true); } catch {}
-                            }
-                            Directory.CreateDirectory(extractDir);
+                    candidateFolders.Add(urlParts[2]);
+                }
+                candidateFolders.Add(d.GameId.ToString());
 
-                            ZipFile.ExtractToDirectory(zipFiles[0], extractDir, overwriteFiles: true);
-                            Console.WriteLine($"Successfully extracted demo zip for Game {d.GameId}");
+                foreach (var folder in candidateFolders.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    var demoDir = Path.Combine(uploadsRoot, "games", folder, "demo");
+                    if (!Directory.Exists(demoDir)) continue;
+
+                    var zipFiles = Directory.GetFiles(demoDir, "*.zip");
+                    if (zipFiles.Length > 0)
+                    {
+                        var extractDir = Path.Combine(demoDir, "extracted");
+                        Console.WriteLine($"Auto-extracting demo zip for Game {d.GameId}: {zipFiles[0]}");
+                        if (Directory.Exists(extractDir))
+                        {
+                            try { Directory.Delete(extractDir, true); } catch {}
                         }
+                        Directory.CreateDirectory(extractDir);
+
+                        ZipFile.ExtractToDirectory(zipFiles[0], extractDir, overwriteFiles: true);
+                        Console.WriteLine($"Successfully extracted demo zip for Game {d.GameId}");
+                        break;
                     }
                 }
             }

@@ -230,18 +230,40 @@ public class OrderService(AppDbContext db, IEmailService email, IConfiguration c
 
 public class SePaySimulatorService(IConfiguration config)
 {
+    private string GetConfigOrFallback(string key, string fallback)
+    {
+        var value = config[key];
+        if (string.IsNullOrWhiteSpace(value)
+            || value.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("YOUR ", StringComparison.OrdinalIgnoreCase))
+            return fallback;
+        return value.Trim();
+    }
+
+    private string? GetConfiguredWebhookSecret()
+    {
+        var secret = config["SePay:WebhookSecret"];
+        if (string.IsNullOrWhiteSpace(secret)
+            || secret.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase)
+            || secret.StartsWith("YOUR ", StringComparison.OrdinalIgnoreCase))
+            return null;
+        return secret.Trim();
+    }
+
+    public bool IsWebhookSecretConfigured => GetConfiguredWebhookSecret() is not null;
+
     public string BuildQrContent(string orderCode, decimal amount)
     {
-        var bank = config["SePay:BankCode"] ?? "970422";
-        var account = config["SePay:AccountNumber"] ?? "0123456789";
+        var bank = GetConfigOrFallback("SePay:BankCode", "970422");
+        var account = GetConfigOrFallback("SePay:AccountNumber", "0123456789");
         return $"{bank}|{account}|{(long)amount}|{orderCode}";
     }
 
     public string BuildQrImageUrl(string orderCode, decimal amount)
     {
-        var bank = config["SePay:BankCode"] ?? "970422";
-        var account = config["SePay:AccountNumber"] ?? "0123456789";
-        var accountName = config["SePay:AccountName"] ?? "GAME VAULT";
+        var bank = GetConfigOrFallback("SePay:BankCode", "970422");
+        var account = GetConfigOrFallback("SePay:AccountNumber", "0123456789");
+        var accountName = GetConfigOrFallback("SePay:AccountName", "GAME VAULT");
         return $"https://img.vietqr.io/image/{bank}-{account}-qr_only.png?amount={(long)amount}&addInfo={orderCode}&accountName={Uri.EscapeDataString(accountName)}";
     }
 
@@ -255,7 +277,8 @@ public class SePaySimulatorService(IConfiguration config)
 
     public string ComputeSignature(string transactionId, string orderCode, decimal amount, long timestamp)
     {
-        var secret = config["SePay:WebhookSecret"] ?? "dev-secret";
+        var secret = GetConfiguredWebhookSecret();
+        if (secret is null) return string.Empty;
         var payload = $"{transactionId}|{orderCode}|{amount}|{timestamp}";
         using var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(secret));
         return Convert.ToHexString(hmac.ComputeHash(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
@@ -263,19 +286,52 @@ public class SePaySimulatorService(IConfiguration config)
 
     public bool VerifySignature(SePayWebhookPayload payload)
     {
+        if (!IsWebhookSecretConfigured || string.IsNullOrWhiteSpace(payload.Signature))
+            return false;
         var expected = ComputeSignature(payload.TransactionId, payload.OrderCode, payload.Amount, payload.Timestamp);
-        return string.Equals(expected, payload.Signature, StringComparison.OrdinalIgnoreCase);
+        if (string.IsNullOrEmpty(expected)) return false;
+        var expectedBytes = Encoding.UTF8.GetBytes(expected.ToLowerInvariant());
+        var providedBytes = Encoding.UTF8.GetBytes(payload.Signature.Trim().ToLowerInvariant());
+        return expectedBytes.Length == providedBytes.Length &&
+               CryptographicOperations.FixedTimeEquals(expectedBytes, providedBytes);
+    }
+
+    public bool VerifyApiKey(string? authorizationHeader)
+    {
+        var secret = GetConfiguredWebhookSecret();
+        if (secret is null || string.IsNullOrWhiteSpace(authorizationHeader))
+            return false;
+
+        var trimmed = authorizationHeader.Trim();
+        string? providedKey = null;
+        if (trimmed.StartsWith("Apikey ", StringComparison.OrdinalIgnoreCase))
+            providedKey = trimmed.Substring(7).Trim();
+        else if (trimmed.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            providedKey = trimmed.Substring(7).Trim();
+
+        if (string.IsNullOrEmpty(providedKey))
+            return false;
+
+        var expectedBytes = Encoding.UTF8.GetBytes(secret);
+        var providedBytes = Encoding.UTF8.GetBytes(providedKey);
+        return expectedBytes.Length == providedBytes.Length &&
+               CryptographicOperations.FixedTimeEquals(expectedBytes, providedBytes);
     }
 
     public bool VerifySePayWebhookSignature(string rawBody, string signatureHeader, string timestampHeader)
     {
-        if (string.IsNullOrEmpty(signatureHeader) || !signatureHeader.StartsWith("sha256=", StringComparison.OrdinalIgnoreCase))
+        var secret = GetConfiguredWebhookSecret();
+        if (secret is null || string.IsNullOrWhiteSpace(signatureHeader))
             return false;
 
-        var providedHash = signatureHeader.Substring(7);
-        var message = $"{timestampHeader}.{rawBody}";
+        var providedHash = signatureHeader.StartsWith("sha256=", StringComparison.OrdinalIgnoreCase)
+            ? signatureHeader.Substring(7).Trim()
+            : signatureHeader.Trim();
 
-        var secret = config["SePay:WebhookSecret"] ?? "dev-secret";
+        var message = string.IsNullOrWhiteSpace(timestampHeader)
+            ? rawBody
+            : $"{timestampHeader}.{rawBody}";
+
         var keyBytes = Encoding.UTF8.GetBytes(secret);
         var messageBytes = Encoding.UTF8.GetBytes(message);
 
@@ -283,7 +339,10 @@ public class SePaySimulatorService(IConfiguration config)
         var hashBytes = hmac.ComputeHash(messageBytes);
         var computedHash = Convert.ToHexString(hashBytes).ToLowerInvariant();
 
-        return string.Equals(computedHash, providedHash, StringComparison.OrdinalIgnoreCase);
+        var expectedBytes = Encoding.UTF8.GetBytes(computedHash);
+        var providedBytes = Encoding.UTF8.GetBytes(providedHash.ToLowerInvariant());
+        return expectedBytes.Length == providedBytes.Length &&
+               CryptographicOperations.FixedTimeEquals(expectedBytes, providedBytes);
     }
 }
 
@@ -352,11 +411,13 @@ public class PaymentService(AppDbContext db, SePaySimulatorService sepay, INotif
         }
     }
 
-    public async Task SimulatePaymentAsync(Guid paymentId, CancellationToken ct = default)
+    public async Task SimulatePaymentAsync(Guid paymentId, Guid? userId = null, bool isAdmin = false, CancellationToken ct = default)
     {
         var payment = await db.Payments.Include(p => p.Order).ThenInclude(o => o.Items).ThenInclude(i => i.Game)
             .FirstOrDefaultAsync(p => p.Id == paymentId, ct)
             ?? throw new AppException("PAYMENT_NOT_FOUND", "Payment not found", 404);
+        if (!isAdmin && (!userId.HasValue || payment.Order.UserId != userId.Value))
+            throw new AppException("FORBIDDEN", "You do not have permission to simulate this payment", 403);
         if (payment.Status != PaymentStatus.Pending) throw new AppException("PAYMENT_INVALID", "Payment not pending", 400);
         await CompletePayment(payment.Order, payment, payment.TransactionId ?? Guid.NewGuid().ToString("n")[..8].ToUpper(), ct);
     }
@@ -500,9 +561,20 @@ public class LibraryService(AppDbContext db, IGoogleDriveService drive) : ILibra
         var file = await db.GameFiles.Where(f => f.GameId == gameId && f.IsActive).OrderByDescending(f => f.CreatedAt).FirstOrDefaultAsync(ct)
             ?? throw new AppException("FILE_NOT_FOUND", "No download file available", 404);
 
-        var url = !string.IsNullOrEmpty(file.GoogleDriveFileId)
-            ? await drive.GetDownloadUrlAsync(file.GoogleDriveFileId, ct)
-            : file.DownloadUrl ?? throw new AppException("FILE_NOT_FOUND", "Download URL missing", 404);
+        string url;
+        if (!string.IsNullOrEmpty(file.GoogleDriveFileId))
+        {
+            url = await drive.GetDownloadUrlAsync(file.GoogleDriveFileId, ct);
+            if ((url == $"/uploads/{file.GoogleDriveFileId}" || url == $"/uploads/{Uri.EscapeDataString(file.GoogleDriveFileId)}")
+                && !string.IsNullOrEmpty(file.DownloadUrl))
+            {
+                url = file.DownloadUrl;
+            }
+        }
+        else
+        {
+            url = file.DownloadUrl ?? throw new AppException("FILE_NOT_FOUND", "Download URL missing", 404);
+        }
 
         owned.LastDownloadAt = DateTime.UtcNow;
         var game = await db.Games.FindAsync([gameId], ct);

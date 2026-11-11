@@ -21,6 +21,8 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<GameListItem> _allGames = new();
     private readonly ObservableCollection<GameListItem> _displayedGames = new();
     private readonly Dictionary<Guid, CancellationTokenSource> _downloadingTasks = new();
+    private readonly Dictionary<Guid, GameListItem> _downloadingItems = new();
+    private readonly SemaphoreSlim _loadLibraryLock = new(1, 1);
 
     public MainWindow()
     {
@@ -42,7 +44,7 @@ public partial class MainWindow : Window
         };
         _autoSyncTimer.Tick += async (s, e) =>
         {
-            if (_session.User != null && !string.IsNullOrEmpty(_session.AccessToken))
+            if (_session.User != null && !string.IsNullOrEmpty(_session.AccessToken) && viewMainSteam.Visibility == Visibility.Visible)
             {
                 await LoadLibraryAsync(silent: true);
             }
@@ -50,9 +52,24 @@ public partial class MainWindow : Window
         _autoSyncTimer.Start();
 
         Loaded += MainWindow_Loaded;
+        Closing += MainWindow_Closing;
     }
 
     private readonly System.Windows.Threading.DispatcherTimer _autoSyncTimer;
+
+    private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        _autoSyncTimer.Stop();
+        CancelAllDownloads();
+    }
+
+    private void CancelAllDownloads()
+    {
+        foreach (var cts in _downloadingTasks.Values.ToList())
+        {
+            try { cts.Cancel(); } catch { }
+        }
+    }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
@@ -132,11 +149,13 @@ public partial class MainWindow : Window
         viewMainSteam.Visibility = Visibility.Visible;
     }
 
+    private string? _lastRenderedAvatarUrl;
+
     private void UpdateUserProfileUi(UserDto user)
     {
         txtUserName.Text = string.IsNullOrWhiteSpace(user.FullName) ? "Gamer" : user.FullName;
         txtUserAvatarInitial.Text = string.IsNullOrWhiteSpace(user.FullName)
-            ? user.Email[0].ToString().ToUpperInvariant()
+            ? (!string.IsNullOrEmpty(user.Email) ? user.Email[0].ToString().ToUpperInvariant() : "G")
             : user.FullName[0].ToString().ToUpperInvariant();
 
         if (!string.IsNullOrWhiteSpace(user.AvatarUrl))
@@ -144,8 +163,15 @@ public partial class MainWindow : Window
             try
             {
                 var avatarPath = user.AvatarUrl.StartsWith("/")
-                    ? $"{_session.ApiUrl.TrimEnd('/')}{user.AvatarUrl}"
+                    ? $"{_apiService.BaseUrl.TrimEnd('/')}{user.AvatarUrl}"
                     : user.AvatarUrl;
+
+                if (string.Equals(_lastRenderedAvatarUrl, avatarPath, StringComparison.Ordinal) && imgUserAvatar.Source != null)
+                {
+                    imgUserAvatar.Visibility = Visibility.Visible;
+                    txtUserAvatarInitial.Visibility = Visibility.Collapsed;
+                    return;
+                }
 
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
@@ -154,18 +180,21 @@ public partial class MainWindow : Window
                 bitmap.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
                 bitmap.EndInit();
 
+                _lastRenderedAvatarUrl = avatarPath;
                 imgUserAvatar.Source = bitmap;
                 imgUserAvatar.Visibility = Visibility.Visible;
                 txtUserAvatarInitial.Visibility = Visibility.Collapsed;
             }
             catch
             {
+                _lastRenderedAvatarUrl = null;
                 imgUserAvatar.Visibility = Visibility.Collapsed;
                 txtUserAvatarInitial.Visibility = Visibility.Visible;
             }
         }
         else
         {
+            _lastRenderedAvatarUrl = null;
             imgUserAvatar.Visibility = Visibility.Collapsed;
             txtUserAvatarInitial.Visibility = Visibility.Visible;
         }
@@ -256,6 +285,21 @@ public partial class MainWindow : Window
         pnlLoginError.Visibility = Visibility.Visible;
     }
 
+    private void ClearSessionAndShowLogin()
+    {
+        CancelAllDownloads();
+        _storageService.ClearSession();
+        _session.AccessToken = null;
+        _session.RefreshToken = null;
+        _session.User = null;
+        _lastRenderedAvatarUrl = null;
+        _apiService.SetAuthToken(null);
+        _allGames.Clear();
+        _displayedGames.Clear();
+
+        ShowLoginView();
+    }
+
     private void BtnLogout_Click(object sender, RoutedEventArgs e)
     {
         var confirm = DarkMessageBoxWindow.ShowConfirm(
@@ -268,12 +312,7 @@ public partial class MainWindow : Window
 
         if (confirm)
         {
-            _storageService.ClearSession();
-            _apiService.SetAuthToken(null);
-            _allGames.Clear();
-            _displayedGames.Clear();
-
-            ShowLoginView();
+            ClearSessionAndShowLogin();
         }
     }
 
@@ -281,10 +320,58 @@ public partial class MainWindow : Window
 
     #region Library Operations
 
-    private async Task LoadLibraryAsync(bool silent = false)
+    private static bool HasSameLibrarySnapshot(IReadOnlyList<LibraryGameDto> serverGames, IReadOnlyList<GameListItem> currentGames)
     {
+        if (serverGames.Count != currentGames.Count) return false;
+
+        for (int i = 0; i < serverGames.Count; i++)
+        {
+            var s = serverGames[i];
+            var c = currentGames[i];
+            if (s.GameId != c.GameId ||
+                !string.Equals(s.Title, c.Title, StringComparison.Ordinal) ||
+                !string.Equals(s.Version ?? "1.0.0", c.Version, StringComparison.Ordinal) ||
+                !string.Equals(s.CoverUrl, c.RawCoverUrl, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private ImageSource? CreateSafeCoverImage(string? rawCoverUrl)
+    {
+        if (string.IsNullOrEmpty(rawCoverUrl)) return null;
+
         try
         {
+            var uri = rawCoverUrl.StartsWith("/")
+                ? new Uri($"{_apiService.BaseUrl.TrimEnd('/')}{rawCoverUrl}")
+                : new Uri(rawCoverUrl);
+            return new BitmapImage(uri);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private async Task LoadLibraryAsync(bool silent = false)
+    {
+        if (silent && _loadLibraryLock.CurrentCount == 0)
+        {
+            return;
+        }
+
+        await _loadLibraryLock.WaitAsync();
+        try
+        {
+            if (silent && (_session.User == null || string.IsNullOrEmpty(_session.AccessToken) || viewMainSteam.Visibility != Visibility.Visible))
+            {
+                return;
+            }
+
             // Sync latest user profile and avatar from server
             var latestProfile = await _apiService.GetProfileAsync();
             if (latestProfile != null)
@@ -296,17 +383,32 @@ public partial class MainWindow : Window
 
             var serverGames = await _apiService.GetLibraryAsync();
 
-            // If silent sync and count matches existing without download ongoing, skip full refresh
-            if (silent && serverGames.Count == _allGames.Count && !_allGames.Any(g => g.IsDownloading))
+            // Skip silent auto-sync rebuild whenever library snapshot matches existing list (including while downloading)
+            if (silent && HasSameLibrarySnapshot(serverGames, _allGames))
             {
                 return;
             }
+
+            var selectedGameId = (lstSidebarGames.SelectedItem as GameListItem)?.GameId;
+            var existingById = _allGames.ToDictionary(g => g.GameId);
 
             _allGames.Clear();
             _displayedGames.Clear();
 
             foreach (var g in serverGames)
             {
+                // Preserve live downloading item instance so progress UI and task bindings are never lost
+                if (_downloadingItems.TryGetValue(g.GameId, out var activeDownloadingItem))
+                {
+                    if (!string.Equals(activeDownloadingItem.RawCoverUrl, g.CoverUrl, StringComparison.Ordinal))
+                    {
+                        activeDownloadingItem.RawCoverUrl = g.CoverUrl;
+                        activeDownloadingItem.CoverUrl = CreateSafeCoverImage(g.CoverUrl);
+                    }
+                    _allGames.Add(activeDownloadingItem);
+                    continue;
+                }
+
                 var item = new GameListItem
                 {
                     GameId = g.GameId,
@@ -318,17 +420,15 @@ public partial class MainWindow : Window
                     LastDownloadAt = g.LastDownloadAt
                 };
 
-                // Safe image loading
-                if (!string.IsNullOrEmpty(g.CoverUrl))
+                if (existingById.TryGetValue(g.GameId, out var previousItem) &&
+                    string.Equals(previousItem.RawCoverUrl, g.CoverUrl, StringComparison.Ordinal) &&
+                    previousItem.CoverUrl != null)
                 {
-                    try
-                    {
-                        var uri = g.CoverUrl.StartsWith("/") 
-                            ? new Uri($"{_session.ApiUrl.TrimEnd('/')}{g.CoverUrl}")
-                            : new Uri(g.CoverUrl);
-                        item.CoverUrl = new BitmapImage(uri);
-                    }
-                    catch { }
+                    item.CoverUrl = previousItem.CoverUrl;
+                }
+                else
+                {
+                    item.CoverUrl = CreateSafeCoverImage(g.CoverUrl);
                 }
 
                 // Check local installation state
@@ -343,19 +443,28 @@ public partial class MainWindow : Window
                 }
 
                 _allGames.Add(item);
-                _displayedGames.Add(item);
             }
 
+            ApplyCurrentFilters();
+
             txtGamesCountBadge.Text = $"Games ({_allGames.Count})";
-            txtShelfCount.Text = $"({_allGames.Count} trò chơi sở hữu)";
             pnlEmptyLibrary.Visibility = _allGames.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+            if (selectedGameId.HasValue)
+            {
+                lstSidebarGames.SelectedItem = _displayedGames.FirstOrDefault(x => x.GameId == selectedGameId.Value);
+            }
         }
-        catch (UnauthorizedAccessException)
+        catch (ApiSessionExpiredException)
         {
             if (!silent)
             {
                 DarkMessageBoxWindow.ShowWarning(this, "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại vào Launcher.", "Hết hạn đăng nhập");
-                ShowLoginView();
+                ClearSessionAndShowLogin();
+            }
+            else if (_downloadingItems.Count == 0)
+            {
+                ClearSessionAndShowLogin();
             }
         }
         catch (Exception ex)
@@ -364,6 +473,10 @@ public partial class MainWindow : Window
             {
                 DarkMessageBoxWindow.ShowWarning(this, $"Lỗi tải thư viện: {ex.Message}", "Lỗi kết nối");
             }
+        }
+        finally
+        {
+            _loadLibraryLock.Release();
         }
     }
 
@@ -417,7 +530,9 @@ public partial class MainWindow : Window
 
         if (txtShelfCount != null)
         {
-            txtShelfCount.Text = $"({_displayedGames.Count} trò chơi)";
+            txtShelfCount.Text = string.IsNullOrEmpty(filter) && _currentFilter == "all"
+                ? $"({_allGames.Count} trò chơi sở hữu)"
+                : $"({_displayedGames.Count} / {_allGames.Count} trò chơi)";
         }
     }
 
@@ -466,6 +581,11 @@ public partial class MainWindow : Window
 
     private async Task DownloadAndInstallCardGameAsync(GameListItem game)
     {
+        if (game.IsDownloading || _downloadingTasks.ContainsKey(game.GameId))
+        {
+            return;
+        }
+
         // Cho phép người dùng chọn ổ đĩa / thư mục cài đặt game (D:\, E:\, C:\...)
         var folderDialog = new Microsoft.Win32.OpenFolderDialog
         {
@@ -493,12 +613,20 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Re-resolve active item in _allGames in case auto-sync ran while folder dialog was open
+        game = _allGames.FirstOrDefault(g => g.GameId == game.GameId) ?? game;
+        if (game.IsDownloading || _downloadingTasks.ContainsKey(game.GameId))
+        {
+            return;
+        }
+
         string chosenInstallFolder = folderDialog.FolderName;
         _session.PreferredInstallDirectory = chosenInstallFolder;
         _storageService.SaveSession(_session);
 
         var cts = new CancellationTokenSource();
         _downloadingTasks[game.GameId] = cts;
+        _downloadingItems[game.GameId] = game;
 
         game.IsDownloading = true;
         game.DownloadPercent = 0;
@@ -507,8 +635,15 @@ public partial class MainWindow : Window
         var progress = new Progress<(double progressPercent, string statusText)>(info =>
         {
             game.DownloadPercent = info.progressPercent;
-            game.DownloadProgressText = $"{info.progressPercent:F0}%";
+            game.DownloadProgressText = info.progressPercent >= 90 && info.progressPercent < 100
+                ? $"Giải nén {info.progressPercent:F0}%"
+                : $"{info.progressPercent:F0}%";
         });
+
+        bool installSucceeded = false;
+        bool wasCanceled = false;
+        bool authExpired = false;
+        string? errorMsg = null;
 
         try
         {
@@ -520,7 +655,7 @@ public partial class MainWindow : Window
             await _gameManagerService.DownloadAndInstallGameAsync(
                 gameDto,
                 downloadLink.DownloadUrl,
-                _session.ApiUrl,
+                _apiService.BaseUrl,
                 chosenInstallFolder,
                 progress,
                 cts.Token
@@ -532,25 +667,49 @@ public partial class MainWindow : Window
                 game.InstalledMetadata = metadata;
             }
 
-            DarkMessageBoxWindow.ShowInfo(this, $"Cài đặt hoàn tất: {game.Title}!\nBạn có thể bấm nút Play ▶ màu xanh để bắt đầu chơi.", "Hoàn tất cài đặt");
+            installSucceeded = true;
         }
         catch (OperationCanceledException)
         {
+            wasCanceled = true;
             game.DownloadProgressText = "Đã hủy";
         }
-        catch (UnauthorizedAccessException ex)
+        catch (ApiSessionExpiredException ex)
         {
-            DarkMessageBoxWindow.ShowWarning(this, ex.Message, "Hết hạn đăng nhập");
-            ShowLoginView();
+            authExpired = true;
+            errorMsg = ex.Message;
         }
         catch (Exception ex)
         {
-            DarkMessageBoxWindow.ShowError(this, $"Lỗi tải/cài đặt: {ex.Message}", "Lỗi tải game");
+            errorMsg = ex.Message;
         }
         finally
         {
             game.IsDownloading = false;
-            _downloadingTasks.Remove(game.GameId);
+            if (_downloadingTasks.TryGetValue(game.GameId, out var activeCts) && ReferenceEquals(activeCts, cts))
+            {
+                _downloadingTasks.Remove(game.GameId);
+            }
+            if (_downloadingItems.TryGetValue(game.GameId, out var trackedItem) && ReferenceEquals(trackedItem, game))
+            {
+                _downloadingItems.Remove(game.GameId);
+            }
+            cts.Dispose();
+            ApplyCurrentFilters();
+        }
+
+        if (installSucceeded)
+        {
+            DarkMessageBoxWindow.ShowInfo(this, $"Cài đặt hoàn tất: {game.Title}!\nBạn có thể bấm nút Play ▶ màu xanh để bắt đầu chơi.", "Hoàn tất cài đặt");
+        }
+        else if (authExpired)
+        {
+            DarkMessageBoxWindow.ShowWarning(this, errorMsg ?? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại vào Launcher.", "Hết hạn đăng nhập");
+            ClearSessionAndShowLogin();
+        }
+        else if (!wasCanceled && errorMsg != null)
+        {
+            DarkMessageBoxWindow.ShowError(this, $"Lỗi tải/cài đặt: {errorMsg}", "Lỗi tải game");
         }
     }
 
@@ -560,7 +719,24 @@ public partial class MainWindow : Window
         {
             var menu = new ContextMenu();
 
-            if (game.IsInstalled)
+            if (game.IsDownloading || _downloadingTasks.ContainsKey(game.GameId))
+            {
+                var itemCancel = new MenuItem
+                {
+                    Header = "⏹  Hủy tải xuống",
+                    FontWeight = FontWeights.Bold,
+                    Foreground = (SolidColorBrush)new BrushConverter().ConvertFrom("#FBBF24")!
+                };
+                itemCancel.Click += (s, args) =>
+                {
+                    if (_downloadingTasks.TryGetValue(game.GameId, out var activeCts))
+                    {
+                        try { activeCts.Cancel(); } catch { }
+                    }
+                };
+                menu.Items.Add(itemCancel);
+            }
+            else if (game.IsInstalled)
             {
                 var itemPlay = new MenuItem
                 {
@@ -648,12 +824,19 @@ public partial class MainWindow : Window
             _gameManagerService.UninstallGame(game.GameId);
             game.IsInstalled = false;
             game.InstalledMetadata = null;
+            ApplyCurrentFilters();
             DarkMessageBoxWindow.ShowInfo(this, $"Đã gỡ cài đặt thành công '{game.Title}'.", "Thông báo");
         }
     }
 
     private async Task RemoveGameFromAccount(GameListItem game)
     {
+        if (game.IsDownloading || _downloadingTasks.ContainsKey(game.GameId))
+        {
+            DarkMessageBoxWindow.ShowWarning(this, "Vui lòng đợi hoặc hủy quá trình tải xuống trước khi xóa game khỏi thư viện.", "Đang tải game");
+            return;
+        }
+
         var confirm = DarkMessageBoxWindow.ShowConfirm(
             this,
             $"Bạn có chắc chắn muốn xóa game '{game.Title}' vĩnh viễn khỏi tài khoản của mình không?",
@@ -677,10 +860,15 @@ public partial class MainWindow : Window
                 _displayedGames.Remove(game);
 
                 txtGamesCountBadge.Text = $"Games ({_allGames.Count})";
-                txtShelfCount.Text = $"({_allGames.Count} trò chơi sở hữu)";
+                ApplyCurrentFilters();
                 pnlEmptyLibrary.Visibility = _allGames.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
                 DarkMessageBoxWindow.ShowInfo(this, "Đã xóa game khỏi Thư viện tài khoản thành công.", "Đã xóa");
+            }
+            catch (ApiSessionExpiredException ex)
+            {
+                DarkMessageBoxWindow.ShowWarning(this, ex.Message, "Hết hạn đăng nhập");
+                ClearSessionAndShowLogin();
             }
             catch (Exception ex)
             {

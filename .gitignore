@@ -61,6 +61,9 @@ CODEBASE.md
 scratch/
 
 # Large installer packages (>100MB cannot be pushed to GitHub)
+# Note: Light demo/sample game packages under 50MB remain tracked so fresh clones work out of the box
 backend/src/GameVault.API/wwwroot/uploads/games/*/installer/*.zip
 backend/src/GameVault.API/wwwroot/uploads/games/*/installer/*.exe
+!backend/src/GameVault.API/wwwroot/uploads/games/shootv2/installer/4cfa0238-80d8-4475-abac-7a364f31dbc6_Game.zip
+!backend/src/GameVault.API/wwwroot/uploads/games/survival-on-earth/installer/37535633-b650-4d9d-bdb3-490e7bc3c75a_Game.zip
 

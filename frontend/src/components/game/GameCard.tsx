@@ -35,7 +35,7 @@ export function GameCard({ game }: { game: GameListItem }) {
           {game.primaryImageUrl ? (
             <img
               src={resolveImageUrl(game.primaryImageUrl)}
-              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
               alt={game.title}
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
             />

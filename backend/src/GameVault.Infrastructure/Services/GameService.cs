@@ -30,7 +30,7 @@ public class GameService(AppDbContext db) : IGameService
         if (f.MinPrice.HasValue) q = q.Where(g => (g.DiscountPrice ?? g.Price) >= f.MinPrice);
         if (f.MaxPrice.HasValue) q = q.Where(g => (g.DiscountPrice ?? g.Price) <= f.MaxPrice);
         if (f.MaxMinAge.HasValue) q = q.Where(g => g.MinAge <= f.MaxMinAge);
-        if (f.MinRating.HasValue) q = q.Where(g => g.AvgRating <= f.MinRating);
+        if (f.MinRating.HasValue) q = q.Where(g => g.AvgRating >= f.MinRating);
         if (f.Featured == true) q = q.Where(g => g.IsFeatured);
         if (f.HasDemo == true) q = q.Where(g => g.UnityDemo != null && g.UnityDemo.IsActive);
         if (f.Discounted == true) q = q.Where(g => g.DiscountPrice.HasValue && g.DiscountPrice < g.Price);

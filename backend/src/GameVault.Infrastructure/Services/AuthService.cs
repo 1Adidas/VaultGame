@@ -39,10 +39,11 @@ public class AuthService(AppDbContext db, IJwtTokenService jwt, IEmailService em
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken ct = default)
     {
-        if (await db.Users.AnyAsync(u => u.Email == request.Email, ct))
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        if (await db.Users.AnyAsync(u => u.Email == normalizedEmail, ct))
             throw new AppException("AUTH_EMAIL_EXISTS", "Email already registered", 409);
 
-        if (!IsRealEmailDomain(request.Email))
+        if (!IsRealEmailDomain(normalizedEmail))
             throw new AppException("AUTH_EMAIL_FAKE", "Địa chỉ email không tồn tại hoặc không hợp lệ. Vui lòng sử dụng email thật! / Invalid or non-existent email domain. Please use a real email!", 400);
 
         var customerRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == RoleNames.Customer, ct)
@@ -50,7 +51,7 @@ public class AuthService(AppDbContext db, IJwtTokenService jwt, IEmailService em
 
         var user = new User
         {
-            Email = request.Email.ToLowerInvariant(),
+            Email = normalizedEmail,
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
             FullName = request.FullName,
             IsEmailVerified = false
@@ -81,11 +82,25 @@ public class AuthService(AppDbContext db, IJwtTokenService jwt, IEmailService em
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken ct = default)
     {
+        var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var user = await db.Users.Include(u => u.UserRoles).ThenInclude(ur => ur.Role)
-            .FirstOrDefaultAsync(u => u.Email == request.Email.ToLowerInvariant() && u.IsActive, ct)
+            .FirstOrDefaultAsync(u => u.Email == normalizedEmail && u.IsActive, ct)
             ?? throw new AppException("AUTH_INVALID", "Invalid email or password", 401);
 
-        if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        bool passwordValid = false;
+        if (!string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            try
+            {
+                passwordValid = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
+            }
+            catch (BCrypt.Net.SaltParseException)
+            {
+                passwordValid = false;
+            }
+        }
+
+        if (!passwordValid)
             throw new AppException("AUTH_INVALID", "Invalid email or password", 401);
 
         return await BuildAuthResponse(user, ct);
@@ -184,9 +199,9 @@ public class AuthService(AppDbContext db, IJwtTokenService jwt, IEmailService em
         {
             var validationSettings = new GoogleJsonWebSignature.ValidationSettings();
             var clientId = config["Authentication:Google:ClientId"];
-            if (!string.IsNullOrEmpty(clientId) && 
-                clientId != "YOUR_GOOGLE_CLIENT_ID" && 
-                clientId != "YOUR_GOOGLE_CLIENT_ID_HERE")
+            if (!string.IsNullOrWhiteSpace(clientId) &&
+                !clientId.StartsWith("YOUR_", StringComparison.OrdinalIgnoreCase) &&
+                !clientId.StartsWith("YOUR ", StringComparison.OrdinalIgnoreCase))
             {
                 validationSettings.Audience = [clientId];
             }

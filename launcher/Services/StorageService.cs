@@ -6,14 +6,10 @@ namespace GameVault.Launcher.Services;
 
 public class StorageService
 {
-    private static readonly string AppDataFolder = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "GameVault"
-    );
+    private readonly string _appDataFolder;
+    private readonly string _sessionFilePath;
+    private readonly string _installedGamesFilePath;
 
-    private static readonly string SessionFilePath = Path.Combine(AppDataFolder, "session.json");
-    private static readonly string InstalledGamesFilePath = Path.Combine(AppDataFolder, "installed_games.json");
-    
     public static readonly string DefaultGamesInstallDirectory = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "GameVault",
@@ -26,14 +22,21 @@ public class StorageService
         WriteIndented = true
     };
 
-    public StorageService()
+    public StorageService(string? customAppDataFolder = null)
     {
-        if (!Directory.Exists(AppDataFolder))
+        _appDataFolder = string.IsNullOrWhiteSpace(customAppDataFolder)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GameVault")
+            : customAppDataFolder;
+
+        _sessionFilePath = Path.Combine(_appDataFolder, "session.json");
+        _installedGamesFilePath = Path.Combine(_appDataFolder, "installed_games.json");
+
+        if (!Directory.Exists(_appDataFolder))
         {
-            Directory.CreateDirectory(AppDataFolder);
+            Directory.CreateDirectory(_appDataFolder);
         }
 
-        if (!Directory.Exists(DefaultGamesInstallDirectory))
+        if (string.IsNullOrWhiteSpace(customAppDataFolder) && !Directory.Exists(DefaultGamesInstallDirectory))
         {
             Directory.CreateDirectory(DefaultGamesInstallDirectory);
         }
@@ -43,9 +46,9 @@ public class StorageService
     {
         try
         {
-            if (File.Exists(SessionFilePath))
+            if (File.Exists(_sessionFilePath))
             {
-                var json = File.ReadAllText(SessionFilePath);
+                var json = File.ReadAllText(_sessionFilePath);
                 var session = JsonSerializer.Deserialize<AppSession>(json, JsonOptions);
                 if (session != null) return session;
             }
@@ -60,7 +63,7 @@ public class StorageService
         try
         {
             var json = JsonSerializer.Serialize(session, JsonOptions);
-            File.WriteAllText(SessionFilePath, json);
+            File.WriteAllText(_sessionFilePath, json);
         }
         catch { }
     }
@@ -82,9 +85,9 @@ public class StorageService
     {
         try
         {
-            if (File.Exists(InstalledGamesFilePath))
+            if (File.Exists(_installedGamesFilePath))
             {
-                var json = File.ReadAllText(InstalledGamesFilePath);
+                var json = File.ReadAllText(_installedGamesFilePath);
                 var dict = JsonSerializer.Deserialize<Dictionary<Guid, InstalledGameMetadata>>(json, JsonOptions);
                 return dict ?? new Dictionary<Guid, InstalledGameMetadata>();
             }
@@ -99,7 +102,7 @@ public class StorageService
         try
         {
             var json = JsonSerializer.Serialize(installedGames, JsonOptions);
-            File.WriteAllText(InstalledGamesFilePath, json);
+            File.WriteAllText(_installedGamesFilePath, json);
         }
         catch { }
     }

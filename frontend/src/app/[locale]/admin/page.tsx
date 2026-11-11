@@ -196,25 +196,13 @@ export default function AdminPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
-  const { user, isLoading } = useAuthStore();
+  const { user, isLoading, isHydrated } = useAuthStore();
 
   useEffect(() => {
-    if (!isLoading && (!user || !user.roles?.includes("Admin"))) {
+    if (isHydrated && !isLoading && (!user || !user.roles?.includes("Admin"))) {
       router.replace(`/${locale}`);
     }
-  }, [user, isLoading, locale, router]);
-
-  useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab) {
-      setActiveTab(tab);
-    }
-  }, [searchParams]);
-
-  const handleTabChange = (tabId: string) => {
-    setActiveTab(tabId);
-    router.replace(`/${locale}/admin?tab=${tabId}`, { scroll: false });
-  };
+  }, [user, isLoading, isHydrated, locale, router]);
 
   // Danh sách các tab điều hướng trang quản trị (100% Tiếng Việt)
   const tabs = [
@@ -227,7 +215,21 @@ export default function AdminPage() {
     { id: "help", label: "Hướng dẫn & Hỗ trợ", icon: HelpCircle },
   ];
 
-  if (isLoading || !user || !user.roles?.includes("Admin")) {
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab && tabs.some((item) => item.id === tab)) {
+      setActiveTab(tab);
+    } else if (tab) {
+      setActiveTab("overview");
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tabId: string) => {
+    setActiveTab(tabId);
+    router.replace(`/${locale}/admin?tab=${tabId}`, { scroll: false });
+  };
+
+  if (!isHydrated || isLoading || !user || !user.roles?.includes("Admin")) {
     return (
       <div className="flex h-[70vh] items-center justify-center">
         <Loader2 className="size-8 animate-spin text-violet-500" />
@@ -309,7 +311,7 @@ function OverviewTab() {
       }
     } catch (error: any) {
       console.error(error);
-      const msg = error.response?.data?.message || (locale === "vi" ? "Đồng bộ thất bại hoặc xảy ra lỗi kết nối." : "Sync failed or connection error.");
+      const msg = error.response?.data?.error?.message || error.response?.data?.message || (locale === "vi" ? "Đồng bộ thất bại hoặc xảy ra lỗi kết nối." : "Sync failed or connection error.");
       alert(msg);
     } finally {
       setIsMigrating(false);
@@ -718,8 +720,8 @@ function GamesTab() {
   const handleSaveGame = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    let curTitleEn = titleEn || title;
-    let curTitleZh = titleZh || title;
+    const curTitleEn = titleEn || title;
+    const curTitleZh = titleZh || title;
     let curDescEn = descriptionEn;
     let curDescZh = descriptionZh;
     let curShortEn = shortDescriptionEn;
@@ -844,7 +846,7 @@ function GamesTab() {
       refetchGames();
     } catch (error: any) {
       console.error(error);
-      const msg = error?.response?.data?.message || error?.message || "Lỗi khi lưu trò chơi. Vui lòng đảm bảo Game Slug là duy nhất.";
+      const msg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || "Lỗi khi lưu trò chơi. Vui lòng đảm bảo Game Slug là duy nhất.";
       alert(`Lỗi: ${msg}`);
     } finally {
       setIsSubmittingGame(false);
@@ -925,7 +927,7 @@ function GamesTab() {
     } catch (err: any) {
       console.error("Auto-translate error:", err);
       if (!silent) {
-        alert(`Lỗi dịch tự động: ${err?.response?.data?.message || err?.message || "Không thể kết nối dịch vụ AI"}`);
+        alert(`Lỗi dịch tự động: ${err?.response?.data?.error?.message || err?.response?.data?.message || err?.message || "Không thể kết nối dịch vụ AI"}`);
       }
     } finally {
       setIsTranslating(false);
@@ -953,7 +955,7 @@ function GamesTab() {
       );
     } catch (error: any) {
       console.error("Delete game error:", error);
-      const errMsg = error?.response?.data?.message || error?.message || "Unknown error";
+      const errMsg = error?.response?.data?.error?.message || error?.response?.data?.message || error?.message || "Unknown error";
       alert(
         locale === "vi"
           ? `Lỗi khi xóa trò chơi: ${errMsg}`
@@ -1672,7 +1674,7 @@ function GamesTab() {
             </div>
 
             {/* Limits & Flags */}
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
               <div className="space-y-2">
                 <label className="text-xs text-zinc-400">Ngày phát hành (Release Date)</label>
                 <Input type="date" value={releaseDate} onChange={(e) => setReleaseDate(e.target.value)} className="[color-scheme:dark]" />
@@ -1680,6 +1682,18 @@ function GamesTab() {
               <div className="space-y-2">
                 <label className="text-xs text-zinc-400">Độ tuổi tối thiểu (Tuổi)</label>
                 <Input type="number" value={minAge} onChange={(e) => setMinAge(parseInt(e.target.value))} placeholder="0" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-zinc-400">Trạng thái phát hành (Status)</label>
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value)}
+                  className="w-full h-9 rounded-md border border-white/10 bg-zinc-950 px-3 text-sm text-zinc-200 outline-none focus:border-violet-500 cursor-pointer"
+                >
+                  <option value="Draft">Bản nháp (Draft)</option>
+                  <option value="Published">Đã phát hành (Published)</option>
+                  <option value="Archived">Lưu trữ (Archived)</option>
+                </select>
               </div>
               <div className="flex flex-col gap-1 pt-6">
                 <div className="flex items-center gap-2">
@@ -1770,6 +1784,7 @@ function GamesTab() {
                         <div className="flex items-center gap-2 min-w-0">
                           <img
                             src={resolveImageUrl(editingGame.coverUrl)}
+                            referrerPolicy="no-referrer"
                             alt={editingGame.title || "Ảnh bìa"}
                             className="size-9 rounded-md object-cover border border-white/10 shrink-0"
                           />
@@ -1888,7 +1903,7 @@ function GamesTab() {
                     <DropzoneFileInput
                       accept=".zip,application/zip"
                       files={newGameAssets.demo}
-                      formatHint="ZIP build chứa index.html (Tối đa 3GB)"
+                      formatHint="ZIP build WebGL (Unity, Godot, HTML5 — Tối đa 3GB)"
                       onSelect={(files) => setNewGameAssets(prev => ({ ...prev, demo: files?.[0] || null }))}
                       onClear={() => setNewGameAssets(prev => ({ ...prev, demo: null }))}
                     />
@@ -1966,6 +1981,7 @@ function GamesTab() {
                       >
                         <img
                           src={resolveImageUrl(s.url)}
+                          referrerPolicy="no-referrer"
                           alt={`Gameplay ${idx + 1}`}
                           className="w-full h-full object-cover"
                         />
@@ -2083,6 +2099,7 @@ function GamesTab() {
                   <div className="relative w-full h-28 rounded-lg overflow-hidden border border-white/[0.08] my-2 group">
                     <img
                       src={resolveImageUrl(selectedGameForUpload.coverUrl)}
+                      referrerPolicy="no-referrer"
                       alt="Cover preview"
                       className="size-full object-cover"
                     />
@@ -2339,6 +2356,7 @@ function GamesTab() {
                       >
                         <img
                           src={resolveImageUrl(s.url)}
+                          referrerPolicy="no-referrer"
                           alt={`Gameplay ${idx + 1}`}
                           className="w-full h-full object-cover"
                         />
@@ -2423,6 +2441,7 @@ function GamesTab() {
                         {g.coverUrl ? (
                           <img
                             src={resolveImageUrl(g.coverUrl)}
+                            referrerPolicy="no-referrer"
                             alt={g.title}
                             className="size-12 rounded-lg object-cover border border-white/10 flex-shrink-0"
                           />
@@ -2450,7 +2469,7 @@ function GamesTab() {
                             await api.patch(`/admin/games/${g.id}/status`, { status: newStatus });
                             refetchGames();
                           } catch (err: any) {
-                            alert("Lỗi khi cập nhật trạng thái: " + (err?.response?.data?.message || err?.message));
+                            alert("Lỗi khi cập nhật trạng thái: " + (err?.response?.data?.error?.message || err?.response?.data?.message || err?.message));
                           }
                         }}
                         className={`text-xs font-medium px-3 py-1 rounded-full border outline-none cursor-pointer transition appearance-none text-center ${

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
@@ -12,7 +12,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#070A10] text-zinc-100 flex flex-col selection:bg-cyan-500/30 selection:text-white">
       {/* 1. Left Gaming Rail / Sidebar */}
-      <AppSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <Suspense fallback={null}>
+        <AppSidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      </Suspense>
 
       {/* 2. Main Execution Stage (Offset for desktop sidebar) */}
       <div className="flex-1 flex flex-col lg:pl-64 min-w-0 transition-all duration-300">

@@ -10,28 +10,32 @@ namespace GameVault.Infrastructure.Services;
 
 public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
 {
-    private string LocalRoot
+    public static string ResolveLocalUploadsRoot()
     {
-        get
+        var dir = Directory.GetCurrentDirectory();
+        while (dir != null)
         {
-            var dir = Directory.GetCurrentDirectory();
-            while (dir != null)
+            var wwwroot = Path.Combine(dir, "wwwroot");
+            if (Directory.Exists(wwwroot))
             {
-                var wwwroot = Path.Combine(dir, "wwwroot");
-                if (Directory.Exists(wwwroot))
-                {
-                    return Path.Combine(wwwroot, "uploads");
-                }
-                var apiWwwroot = Path.Combine(dir, "src", "GameVault.API", "wwwroot");
-                if (Directory.Exists(apiWwwroot))
-                {
-                    return Path.Combine(apiWwwroot, "uploads");
-                }
-                dir = Directory.GetParent(dir)?.FullName;
+                return Path.Combine(wwwroot, "uploads");
             }
-            return Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+            var apiWwwroot = Path.Combine(dir, "src", "GameVault.API", "wwwroot");
+            if (Directory.Exists(apiWwwroot))
+            {
+                return Path.Combine(apiWwwroot, "uploads");
+            }
+            var backendApiWwwroot = Path.Combine(dir, "backend", "src", "GameVault.API", "wwwroot");
+            if (Directory.Exists(backendApiWwwroot))
+            {
+                return Path.Combine(backendApiWwwroot, "uploads");
+            }
+            dir = Directory.GetParent(dir)?.FullName;
         }
+        return Path.Combine(AppContext.BaseDirectory, "wwwroot", "uploads");
     }
+
+    private string LocalRoot => ResolveLocalUploadsRoot();
 
     private bool IsLocalFallback()
     {
@@ -220,14 +224,21 @@ public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
         {
             if (Directory.Exists(LocalRoot))
             {
-                var files = Directory.GetFiles(LocalRoot, $"*{fileId}*", SearchOption.AllDirectories);
+                var exactFiles = Directory.GetFiles(LocalRoot, $"{fileId}*", SearchOption.AllDirectories);
+                var files = exactFiles.Length > 0
+                    ? exactFiles
+                    : Directory.GetFiles(LocalRoot, $"*{fileId}*", SearchOption.AllDirectories);
                 if (files.Length > 0)
                 {
-                    var rel = files[0].Replace(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"), "").Replace('\\', '/');
-                    return rel;
+                    var installerSeg = $"{Path.DirectorySeparatorChar}installer{Path.DirectorySeparatorChar}";
+                    var matched = files.FirstOrDefault(f => f.Contains(installerSeg, StringComparison.OrdinalIgnoreCase))
+                        ?? files[0];
+                    var relPath = Path.GetRelativePath(LocalRoot, matched).Replace('\\', '/');
+                    var encoded = string.Join("/", relPath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString));
+                    return $"/uploads/{encoded}";
                 }
             }
-            return $"/uploads/{fileId}";
+            return $"/uploads/{Uri.EscapeDataString(fileId)}";
         }
         else
         {
@@ -235,7 +246,8 @@ public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
             var request = service.Files.Get(fileId);
             request.Fields = "webContentLink, webViewLink";
             var file = await request.ExecuteAsync(ct);
-            return file.WebContentLink ?? file.WebViewLink;
+            return file.WebContentLink
+                ?? $"https://drive.usercontent.google.com/download?id={Uri.EscapeDataString(fileId)}&export=download&confirm=t";
         }
     }
 

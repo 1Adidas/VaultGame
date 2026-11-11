@@ -55,10 +55,17 @@ $frontendJob = Start-Job -Name "gv-frontend" -ArgumentList $PSScriptRoot -Script
 Write-Host " -> Cho he thong san sang trong 5 giay..." -ForegroundColor Yellow
 Start-Sleep -Seconds 5
 
-# 6. Start Game Launcher Client
-Write-Host " -> Dang khoi dong GameVault Client Launcher..." -ForegroundColor Green
+# 6. Build & Start Game Launcher Client executable directly (keeps GameVault.Launcher.exe for DRM)
+Write-Host " -> Dang bien dich va khoi dong GameVault Client Launcher..." -ForegroundColor Green
+Stop-Process -Name "GameVault.Launcher" -Force -ErrorAction SilentlyContinue
 $launcherCsproj = Join-Path $PSScriptRoot "launcher\GameVault.Launcher.csproj"
-Start-Process dotnet -ArgumentList @("run", "--project", $launcherCsproj)
+dotnet build $launcherCsproj
+$launcherExe = Join-Path $PSScriptRoot "launcher\bin\Debug\net9.0-windows\GameVault.Launcher.exe"
+if ($LASTEXITCODE -eq 0 -and (Test-Path $launcherExe)) {
+    Start-Process -FilePath $launcherExe
+} else {
+    Write-Host " -> Canh bao: Khong the khoi dong GameVault Launcher (.NET build failed)." -ForegroundColor Red
+}
 
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host " HE THONG DA SAN SANG DONG BO 2 CHIEU!                    " -ForegroundColor Green

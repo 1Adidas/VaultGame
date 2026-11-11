@@ -267,11 +267,35 @@ public class PaymentsController(IPaymentService payments, SePaySimulatorService 
     [HttpPost("webhook/sepay")]
     public async Task<ActionResult> Webhook(CancellationToken ct)
     {
+        if (!sepay.IsWebhookSecretConfigured)
+        {
+            return StatusCode(503, ApiResponse<object>.Fail("WEBHOOK_NOT_CONFIGURED", "SePay webhook secret is not configured"));
+        }
+
         Request.EnableBuffering();
 
         using var reader = new StreamReader(Request.Body, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
         var rawBody = await reader.ReadToEndAsync(ct);
         Request.Body.Position = 0;
+
+        bool isRequestAuthenticated = false;
+        if (Request.Headers.TryGetValue("X-SePay-Signature", out var signatureHeader))
+        {
+            Request.Headers.TryGetValue("X-SePay-Timestamp", out var timestampHeader);
+            if (!sepay.VerifySePayWebhookSignature(rawBody, signatureHeader.ToString(), timestampHeader.ToString()))
+            {
+                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_INVALID", "Invalid signature"));
+            }
+            isRequestAuthenticated = true;
+        }
+        else if (Request.Headers.TryGetValue("Authorization", out var authHeader))
+        {
+            if (!sepay.VerifyApiKey(authHeader.ToString()))
+            {
+                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_INVALID", "Invalid API key"));
+            }
+            isRequestAuthenticated = true;
+        }
 
         var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
         SePayWebhookBody? sePayBody = null;
@@ -283,6 +307,17 @@ public class PaymentsController(IPaymentService payments, SePaySimulatorService 
 
         if (sePayBody != null && (sePayBody.TransferAmount > 0 || !string.IsNullOrEmpty(sePayBody.Content) || !string.IsNullOrEmpty(sePayBody.Code)))
         {
+            if (!isRequestAuthenticated)
+            {
+                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_UNAUTHORIZED", "Missing webhook signature or API key"));
+            }
+
+            if (!string.IsNullOrWhiteSpace(sePayBody.TransferType) &&
+                !string.Equals(sePayBody.TransferType, "in", StringComparison.OrdinalIgnoreCase))
+            {
+                return Ok(new { success = true, ignored = true });
+            }
+
             var orderCode = sePayBody.Code ?? "";
             if (string.IsNullOrEmpty(orderCode) && !string.IsNullOrEmpty(sePayBody.Content))
             {
@@ -297,51 +332,50 @@ public class PaymentsController(IPaymentService payments, SePaySimulatorService 
                 }
             }
 
+            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var txId = sePayBody.Id > 0 ? sePayBody.Id.ToString() : (sePayBody.ReferenceCode ?? Guid.NewGuid().ToString("n")[..8].ToUpper());
             var payload = new SePayWebhookPayload(
-                TransactionId: sePayBody.Id > 0 ? sePayBody.Id.ToString() : (sePayBody.ReferenceCode ?? Guid.NewGuid().ToString("n")[..8].ToUpper()),
+                TransactionId: txId,
                 OrderCode: orderCode,
                 Amount: sePayBody.TransferAmount,
                 Status: "success",
-                Timestamp: DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
-                Signature: ""
+                Timestamp: timestamp,
+                Signature: sepay.ComputeSignature(txId, orderCode, sePayBody.TransferAmount, timestamp)
             );
 
-            var mockSignature = sepay.ComputeSignature(payload.TransactionId, payload.OrderCode, payload.Amount, payload.Timestamp);
-            var signedPayload = payload with { Signature = mockSignature };
-
-            await payments.HandleWebhookAsync(signedPayload, ct);
-            return Ok(new { success = true, received = true });
-        }
-        else if (Request.Headers.TryGetValue("X-SePay-Signature", out var signatureHeader))
-        {
-            Request.Headers.TryGetValue("X-SePay-Timestamp", out var timestampHeader);
-
-            var isSignatureValid = sepay.VerifySePayWebhookSignature(rawBody, signatureHeader.ToString(), timestampHeader.ToString());
-            if (!isSignatureValid)
-            {
-                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_INVALID", "Invalid signature"));
-            }
-
-            var payload = JsonSerializer.Deserialize<SePayWebhookPayload>(rawBody, options);
-            if (payload == null)
-            {
-                return BadRequest(ApiResponse<object>.Fail("INVALID_BODY", "Invalid request payload"));
-            }
-
             await payments.HandleWebhookAsync(payload, ct);
             return Ok(new { success = true, received = true });
         }
-        else
-        {
-            var payload = JsonSerializer.Deserialize<SePayWebhookPayload>(rawBody, options);
-            if (payload == null)
-            {
-                return BadRequest(ApiResponse<object>.Fail("INVALID_BODY", "Invalid request payload"));
-            }
 
-            await payments.HandleWebhookAsync(payload, ct);
-            return Ok(new { success = true, received = true });
+        SePayWebhookPayload? directPayload = null;
+        try
+        {
+            directPayload = JsonSerializer.Deserialize<SePayWebhookPayload>(rawBody, options);
         }
+        catch { }
+
+        if (directPayload == null || string.IsNullOrWhiteSpace(directPayload.OrderCode))
+        {
+            return BadRequest(ApiResponse<object>.Fail("INVALID_BODY", "Invalid request payload"));
+        }
+
+        if (!isRequestAuthenticated)
+        {
+            if (!sepay.VerifySignature(directPayload))
+            {
+                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_INVALID", "Missing or invalid webhook signature"));
+            }
+        }
+        else if (string.IsNullOrWhiteSpace(directPayload.Signature))
+        {
+            directPayload = directPayload with
+            {
+                Signature = sepay.ComputeSignature(directPayload.TransactionId, directPayload.OrderCode, directPayload.Amount, directPayload.Timestamp)
+            };
+        }
+
+        await payments.HandleWebhookAsync(directPayload, ct);
+        return Ok(new { success = true, received = true });
     }
 }
 
@@ -442,7 +476,7 @@ public class AiController(IAiService ai) : ControllerBase
         }
     }
 
-    [AllowAnonymous]
+    [Authorize(Roles = "Admin")]
     [HttpGet("available-models")]
     public async Task<ActionResult<ApiResponse<object>>> ListModels([FromQuery] string apiKey, CancellationToken ct)
     {
@@ -450,7 +484,7 @@ public class AiController(IAiService ai) : ControllerBase
         using var client = new HttpClient();
         try
         {
-            var response = await client.GetAsync($"https://generativelanguage.googleapis.com/v1beta/models?key={apiKey.Trim()}", ct);
+            var response = await client.GetAsync($"https://generativelanguage.googleapis.com/v1beta/models?key={Uri.EscapeDataString(apiKey.Trim())}", ct);
             var content = await response.Content.ReadAsStringAsync(ct);
             if (!response.IsSuccessStatusCode) return StatusCode((int)response.StatusCode, ApiResponse<object>.Fail("API_ERROR", content));
             var parsed = JsonSerializer.Deserialize<object>(content);
@@ -663,13 +697,21 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
                     {
                         try
                         {
-                            var demoDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", gameFolder, "demo");
+                            var uploadsRoot = GoogleDriveService.ResolveLocalUploadsRoot();
+                            var wwwrootDir = Directory.GetParent(uploadsRoot)?.FullName ?? Path.Combine(Directory.GetCurrentDirectory(), "wwwroot");
+                            var demoDir = Path.Combine(uploadsRoot, "games", gameFolder, "demo");
                             var extractDir = Path.Combine(demoDir, "extracted");
                             if (Directory.Exists(extractDir))
                             {
                                 try { Directory.Delete(extractDir, true); } catch {}
                             }
                             Directory.CreateDirectory(extractDir);
+
+                            var fullExtractDir = Path.GetFullPath(extractDir);
+                            if (!fullExtractDir.EndsWith(Path.DirectorySeparatorChar))
+                            {
+                                fullExtractDir += Path.DirectorySeparatorChar;
+                            }
 
                             using (var fileStream = file.OpenReadStream())
                             using (var archive = new System.IO.Compression.ZipArchive(fileStream, System.IO.Compression.ZipArchiveMode.Read))
@@ -678,7 +720,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
                                 {
                                     if (string.IsNullOrEmpty(entry.Name)) continue;
                                     var targetPath = Path.GetFullPath(Path.Combine(extractDir, entry.FullName));
-                                    if (!targetPath.StartsWith(Path.GetFullPath(extractDir), StringComparison.OrdinalIgnoreCase)) continue;
+                                    if (!targetPath.StartsWith(fullExtractDir, StringComparison.OrdinalIgnoreCase)) continue;
                                     var dir = Path.GetDirectoryName(targetPath);
                                     if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
                                     entry.ExtractToFile(targetPath, overwrite: true);
@@ -688,7 +730,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
                             var entryHtml = ResolveDemoEntryHtml(extractDir);
                             if (!string.IsNullOrEmpty(entryHtml))
                             {
-                                var wwwrootPath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "wwwroot"));
+                                var wwwrootPath = Path.GetFullPath(wwwrootDir);
                                 var fullEntryPath = Path.GetFullPath(entryHtml);
                                 var relativePath = fullEntryPath.StartsWith(wwwrootPath, StringComparison.OrdinalIgnoreCase)
                                     ? fullEntryPath.Substring(wwwrootPath.Length)
@@ -818,12 +860,13 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
             
             var game = await db.Games.FindAsync([id], ct);
             string gameFolder = game != null && !string.IsNullOrEmpty(game.Slug) ? game.Slug : id.ToString();
-            var demoDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", gameFolder, "demo");
+            var uploadsRoot = GoogleDriveService.ResolveLocalUploadsRoot();
+            var demoDir = Path.Combine(uploadsRoot, "games", gameFolder, "demo");
             if (Directory.Exists(demoDir))
             {
                 try { Directory.Delete(demoDir, true); } catch {}
             }
-            var demoDirId = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads", "games", id.ToString(), "demo");
+            var demoDirId = Path.Combine(uploadsRoot, "games", id.ToString(), "demo");
             if (Directory.Exists(demoDirId))
             {
                 try { Directory.Delete(demoDirId, true); } catch {}
@@ -1502,6 +1545,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
 }
 
 [ApiController]
+[Authorize]
 [Route("api/v1/dev")]
 public class DevController(IPaymentService payments, IHostEnvironment env) : ControllerBase
 {
@@ -1509,7 +1553,9 @@ public class DevController(IPaymentService payments, IHostEnvironment env) : Con
     public async Task<ActionResult<ApiResponse<object>>> SimulatePayment(Guid paymentId, CancellationToken ct)
     {
         if (!env.IsDevelopment()) return NotFound();
-        await payments.SimulatePaymentAsync(paymentId, ct);
+        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var isAdmin = User.IsInRole("Admin");
+        await payments.SimulatePaymentAsync(paymentId, userId, isAdmin, ct);
         return Ok(ApiResponse<object>.Ok(new { success = true }));
     }
 }

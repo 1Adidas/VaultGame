@@ -56,7 +56,7 @@ public interface IPaymentService
     Task<PaymentDto> InitiatePaymentAsync(Guid userId, Guid orderId, CancellationToken ct = default);
     Task<PaymentStatusDto> GetStatusAsync(Guid userId, Guid paymentId, CancellationToken ct = default);
     Task HandleWebhookAsync(SePayWebhookPayload payload, CancellationToken ct = default);
-    Task SimulatePaymentAsync(Guid paymentId, CancellationToken ct = default);
+    Task SimulatePaymentAsync(Guid paymentId, Guid? userId = null, bool isAdmin = false, CancellationToken ct = default);
 }
 
 public interface ILibraryService

@@ -198,6 +198,7 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
             <div className="relative h-60 w-60 rounded-2xl overflow-hidden border border-white/15 shadow-2xl bg-white p-2.5 flex items-center justify-center">
               <img
                 src={payment.qrImageUrl}
+                referrerPolicy="no-referrer"
                 alt="VietQR Code"
                 className={`size-full object-contain transition duration-300 ${isExpired ? "blur-md opacity-20" : ""}`}
               />

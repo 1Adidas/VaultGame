@@ -184,7 +184,7 @@ export default function HomePage() {
                   >
                     <img
                       src={resolveImageUrl(game.primaryImageUrl)}
-                      crossOrigin="anonymous"
+                      referrerPolicy="no-referrer"
                       alt={game.title}
                       className="size-full object-cover object-center"
                     />
@@ -362,7 +362,7 @@ export default function HomePage() {
                             {g.primaryImageUrl && (
                               <img
                                 src={resolveImageUrl(g.primaryImageUrl)}
-                                crossOrigin="anonymous"
+                                referrerPolicy="no-referrer"
                                 alt={g.title}
                                 className="size-full object-cover group-hover:scale-110 transition-transform duration-500"
                               />
@@ -450,6 +450,7 @@ export default function HomePage() {
                   {heroGames[0].primaryImageUrl && (
                     <img
                       src={resolveImageUrl(heroGames[0].primaryImageUrl)}
+                      referrerPolicy="no-referrer"
                       alt={heroGames[0].title}
                       className="size-full object-cover group-hover:scale-102 transition-transform duration-700"
                     />
@@ -525,6 +526,7 @@ export default function HomePage() {
                         {game.primaryImageUrl && (
                           <img
                             src={resolveImageUrl(game.primaryImageUrl)}
+                            referrerPolicy="no-referrer"
                             alt={game.title}
                             className="size-full object-cover group-hover:scale-105 transition-transform"
                           />

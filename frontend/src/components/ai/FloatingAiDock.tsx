@@ -103,7 +103,14 @@ export function FloatingAiDock() {
 
   // Hide dock if we are inside admin section or if user is an Admin
   // Dynamic UI overlays detection (WebGL demo playing, QR payment modal, Fullscreen)
+  const [mounted, setMounted] = useState(false);
   const [isOverlayActive, setIsOverlayActive] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const effectiveUser = mounted ? user : null;
 
   useEffect(() => {
     const checkOverlays = () => {
@@ -133,7 +140,7 @@ export function FloatingAiDock() {
     pathname?.includes("/login") ||
     pathname?.includes("/register") ||
     pathname?.includes("/orders") ||
-    user?.roles?.includes("Admin")
+    effectiveUser?.roles?.includes("Admin")
   );
 
   if (isHiddenRoute || isOverlayActive) {
@@ -343,7 +350,7 @@ export function FloatingAiDock() {
                             {g.primaryImageUrl ? (
                               <img
                                 src={resolveImageUrl(g.primaryImageUrl)}
-                                crossOrigin="anonymous"
+                                referrerPolicy="no-referrer"
                                 alt={g.title}
                                 className="size-full object-cover group-hover:scale-105 transition-transform duration-300"
                               />
@@ -454,7 +461,7 @@ export function FloatingAiDock() {
               <div className="flex flex-col gap-2 p-3.5 rounded-xl bg-[#111728] border border-white/[0.08] text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-mono text-cyan-400 tracking-wider uppercase font-semibold">
-                    {isVi ? "Oracle đang phân tích kho dữ liệu..." : isZh ? "Oracle 正在检索游戏库..." : "Oracle is analyzing library..."}
+                    {isVi ? "THE VOID đang phân tích kho dữ liệu..." : isZh ? "THE VOID 正在检索游戏库..." : "THE VOID is analyzing library..."}
                   </span>
                 </div>
                 <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">

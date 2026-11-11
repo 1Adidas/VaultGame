@@ -16,21 +16,21 @@ export default function LibraryPage() {
   const isVi = locale === "vi";
   const isZh = locale === "zh";
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, isHydrated } = useAuthStore();
   const { data, isLoading, refetch } = useLibrary();
 
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    const token = typeof window !== "undefined" ? (localStorage.getItem("gv_access") || sessionStorage.getItem("gv_access")) : null;
-    if (!token && !user) {
+    if (!isHydrated) return;
+    if (!user) {
       router.replace(`/${locale}/login`);
       return;
     }
-    if (user?.roles.includes("Admin")) {
+    if (user.roles.includes("Admin")) {
       router.replace(`/${locale}/admin`);
     }
-  }, [user, locale, router]);
+  }, [user, isHydrated, locale, router]);
 
   const download = async (gameId: string) => {
     try {
@@ -62,7 +62,7 @@ export default function LibraryPage() {
     }
   };
 
-  if (!user || isLoading || user?.roles.includes("Admin")) {
+  if (!isHydrated || !user || isLoading || user?.roles.includes("Admin")) {
     return (
       <div className="w-full space-y-8 animate-pulse">
         <div className="h-10 w-64 rounded-xl bg-[#0E131E]" />
@@ -158,6 +158,7 @@ export default function LibraryPage() {
                     {coverUrl ? (
                       <img
                         src={coverUrl}
+                        referrerPolicy="no-referrer"
                         alt={g.title}
                         className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />

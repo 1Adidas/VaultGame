@@ -10,6 +10,8 @@ public class ApiService
 {
     private HttpClient _httpClient;
     private readonly StorageService? _storageService;
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private string? _currentAccessToken;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -21,25 +23,36 @@ public class ApiService
     {
         _storageService = storageService;
         // Convert localhost to 127.0.0.1 to avoid Windows IPv6 resolution issues
-        if (baseUrl.Contains("localhost:5000"))
+        if (baseUrl.Contains("localhost:5000", StringComparison.OrdinalIgnoreCase))
         {
-            baseUrl = baseUrl.Replace("localhost:5000", "127.0.0.1:5000");
+            baseUrl = baseUrl.Replace("localhost:5000", "127.0.0.1:5000", StringComparison.OrdinalIgnoreCase);
         }
         BaseUrl = baseUrl.TrimEnd('/');
-        _httpClient = new HttpClient
+        _httpClient = CreateHttpClient(BaseUrl, null);
+    }
+
+    private static HttpClient CreateHttpClient(string baseUrl, AuthenticationHeaderValue? existingAuth)
+    {
+        var client = new HttpClient
         {
-            BaseAddress = new Uri(BaseUrl),
+            BaseAddress = new Uri(baseUrl),
             Timeout = TimeSpan.FromSeconds(30)
         };
+        client.DefaultRequestHeaders.TryAddWithoutValidation("ngrok-skip-browser-warning", "1");
+        if (existingAuth != null)
+        {
+            client.DefaultRequestHeaders.Authorization = existingAuth;
+        }
+        return client;
     }
 
     public void UpdateBaseUrl(string newBaseUrl)
     {
         if (string.IsNullOrWhiteSpace(newBaseUrl)) return;
 
-        if (newBaseUrl.Contains("localhost:5000"))
+        if (newBaseUrl.Contains("localhost:5000", StringComparison.OrdinalIgnoreCase))
         {
-            newBaseUrl = newBaseUrl.Replace("localhost:5000", "127.0.0.1:5000");
+            newBaseUrl = newBaseUrl.Replace("localhost:5000", "127.0.0.1:5000", StringComparison.OrdinalIgnoreCase);
         }
 
         var cleanUrl = newBaseUrl.TrimEnd('/');
@@ -49,20 +62,15 @@ public class ApiService
         }
 
         BaseUrl = cleanUrl;
-        var existingAuth = _httpClient.DefaultRequestHeaders.Authorization;
-        _httpClient = new HttpClient
-        {
-            BaseAddress = new Uri(BaseUrl),
-            Timeout = TimeSpan.FromSeconds(30)
-        };
-        if (existingAuth != null)
-        {
-            _httpClient.DefaultRequestHeaders.Authorization = existingAuth;
-        }
+        var oldClient = _httpClient;
+        var existingAuth = oldClient.DefaultRequestHeaders.Authorization;
+        _httpClient = CreateHttpClient(BaseUrl, existingAuth);
+        oldClient.Dispose();
     }
 
     public void SetAuthToken(string? token)
     {
+        _currentAccessToken = token;
         if (string.IsNullOrEmpty(token))
         {
             _httpClient.DefaultRequestHeaders.Authorization = null;
@@ -134,13 +142,24 @@ public class ApiService
     }
 
     public async Task<bool> TryRefreshTokenAsync(CancellationToken ct = default)
+        => await TryRefreshTokenAsync(_currentAccessToken, ct);
+
+    private async Task<bool> TryRefreshTokenAsync(string? failedToken, CancellationToken ct)
     {
         if (_storageService == null) return false;
-        var session = _storageService.LoadSession();
-        if (string.IsNullOrEmpty(session.RefreshToken)) return false;
 
+        await _refreshLock.WaitAsync(ct);
         try
         {
+            if (!string.IsNullOrEmpty(_currentAccessToken) &&
+                !string.Equals(_currentAccessToken, failedToken, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            var session = _storageService.LoadSession();
+            if (string.IsNullOrEmpty(session.RefreshToken)) return false;
+
             var payload = new RefreshTokenRequest(session.RefreshToken);
             var json = JsonSerializer.Serialize(payload, JsonOptions);
             var content = new StringContent(json, Encoding.UTF8, MediaTypeHeaderValue.Parse("application/json"));
@@ -161,36 +180,59 @@ public class ApiService
             }
         }
         catch { }
+        finally
+        {
+            _refreshLock.Release();
+        }
 
         return false;
     }
 
     private async Task<HttpResponseMessage> SendWithRetryAsync(Func<Task<HttpResponseMessage>> sendFunc, CancellationToken ct = default)
     {
+        var tokenUsed = _currentAccessToken;
         var response = await sendFunc();
         if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {
-            var refreshed = await TryRefreshTokenAsync(ct);
+            var refreshed = await TryRefreshTokenAsync(tokenUsed, ct);
             if (refreshed)
             {
+                response.Dispose();
                 response = await sendFunc();
             }
         }
         return response;
     }
 
+    private static string? ExtractApiErrorMessage(string responseString)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(responseString)) return null;
+            var err = JsonSerializer.Deserialize<ApiResponse<object>>(responseString, JsonOptions);
+            return err?.Error?.Message ?? err?.Message;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     public async Task<IReadOnlyList<LibraryGameDto>> GetLibraryAsync(CancellationToken ct = default)
     {
-        var response = await SendWithRetryAsync(() => _httpClient.GetAsync("/api/v1/library", ct), ct);
+        using var response = await SendWithRetryAsync(() => _httpClient.GetAsync("/api/v1/library", ct), ct);
         var responseString = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
         {
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                throw new UnauthorizedAccessException("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại tài khoản trên Launcher.");
+                throw new ApiSessionExpiredException("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại tài khoản trên Launcher.");
             }
-            throw new Exception($"Không thể tải thư viện game ({response.StatusCode})");
+            var detail = ExtractApiErrorMessage(responseString);
+            throw new Exception(string.IsNullOrWhiteSpace(detail)
+                ? $"Không thể tải thư viện game ({response.StatusCode})"
+                : detail);
         }
 
         var result = JsonSerializer.Deserialize<ApiResponse<List<LibraryGameDto>>>(responseString, JsonOptions);
@@ -204,20 +246,29 @@ public class ApiService
 
     public async Task<DownloadLinkDto> GetDownloadLinkAsync(Guid gameId, CancellationToken ct = default)
     {
-        var response = await SendWithRetryAsync(() => _httpClient.GetAsync($"/api/v1/library/{gameId}/download", ct), ct);
+        using var response = await SendWithRetryAsync(() => _httpClient.GetAsync($"/api/v1/library/{gameId}/download", ct), ct);
         var responseString = await response.Content.ReadAsStringAsync(ct);
 
         if (!response.IsSuccessStatusCode)
         {
             if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
             {
-                throw new UnauthorizedAccessException("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại tài khoản trên Launcher.");
+                throw new ApiSessionExpiredException("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại tài khoản trên Launcher.");
             }
             if (response.StatusCode == System.Net.HttpStatusCode.Forbidden)
             {
                 throw new Exception("Tài khoản chưa sở hữu trò chơi này. Vui lòng mua game trên Website trước khi tải.");
             }
-            throw new Exception($"Không thể lấy link tải game ({response.StatusCode})");
+            var detail = ExtractApiErrorMessage(responseString);
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                throw new Exception(string.IsNullOrWhiteSpace(detail)
+                    ? "Trò chơi này chưa có tệp cài đặt trên máy chủ."
+                    : $"Trò chơi chưa có tệp cài đặt khả dụng ({detail}).");
+            }
+            throw new Exception(string.IsNullOrWhiteSpace(detail)
+                ? $"Không thể lấy link tải game ({response.StatusCode})"
+                : detail);
         }
 
         var result = JsonSerializer.Deserialize<ApiResponse<DownloadLinkDto>>(responseString, JsonOptions);
@@ -226,16 +277,21 @@ public class ApiService
             return result.Data;
         }
 
-        throw new Exception(result?.Message ?? "Không tìm thấy file cài đặt của game này.");
+        throw new Exception(result?.Error?.Message ?? result?.Message ?? "Không tìm thấy file cài đặt của game này.");
     }
 
     public async Task RemoveFromLibraryAsync(Guid gameId, CancellationToken ct = default)
     {
-        var response = await SendWithRetryAsync(() => _httpClient.DeleteAsync($"/api/v1/library/{gameId}", ct), ct);
+        using var response = await SendWithRetryAsync(() => _httpClient.DeleteAsync($"/api/v1/library/{gameId}", ct), ct);
         if (!response.IsSuccessStatusCode)
         {
+            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+            {
+                throw new ApiSessionExpiredException("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại tài khoản trên Launcher.");
+            }
             var responseString = await response.Content.ReadAsStringAsync(ct);
-            throw new Exception($"Không thể xóa game khỏi thư viện ({response.StatusCode}): {responseString}");
+            var detail = ExtractApiErrorMessage(responseString);
+            throw new Exception($"Không thể xóa game khỏi thư viện ({response.StatusCode}): {detail ?? responseString}");
         }
     }
 
@@ -243,7 +299,7 @@ public class ApiService
     {
         try
         {
-            var response = await _httpClient.GetAsync("/api/v1/users/me", ct);
+            using var response = await SendWithRetryAsync(() => _httpClient.GetAsync("/api/v1/users/profile", ct), ct);
             if (!response.IsSuccessStatusCode) return null;
 
             var responseString = await response.Content.ReadAsStringAsync(ct);

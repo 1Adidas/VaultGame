@@ -15,31 +15,57 @@ public partial class SqlValidator
 {
     private static readonly HashSet<string> AllowedTables = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Games", "Categories", "Tags", "GameTags", "Reviews", "Users", "GameCategories"
+        "Games", "Categories", "Tags", "GameTags", "Reviews", "GameCategories", "UnityDemos"
     };
 
     private static readonly string[] ForbiddenKeywords =
-    ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "GRANT", "REVOKE", "EXEC", "EXECUTE", "INTO", "OUTFILE", "LOAD_FILE", "SLEEP", "BENCHMARK"];
+    [
+        "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", "GRANT", "REVOKE",
+        "EXEC", "EXECUTE", "INTO", "OUTFILE", "DUMPFILE", "LOAD_FILE", "SLEEP", "BENCHMARK",
+        "UNION", "CREATE", "REPLACE", "SHOW", "HANDLER"
+    ];
+
+    private static readonly string[] SensitiveIdentifiers =
+    [
+        "USERS", "ORDERS", "ORDERITEMS", "PAYMENTS", "ROLES", "USERROLES",
+        "USERGAMES", "WISHLISTS", "NOTIFICATIONS", "AICHATHISTORIES", "DEMOPLAYHISTORIES",
+        "PASSWORDHASH", "REFRESHTOKENHASH", "REFRESHTOKENEXPIRESAT",
+        "INFORMATION_SCHEMA", "MYSQL", "PERFORMANCE_SCHEMA", "SYS"
+    ];
 
     public static void Validate(string sql)
     {
         if (string.IsNullOrWhiteSpace(sql)) throw new AppException("AI_UNSAFE_QUERY", "Empty SQL", 400);
         var normalized = sql.Trim().TrimEnd(';');
         if (normalized.Contains(';')) throw new AppException("AI_UNSAFE_QUERY", "Multiple statements not allowed", 400);
-        if (!normalized.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+        if (!Regex.IsMatch(normalized, @"^\s*SELECT\b", RegexOptions.IgnoreCase))
             throw new AppException("AI_UNSAFE_QUERY", "Only SELECT allowed", 400);
         if (normalized.Contains("--") || normalized.Contains("/*"))
             throw new AppException("AI_UNSAFE_QUERY", "Comments not allowed", 400);
 
-        var upper = normalized.ToUpperInvariant();
-        foreach (var kw in ForbiddenKeywords)
-            if (upper.Contains(kw)) throw new AppException("AI_UNSAFE_QUERY", $"Forbidden keyword: {kw}", 400);
+        // Strip single-quoted string literals before checking SQL identifiers/keywords so game search terms like "Nintendo" or "Drop" aren't blocked
+        var structureOnly = StringLiteralRegex().Replace(normalized, "''");
 
-        if (!AllowedTablesRegex().IsMatch(normalized))
+        foreach (var kw in ForbiddenKeywords)
+        {
+            if (Regex.IsMatch(structureOnly, $@"\b{kw}\b", RegexOptions.IgnoreCase))
+                throw new AppException("AI_UNSAFE_QUERY", $"Forbidden keyword: {kw}", 400);
+        }
+
+        foreach (var sensitive in SensitiveIdentifiers)
+        {
+            if (Regex.IsMatch(structureOnly, $@"\b{sensitive}\b", RegexOptions.IgnoreCase))
+                throw new AppException("AI_UNSAFE_QUERY", $"Forbidden table or column: {sensitive}", 400);
+        }
+
+        if (!AllowedTablesRegex().IsMatch(structureOnly))
             throw new AppException("AI_UNSAFE_QUERY", "Query must reference allowed tables", 400);
     }
 
-    [GeneratedRegex(@"\b(Games|Categories|Tags|GameTags|Reviews|Users|GameCategories)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"'([^'\\]|\\.)*'")]
+    private static partial Regex StringLiteralRegex();
+
+    [GeneratedRegex(@"\b(Games|Categories|Tags|GameTags|Reviews|GameCategories|UnityDemos)\b", RegexOptions.IgnoreCase)]
     private static partial Regex AllowedTablesRegex();
 }
 
@@ -739,20 +765,31 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
     private async Task<List<Dictionary<string, object?>>> ExecuteRawQuery(string sql, CancellationToken ct)
     {
         var conn = db.Database.GetDbConnection();
-        await conn.OpenAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = sql;
-        cmd.CommandTimeout = 3;
-        await using var reader = await cmd.ExecuteReaderAsync(ct);
-        var rows = new List<Dictionary<string, object?>>();
-        while (await reader.ReadAsync(ct))
+        var shouldClose = conn.State != System.Data.ConnectionState.Open;
+        if (shouldClose) await conn.OpenAsync(ct);
+        try
         {
-            var row = new Dictionary<string, object?>();
-            for (var i = 0; i < reader.FieldCount; i++)
-                row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
-            rows.Add(row);
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.CommandTimeout = 3;
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            var rows = new List<Dictionary<string, object?>>();
+            while (await reader.ReadAsync(ct))
+            {
+                var row = new Dictionary<string, object?>();
+                for (var i = 0; i < reader.FieldCount; i++)
+                    row[reader.GetName(i)] = reader.IsDBNull(i) ? null : reader.GetValue(i);
+                rows.Add(row);
+            }
+            return rows;
         }
-        return rows;
+        finally
+        {
+            if (shouldClose && conn.State == System.Data.ConnectionState.Open)
+            {
+                await conn.CloseAsync();
+            }
+        }
     }
 
     private static string GetNoGamesMessage(string locale)
@@ -1120,6 +1157,7 @@ public class AiService(AppDbContext db, GroqClient groq) : IAiService
                 "khuyến", "khuyen", "nghị", "nghi"
             };
 
+            keywordText = Regex.Replace(keywordText, @"\b(gợi ý|goi y|đề xuất|de xuat|tư vấn|tu van|tựa game|tua game|trò chơi|tro choi|suggest|suggestions|suggestion|recommendations|recommendation)\b", " ", RegexOptions.IgnoreCase);
             var words = keywordText.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var cleanWords = new List<string>();
             foreach (var w in words)
