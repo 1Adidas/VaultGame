@@ -1,17 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, Suspense } from "react";
+import { useEffect, useRef, useState, useMemo, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth/store";
 import { api } from "@/lib/api/client";
-import { Button } from "@/components/ui/button";
-import {
-  UserCircle, Mail, Calendar, Settings, Gamepad2, Camera, Loader2, CheckCircle,
-  Shield, LayoutDashboard, DollarSign, ShoppingBag, Users, ArrowUpRight
-} from "lucide-react";
 import { useLocale } from "next-intl";
-import { formatDate, formatPrice, resolveImageUrl } from "@/lib/utils";
+import { formatDate, resolveImageUrl } from "@/lib/utils";
 
 interface UserProfile {
   id: string;
@@ -33,22 +28,20 @@ interface LibraryGame {
   acquiredAt: string;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-
 function resolveUrl(url: string | null | undefined): string | null {
   if (!url) return null;
   return resolveImageUrl(url);
 }
 
-
-
 export default function ProfilePage() {
   return (
-    <Suspense fallback={
-      <div className="flex h-[80vh] items-center justify-center">
-        <div className="size-10 animate-spin rounded-full border-4 border-violet-500 border-t-transparent" />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex h-[70vh] items-center justify-center">
+          <div className="size-6 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
+        </div>
+      }
+    >
       <ProfileContent />
     </Suspense>
   );
@@ -60,6 +53,7 @@ function ProfileContent() {
   const searchParams = useSearchParams();
   const locale = useLocale();
   const isZh = locale === "zh";
+  const isVi = locale === "vi";
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const targetId = searchParams.get("id");
@@ -67,27 +61,28 @@ function ProfileContent() {
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [games, setGames] = useState<LibraryGame[]>([]);
-  const [adminStats, setAdminStats] = useState<{
-    totalRevenue?: number;
-    totalOrders?: number;
-    totalUsers?: number;
-    totalGames?: number;
-  } | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [activeTab, setActiveTab] = useState<"library" | "settings" | "notifications">("library");
+  const [gameSearch, setGameSearch] = useState("");
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Form states
   const [fullName, setFullName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [isLibraryPublic, setIsLibraryPublic] = useState(false);
   const [isPurchaseHistoryPublic, setIsPurchaseHistoryPublic] = useState(false);
-  // avatarUrl is kept internally but not exposed as text input — only via file upload
+  const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Avatar states
   const [previewAvatar, setPreviewAvatar] = useState<string | null>(null);
   const [avatarError, setAvatarError] = useState(false);
   const [avatarRetry, setAvatarRetry] = useState(0);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // Notifications states
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [loadingNotifs, setLoadingNotifs] = useState(false);
 
   useEffect(() => {
     setAvatarError(false);
@@ -193,7 +188,7 @@ function ProfileContent() {
 
       canvas.toBlob(async (blob) => {
         if (!blob) {
-          alert(locale === "vi" ? "Lỗi xử lý ảnh." : "Image processing error.");
+          alert(isVi ? "Lỗi xử lý ảnh." : "Image processing error.");
           setUploadingAvatar(false);
           return;
         }
@@ -211,14 +206,14 @@ function ProfileContent() {
           updateUser({ avatarUrl: absoluteUrl });
         } catch (error) {
           console.error("Failed to upload avatar", error);
-          alert(locale === "vi" ? "Upload ảnh thất bại. Vui lòng thử lại." : "Failed to upload avatar. Please try again.");
+          alert(isVi ? "Upload ảnh thất bại. Vui lòng thử lại." : "Failed to upload avatar. Please try again.");
         } finally {
           setUploadingAvatar(false);
         }
       }, "image/png");
     } catch (err) {
       console.error("Failed to load image for cropping", err);
-      alert(locale === "vi" ? "Lỗi tải ảnh để cắt." : "Error loading image to crop.");
+      alert(isVi ? "Lỗi tải ảnh để cắt." : "Error loading image to crop.");
       setUploadingAvatar(false);
     }
   };
@@ -246,15 +241,6 @@ function ProfileContent() {
           setIsLibraryPublic(p.isLibraryPublic);
           setIsPurchaseHistoryPublic(p.isPurchaseHistoryPublic);
           setGames(Array.isArray(libraryRes.data?.data) ? libraryRes.data.data : []);
-
-          if (p.roles?.includes("Admin")) {
-            try {
-              const statsRes = await api.get("/admin/dashboard/stats");
-              setAdminStats(statsRes.data?.data || null);
-            } catch (err) {
-              console.error("Failed to load admin stats for profile page:", err);
-            }
-          }
         } else {
           const profileRes = await api.get(profileUrl);
           const p = profileRes.data.data as UserProfile;
@@ -284,7 +270,26 @@ function ProfileContent() {
     fetchProfileData();
   }, [user, router, locale, targetId, isOwnProfile]);
 
-  // Open cropper on selecting avatar file
+  useEffect(() => {
+    if (!isOwnProfile || activeTab !== "notifications") return;
+
+    const fetchNotifs = async () => {
+      setLoadingNotifs(true);
+      try {
+        const res = await api.get("/notifications");
+        if (res.data?.data) {
+          setNotifications(res.data.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch notifications on profile page", err);
+      } finally {
+        setLoadingNotifs(false);
+      }
+    };
+
+    fetchNotifs();
+  }, [isOwnProfile, activeTab]);
+
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -295,7 +300,6 @@ function ProfileContent() {
     setPosition({ x: 0, y: 0 });
     setScale(1);
 
-    // Reset input so the same file can be re-selected
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -314,78 +318,124 @@ function ProfileContent() {
       setIsLibraryPublic(updated.isLibraryPublic);
       setIsPurchaseHistoryPublic(updated.isPurchaseHistoryPublic);
       updateUser({ fullName, avatarUrl: updated.avatarUrl || undefined });
-      setEditing(false);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 2500);
     } catch (error) {
       console.error("Failed to update profile", error);
-      alert(locale === "vi" ? "Lưu thông tin thất bại. Thử lại!" : "Failed to save profile.");
+      alert(isVi ? "Lưu thông tin thất bại. Vui lòng thử lại." : "Failed to save profile.");
     } finally {
       setSaving(false);
     }
   };
 
+  const copyProfileLink = () => {
+    if (typeof window !== "undefined") {
+      navigator.clipboard.writeText(window.location.href);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
+  const markNotifRead = async (id: string) => {
+    try {
+      await api.post(`/notifications/${id}/read`);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
+      );
+    } catch (err) {
+      console.error("Failed to mark notification read", err);
+    }
+  };
+
+  const clearAllNotifs = async () => {
+    try {
+      await api.delete("/notifications");
+      setNotifications([]);
+    } catch (err) {
+      console.error("Failed to clear notifications", err);
+    }
+  };
+
+  const parseNotifText = (text: string | null | undefined): string => {
+    if (!text) return "";
+    if (!text.includes(" / ")) return text;
+    const parts = text.split(" / ");
+    if (locale === "vi") return parts[0]?.trim() || text;
+    if (locale === "zh") return parts[2]?.trim() || parts[1]?.trim() || parts[0]?.trim() || text;
+    return parts[1]?.trim() || parts[0]?.trim() || text;
+  };
+
+  const filteredGames = useMemo(() => {
+    if (!gameSearch.trim()) return games;
+    return games.filter((g) =>
+      g.title.toLowerCase().includes(gameSearch.toLowerCase().trim())
+    );
+  }, [games, gameSearch]);
+
   if (loading) {
     return (
-      <div className="flex h-[80vh] items-center justify-center">
-        <div className="size-10 animate-spin rounded-full border-4 border-violet-500 border-t-transparent" />
+      <div className="flex h-[70vh] items-center justify-center">
+        <div className="size-6 animate-spin rounded-full border-2 border-zinc-400 border-t-transparent" />
       </div>
     );
   }
 
   if (!profile) return null;
 
+  const isAdmin = profile.roles.includes("Admin");
+  const unreadNotifCount = notifications.filter((n) => !n.isRead).length;
+
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6 md:py-12">
-      <div className="grid gap-6 md:gap-8 md:grid-cols-[300px_1fr]">
+    <div className="mx-auto max-w-5xl px-6 py-10 sm:py-14 text-zinc-100">
 
-        {/* Profile Sidebar */}
-        <div className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/50 p-4 md:p-6 backdrop-blur shadow-xl">
-          <div className="flex flex-col items-center text-center">
+      {/* ===================== EDITORIAL PROFILE HEADER ===================== */}
+      <header className="pb-8 border-b border-zinc-800">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
 
-            {/* Avatar with upload button */}
-            <div className="relative mb-6">
-              {previewAvatar && !avatarError ? (
-                <div className="size-32 overflow-hidden rounded-full ring-4 ring-violet-500/20 relative">
-                  <img 
-                    src={avatarRetry > 0 ? (previewAvatar.includes("?") ? `${previewAvatar}&r=${avatarRetry}` : `${previewAvatar}?r=${avatarRetry}`) : previewAvatar} 
-                    alt={profile.fullName} 
-                    className="size-full object-cover" 
+          {/* Left: Avatar & Identity Details */}
+          <div className="flex items-center gap-5">
+            {/* Avatar with subtle upload trigger */}
+            <div className="relative group shrink-0">
+              <div className="size-20 sm:size-24 rounded-full overflow-hidden border border-zinc-800 bg-zinc-900">
+                {previewAvatar && !avatarError ? (
+                  <img
+                    src={
+                      avatarRetry > 0
+                        ? previewAvatar.includes("?")
+                          ? `${previewAvatar}&r=${avatarRetry}`
+                          : `${previewAvatar}?r=${avatarRetry}`
+                        : previewAvatar
+                    }
+                    alt={profile.fullName}
+                    className="size-full object-cover"
                     referrerPolicy="no-referrer"
                     onError={() => {
                       if (avatarRetry < 3) {
-                        setTimeout(() => {
-                          setAvatarRetry(prev => prev + 1);
-                        }, 1000);
+                        setTimeout(() => setAvatarRetry((prev) => prev + 1), 1000);
                       } else {
                         setAvatarError(true);
                       }
                     }}
                   />
-                  {uploadingAvatar && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full">
-                      <Loader2 className="size-8 text-white animate-spin" />
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="relative">
-                  <UserCircle className="size-32 text-zinc-600" strokeWidth={1} />
-                  {uploadingAvatar && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/60 rounded-full">
-                      <Loader2 className="size-8 text-white animate-spin" />
-                    </div>
-                  )}
-                </div>
-              )}
+                ) : (
+                  <div className="size-full flex items-center justify-center text-zinc-400 font-semibold text-xl">
+                    {profile.fullName ? profile.fullName.charAt(0).toUpperCase() : "U"}
+                  </div>
+                )}
 
-              {/* Camera upload button — only visible on own profile */}
+                {uploadingAvatar && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                    <div className="size-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  </div>
+                )}
+              </div>
+
               {isOwnProfile && (
                 <label
-                  className="absolute -bottom-2 -right-2 rounded-full bg-violet-600 p-2 text-white shadow-lg cursor-pointer hover:bg-violet-500 transition-colors"
-                  title={locale === "vi" ? "Đổi ảnh đại diện" : isZh ? "更换头像" : "Change avatar"}
+                  className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer text-xs text-white font-medium"
+                  title={isVi ? "Đổi ảnh đại diện" : "Change avatar"}
                 >
-                  <Camera className="size-5" />
+                  <span>{isVi ? "Đổi ảnh" : "Edit"}</span>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -397,435 +447,458 @@ function ProfileContent() {
               )}
             </div>
 
-            <h1 className="mb-1 text-2xl font-bold tracking-tight text-white">{profile.fullName}</h1>
-            <p className="mb-4 text-sm text-zinc-400">{profile.email}</p>
-
-            <div className="w-full space-y-3 rounded-xl bg-zinc-950/50 p-4 text-left">
-              <div className="flex items-center gap-3 text-sm text-zinc-300">
-                <Calendar className="size-4 text-violet-400 shrink-0" />
-                <span>{locale === "vi" ? "Tham gia: " : isZh ? "注册时间：" : "Joined: "} {formatDate(profile.createdAt)}</span>
-              </div>
-              {profile.dateOfBirth && (
-                <div className="flex items-center gap-3 text-sm text-zinc-300">
-                  <Calendar className="size-4 text-violet-400 shrink-0" />
-                  <span>
-                    {locale === "vi" ? "Ngày sinh: " : isZh ? "出生日期：" : "Date of Birth: "}
-                    {formatDate(profile.dateOfBirth)}
+            {/* User Meta */}
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2.5">
+                <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-white">
+                  {profile.fullName}
+                </h1>
+                {isAdmin ? (
+                  <span className="text-[11px] font-medium tracking-wide uppercase px-2 py-0.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-300">
+                    Admin
                   </span>
-                </div>
-              )}
-              {isOwnProfile && (
-                <div className="flex items-center gap-3 text-sm text-zinc-300">
-                  <Gamepad2 className="size-4 text-violet-400 shrink-0" />
-                  <span>{games.length} {locale === "vi" ? "game đang sở hữu" : isZh ? "款已拥有游戏" : "Games Owned"}</span>
-                </div>
-              )}
-              <div className="flex items-center gap-3 text-sm text-zinc-300">
-                <Settings className="size-4 text-violet-400 shrink-0" />
-                <span>Role: {profile.roles.join(", ")}</span>
+                ) : (
+                  <span className="text-[11px] font-medium tracking-wide uppercase px-2 py-0.5 rounded border border-zinc-800 text-zinc-400">
+                    {isVi ? "Thành viên" : "Member"}
+                  </span>
+                )}
               </div>
-              {profile.roles.includes("Admin") && (
-                <div className="pt-1">
-                  <Link
-                    href={`/${locale}/admin`}
-                    className="w-full py-2 px-3 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 text-violet-300 border border-violet-500/30 text-xs font-semibold flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
-                  >
-                    <Shield className="size-3.5 text-violet-400" />
-                    <span>{locale === "vi" ? "Vào Trang Quản Trị" : isZh ? "进入管理控制台" : "Go to Admin Panel"}</span>
-                    <ArrowUpRight className="size-3.5" />
-                  </Link>
+
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400">
+                <span>{profile.email}</span>
+                <span>•</span>
+                <span>
+                  {isVi ? "Tham gia " : isZh ? "加入于 " : "Joined "}
+                  {formatDate(profile.createdAt)}
+                </span>
+                {profile.dateOfBirth && (
+                  <>
+                    <span>•</span>
+                    <span>
+                      {isVi ? "Sinh ngày " : isZh ? "出生于 " : "Born "}
+                      {formatDate(profile.dateOfBirth)}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Primary & Secondary Actions */}
+          <div className="flex items-center gap-2.5 self-start sm:self-center">
+            <button
+              type="button"
+              onClick={copyProfileLink}
+              className="px-3.5 py-1.5 rounded-lg border border-zinc-800 hover:border-zinc-700 text-xs font-medium text-zinc-300 hover:text-white transition"
+            >
+              {copiedLink ? (isVi ? "Đã sao chép" : "Copied") : (isVi ? "Chia sẻ" : "Share")}
+            </button>
+
+            {isOwnProfile && (
+              <button
+                type="button"
+                onClick={() => setActiveTab(activeTab === "settings" ? "library" : "settings")}
+                className={`px-4 py-1.5 rounded-lg text-xs font-medium transition ${
+                  activeTab === "settings"
+                    ? "bg-zinc-100 text-zinc-950 font-semibold"
+                    : "border border-zinc-700 bg-zinc-800/80 hover:bg-zinc-800 text-white"
+                }`}
+              >
+                {activeTab === "settings"
+                  ? (isVi ? "Đóng cài đặt" : "Close")
+                  : (isVi ? "Chỉnh sửa hồ sơ" : isZh ? "编辑资料" : "Edit Profile")}
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* ===================== MINIMAL TAB NAVIGATION ===================== */}
+      <nav className="flex items-center gap-8 border-b border-zinc-800 text-sm mt-6">
+        <button
+          type="button"
+          onClick={() => setActiveTab("library")}
+          className={`pb-3 font-medium transition -mb-px flex items-center gap-2 ${
+            activeTab === "library"
+              ? "border-b-2 border-white text-white"
+              : "border-b-2 border-transparent text-zinc-400 hover:text-zinc-200"
+          }`}
+        >
+          <span>{isVi ? "Thư viện trò chơi" : isZh ? "游戏库" : "Games Library"}</span>
+          <span className="text-xs text-zinc-400 font-normal">
+            ({games.length})
+          </span>
+        </button>
+
+        {isOwnProfile && (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveTab("settings")}
+              className={`pb-3 font-medium transition -mb-px ${
+                activeTab === "settings"
+                  ? "border-b-2 border-white text-white"
+                  : "border-b-2 border-transparent text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              {isVi ? "Cài đặt & Quyền riêng tư" : isZh ? "设置与隐私" : "Settings & Privacy"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("notifications")}
+              className={`pb-3 font-medium transition -mb-px flex items-center gap-2 ${
+                activeTab === "notifications"
+                  ? "border-b-2 border-white text-white"
+                  : "border-b-2 border-transparent text-zinc-400 hover:text-zinc-200"
+              }`}
+            >
+              <span>{isVi ? "Thông báo" : isZh ? "通知" : "Notifications"}</span>
+              {unreadNotifCount > 0 && (
+                <span className="size-1.5 rounded-full bg-rose-500" />
+              )}
+            </button>
+          </>
+        )}
+      </nav>
+
+      {/* ===================== TAB CONTENT ===================== */}
+      <main className="pt-6">
+
+        {/* TAB 1: GAMES LIBRARY */}
+        {activeTab === "library" && (
+          <div className="space-y-6">
+            {/* Library Subheader with Inline Search */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <p className="text-xs text-zinc-400">
+                {isVi
+                  ? `Hiển thị ${filteredGames.length} trên tổng số ${games.length} trò chơi đã kích hoạt.`
+                  : `Showing ${filteredGames.length} of ${games.length} activated games.`}
+              </p>
+
+              {games.length > 0 && (
+                <div className="w-full sm:w-64">
+                  <input
+                    type="text"
+                    placeholder={isVi ? "Lọc theo tên trò chơi..." : "Filter by title..."}
+                    value={gameSearch}
+                    onChange={(e) => setGameSearch(e.target.value)}
+                    className="w-full px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900/80 text-xs text-zinc-200 placeholder-zinc-400 focus:outline-none focus:border-zinc-600 transition"
+                  />
                 </div>
               )}
             </div>
 
-            {saveSuccess && (
-              <div className="mt-4 flex items-center gap-2 text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-2 w-full justify-center">
-                <CheckCircle className="size-4" />
-                {locale === "vi" ? "Đã lưu thành công!" : isZh ? "保存成功！" : "Saved successfully!"}
+            {/* Privacy state if viewing another user */}
+            {!isOwnProfile && !profile.isLibraryPublic ? (
+              <div className="py-16 text-center text-zinc-400 border border-zinc-800 rounded-xl bg-zinc-900/30">
+                <p className="text-sm font-medium text-zinc-300">
+                  {isVi ? "Thư viện trò chơi đang ở chế độ riêng tư" : "This library is private"}
+                </p>
+                <p className="text-xs text-zinc-400 mt-1 max-w-sm mx-auto">
+                  {isVi
+                    ? `${profile.fullName} đã ẩn danh sách trò chơi khỏi chế độ xem công khai.`
+                    : `${profile.fullName} keeps their owned games private.`}
+                </p>
               </div>
-            )}
-
-            {isOwnProfile && (
-              <Button
-                className="mt-4 w-full"
-                variant={editing ? "outline" : "default"}
-                onClick={() => setEditing(!editing)}
-              >
-                {editing
-                  ? (locale === "vi" ? "Hủy chỉnh sửa" : isZh ? "取消编辑" : "Cancel Editing")
-                  : (locale === "vi" ? "Chỉnh sửa hồ sơ" : isZh ? "编辑个人资料" : "Edit Profile")}
-              </Button>
-            )}
-          </div>
-        </div>
-
-        {/* Main Content Area */}
-        <div className="space-y-6 md:space-y-8">
-
-          {/* Edit Form */}
-          {editing && (
-            <div className="rounded-2xl border border-violet-500/20 bg-zinc-900/50 p-6 backdrop-blur shadow-xl">
-              <h2 className="mb-6 text-xl font-semibold text-white">
-                {locale === "vi" ? "Chỉnh sửa thông tin" : isZh ? "编辑个人信息" : "Profile Details"}
-              </h2>
-
-              {/* Avatar upload hint */}
-              <div className="mb-5 flex items-start gap-3 rounded-xl bg-violet-500/5 border border-violet-500/10 p-4">
-                <Camera className="size-5 text-violet-400 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-violet-300">
-                    {locale === "vi" ? "Đổi ảnh đại diện" : isZh ? "更换头像" : "Change Avatar"}
-                  </p>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    {locale === "vi"
-                      ? "Bấm vào biểu tượng 📷 ở ảnh đại diện bên trái để tải ảnh mới lên ngay lập tức."
-                      : isZh
-                        ? "点击左侧头像上的 📷 相机图标即可立即上传新头像。"
-                        : "Click the 📷 camera icon on your avatar photo (left panel) to upload a new image instantly."}
-                  </p>
+            ) : games.length === 0 ? (
+              /* Empty Library */
+              <div className="py-16 text-center border border-zinc-800 rounded-xl bg-zinc-900/20 space-y-3">
+                <p className="text-sm font-medium text-zinc-300">
+                  {isVi ? "Chưa có trò chơi nào trong thư viện" : "No games in library"}
+                </p>
+                <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                  {isVi
+                    ? "Các tựa game đã mua hoặc nhận mã kích hoạt sẽ xuất hiện tại đây và có thể chơi trên Launcher."
+                    : "Games purchased or redeemed will appear here and can be launched."}
+                </p>
+                <div className="pt-2">
+                  <Link
+                    href={`/${locale}/games`}
+                    className="inline-block px-4 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-medium text-xs transition"
+                  >
+                    {isVi ? "Xem danh mục cửa hàng" : "Browse Store"}
+                  </Link>
                 </div>
               </div>
+            ) : filteredGames.length === 0 ? (
+              <div className="py-12 text-center text-xs text-zinc-400 border border-zinc-800 rounded-xl">
+                {isVi
+                  ? `Không có trò chơi nào khớp với từ khóa "${gameSearch}".`
+                  : `No games match "${gameSearch}".`}
+              </div>
+            ) : (
+              /* Games Grid */
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {filteredGames.map((game) => (
+                  <Link
+                    key={game.gameId}
+                    href={`/${locale}/game/${game.slug}`}
+                    className="group block space-y-2"
+                  >
+                    {/* Poster */}
+                    <div className="aspect-[16/10] w-full overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900 transition-colors group-hover:border-zinc-700">
+                      {game.coverUrl ? (
+                        <img
+                          src={resolveUrl(game.coverUrl) ?? ""}
+                          referrerPolicy="no-referrer"
+                          alt={game.title}
+                          className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                      ) : (
+                        <div className="size-full flex items-center justify-center text-xs text-zinc-400">
+                          {game.title}
+                        </div>
+                      )}
+                    </div>
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">
-                    {locale === "vi" ? "Họ và tên" : isZh ? "姓名 / 昵称" : "Full Name"}
+                    {/* Meta */}
+                    <div className="space-y-0.5">
+                      <h3 className="text-xs sm:text-sm font-medium text-zinc-200 truncate group-hover:text-white transition-colors">
+                        {game.title}
+                      </h3>
+                      {(isOwnProfile || profile.isPurchaseHistoryPublic) && (
+                        <p className="text-[11px] text-zinc-400">
+                          {isVi ? "Sở hữu " : isZh ? "获得于 " : "Acquired "}
+                          {formatDate(game.acquiredAt)}
+                        </p>
+                      )}
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: SETTINGS & PRIVACY */}
+        {activeTab === "settings" && isOwnProfile && (
+          <div className="max-w-2xl space-y-8">
+            {saveSuccess && (
+              <div className="p-3 text-xs text-emerald-400 bg-emerald-950/30 border border-emerald-900/60 rounded-lg">
+                {isVi ? "Đã lưu thay đổi thành công." : "Profile updated successfully."}
+              </div>
+            )}
+
+            {/* Section 1: Personal Info */}
+            <div className="space-y-4">
+              <div>
+                <h2 className="text-sm font-semibold text-white">
+                  {isVi ? "Thông tin cá nhân" : "Personal Information"}
+                </h2>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {isVi ? "Tên hiển thị công khai trên hồ sơ và bình luận." : "Public identity across the platform."}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-300">
+                    {isVi ? "Họ và tên" : "Display Name"}
                   </label>
                   <input
                     type="text"
                     value={fullName}
-                    onChange={e => setFullName(e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-zinc-950 px-4 py-2 text-white outline-none focus:border-violet-500 transition-colors"
+                    onChange={(e) => setFullName(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-900 text-xs text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-zinc-600 transition"
                   />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-sm text-zinc-400">
-                    {locale === "vi" ? "Ngày sinh" : isZh ? "出生日期" : "Date of Birth"}
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-300">
+                    {isVi ? "Ngày sinh" : "Date of Birth"}
                   </label>
                   <input
                     type="date"
-                    value={dateOfBirth}
-                    onChange={e => setDateOfBirth(e.target.value)}
-                    className="w-full rounded-lg border border-white/10 bg-zinc-950 px-4 py-2 text-white outline-none focus:border-violet-500 [color-scheme:dark] transition-colors"
+                    value={dateOfBirth ? dateOfBirth.split("T")[0] : ""}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-800 bg-zinc-900 text-xs text-zinc-100 focus:outline-none focus:border-zinc-600 transition"
                   />
                 </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-300">
+                    Email
+                  </label>
+                  <input
+                    type="text"
+                    value={profile.email}
+                    disabled
+                    className="w-full px-3 py-2 rounded-lg border border-zinc-800/80 bg-zinc-900/40 text-xs text-zinc-400 cursor-not-allowed"
+                  />
+                  <p className="text-[11px] text-zinc-400">
+                    {isVi ? "Email tài khoản đã liên kết cố định để bảo vệ bản quyền game." : "Email cannot be edited directly."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Section 2: Privacy Preferences */}
+            <div className="space-y-4 pt-6 border-t border-zinc-800">
+              <div>
+                <h2 className="text-sm font-semibold text-white">
+                  {isVi ? "Quyền riêng tư" : "Privacy Settings"}
+                </h2>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  {isVi
+                    ? "Kiểm soát những gì người khác có thể thấy khi xem trang hồ sơ của bạn."
+                    : "Control what other visitors see on your public profile."}
+                </p>
               </div>
 
-              <div className="mt-4 grid gap-4 md:grid-cols-2">
-                <div className="flex items-center gap-2">
+              <div className="space-y-3">
+                <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    id="isLibraryPublic"
                     checked={isLibraryPublic}
-                    onChange={e => setIsLibraryPublic(e.target.checked)}
-                    className="size-4 rounded border-white/10 bg-zinc-950 text-violet-600 focus:ring-violet-500"
+                    onChange={(e) => setIsLibraryPublic(e.target.checked)}
+                    className="mt-0.5 size-4 rounded border-zinc-700 bg-zinc-900 accent-zinc-200 cursor-pointer"
                   />
-                  <label htmlFor="isLibraryPublic" className="text-sm text-zinc-300 cursor-pointer">
-                    {locale === "vi" ? "Công khai thư viện game" : isZh ? "公开游戏库" : "Make game library public"}
-                  </label>
-                </div>
-                <div className="flex items-center gap-2">
+                  <div>
+                    <p className="text-xs font-medium text-zinc-200">
+                      {isVi ? "Công khai thư viện trò chơi" : "Public Game Library"}
+                    </p>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {isVi
+                        ? "Cho phép mọi người xem danh sách các tựa game bạn sở hữu."
+                        : "Allow anyone visiting your profile to view your games."}
+                    </p>
+                  </div>
+                </label>
+
+                <label className="flex items-start gap-3 cursor-pointer">
                   <input
                     type="checkbox"
-                    id="isPurchaseHistoryPublic"
                     checked={isPurchaseHistoryPublic}
-                    onChange={e => setIsPurchaseHistoryPublic(e.target.checked)}
-                    className="size-4 rounded border-white/10 bg-zinc-950 text-violet-600 focus:ring-violet-500"
+                    onChange={(e) => setIsPurchaseHistoryPublic(e.target.checked)}
+                    className="mt-0.5 size-4 rounded border-zinc-700 bg-zinc-900 accent-zinc-200 cursor-pointer"
                   />
-                  <label htmlFor="isPurchaseHistoryPublic" className="text-sm text-zinc-300 cursor-pointer">
-                    {locale === "vi" ? "Công khai lịch sử mua" : isZh ? "公开购买记录" : "Make purchase history public"}
-                  </label>
-                </div>
-              </div>
-
-              <div className="mt-6 flex justify-end gap-3">
-                <Button variant="outline" onClick={() => setEditing(false)}>
-                  {locale === "vi" ? "Hủy" : isZh ? "取消" : "Cancel"}
-                </Button>
-                <Button
-                  onClick={handleSave}
-                  disabled={saving}
-                  className="bg-violet-600 hover:bg-violet-500 gap-2"
-                >
-                  {saving && <Loader2 className="size-4 animate-spin" />}
-                  {locale === "vi" ? "Lưu thay đổi" : isZh ? "保存修改" : "Save Changes"}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Admin Dashboard Overview OR Normal User Library */}
-          {profile.roles.includes("Admin") ? (
-            <div className="space-y-6">
-              {/* Admin Hero Capsule Card */}
-              <div className="relative overflow-hidden rounded-2xl border border-violet-500/25 bg-gradient-to-br from-[#0F1422] via-[#13192B] to-[#0A0D16] p-5 sm:p-6 shadow-2xl backdrop-blur">
-                {/* Decorative ambient glow */}
-                <div className="absolute -top-16 -right-16 size-48 rounded-full bg-violet-600/15 blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-16 -left-16 size-48 rounded-full bg-cyan-600/10 blur-3xl pointer-events-none" />
-
-                <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-5">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-violet-500/15 text-violet-300 border border-violet-500/30">
-                        <Shield className="size-3 text-violet-400" />
-                        {locale === "vi" ? "Đặc Quyền Quản Trị Viên" : isZh ? "最高管理员特权" : "Super Administrator"}
-                      </span>
-                    </div>
-                    <h2 className="text-xl md:text-2xl font-black text-white tracking-tight flex items-center gap-2">
-                      <LayoutDashboard className="size-6 text-violet-400" />
-                      {locale === "vi" ? "Bảng Điều Khiển Quản Trị Hệ Thống" : isZh ? "系统管理总控制台" : "System Admin Control Center"}
-                    </h2>
-                    <p className="text-xs text-zinc-400">
-                      {locale === "vi"
-                        ? "Bạn có toàn quyền quản lý trò chơi, đơn hàng, doanh thu và người dùng trên sàn GameVault."
-                        : isZh
-                          ? "您对 GameVault 平台上的游戏、订单、收入和用户拥有全部管理权限。"
-                          : "Full management authority over games, orders, revenue, and users across GameVault."}
-                    </p>
-                  </div>
-
-                  <Link
-                    href={`/${locale}/admin`}
-                    className="self-start sm:self-auto inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-xs transition active:scale-[0.98] shadow-lg shadow-violet-600/25 cursor-pointer whitespace-nowrap"
-                  >
-                    <span>{locale === "vi" ? "Mở Trang Quản Trị Toàn Diện" : isZh ? "打开全功能管理后台" : "Open Full Admin Console"}</span>
-                    <ArrowUpRight className="size-4" />
-                  </Link>
-                </div>
-
-                {/* Admin Fast Stats Metrics */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-5">
-                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-violet-500/30 transition">
-                    <div className="flex items-center justify-between text-zinc-400 text-xs mb-1.5">
-                      <span>{locale === "vi" ? "Tổng Doanh Thu" : isZh ? "平台总营业额" : "Total Revenue"}</span>
-                      <DollarSign className="size-3.5 text-violet-400" />
-                    </div>
-                    <div className="text-lg md:text-xl font-black text-violet-300 truncate">
-                      {formatPrice(adminStats?.totalRevenue ?? 0)}
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-emerald-500/30 transition">
-                    <div className="flex items-center justify-between text-zinc-400 text-xs mb-1.5">
-                      <span>{locale === "vi" ? "Đơn Hàng Đã Xử Lý" : isZh ? "已完成订单数" : "Completed Orders"}</span>
-                      <ShoppingBag className="size-3.5 text-emerald-400" />
-                    </div>
-                    <div className="text-lg md:text-xl font-black text-emerald-300">
-                      {adminStats?.totalOrders ?? 0}
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-blue-500/30 transition">
-                    <div className="flex items-center justify-between text-zinc-400 text-xs mb-1.5">
-                      <span>{locale === "vi" ? "Người Dùng Đăng Ký" : isZh ? "注册玩家总数" : "Registered Users"}</span>
-                      <Users className="size-3.5 text-blue-400" />
-                    </div>
-                    <div className="text-lg md:text-xl font-black text-blue-300">
-                      {adminStats?.totalUsers ?? 0}
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06] hover:border-amber-500/30 transition">
-                    <div className="flex items-center justify-between text-zinc-400 text-xs mb-1.5">
-                      <span>{locale === "vi" ? "Trò Chơi Trên Sàn" : isZh ? "平台收录游戏" : "Published Games"}</span>
-                      <Gamepad2 className="size-3.5 text-amber-400" />
-                    </div>
-                    <div className="text-lg md:text-xl font-black text-amber-300">
-                      {adminStats?.totalGames ?? 0}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Quick Action Shortcuts for Admin */}
-                <div className="mt-5 pt-4 border-t border-white/[0.06] flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] text-zinc-400 font-medium mr-1">
-                    {locale === "vi" ? "Lối tắt quản lý:" : isZh ? "快捷通道：" : "Quick shortcuts:"}
-                  </span>
-                  <Link
-                    href={`/${locale}/admin?tab=games`}
-                    className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-zinc-300 hover:text-white border border-white/[0.06] transition flex items-center gap-1.5"
-                  >
-                    <Gamepad2 className="size-3.5 text-amber-400" />
-                    <span>{locale === "vi" ? "Quản lý trò chơi" : "Manage Games"}</span>
-                  </Link>
-                  <Link
-                    href={`/${locale}/admin?tab=orders`}
-                    className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-zinc-300 hover:text-white border border-white/[0.06] transition flex items-center gap-1.5"
-                  >
-                    <ShoppingBag className="size-3.5 text-emerald-400" />
-                    <span>{locale === "vi" ? "Xem đơn hàng" : "Orders"}</span>
-                  </Link>
-                  <Link
-                    href={`/${locale}/admin?tab=users`}
-                    className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-zinc-300 hover:text-white border border-white/[0.06] transition flex items-center gap-1.5"
-                  >
-                    <Users className="size-3.5 text-blue-400" />
-                    <span>{locale === "vi" ? "Người dùng" : "Users"}</span>
-                  </Link>
-                  <Link
-                    href={`/${locale}/admin?tab=revenue`}
-                    className="px-3 py-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-xs font-medium text-zinc-300 hover:text-white border border-white/[0.06] transition flex items-center gap-1.5"
-                  >
-                    <DollarSign className="size-3.5 text-violet-400" />
-                    <span>{locale === "vi" ? "Báo cáo doanh thu" : "Revenue"}</span>
-                  </Link>
-                </div>
-              </div>
-
-              {/* Admin Test Library (collapsible / compact) */}
-              <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-4 md:p-6 backdrop-blur shadow-xl">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 border-b border-white/[0.06] pb-3">
                   <div>
-                    <h3 className="text-base font-semibold text-white flex items-center gap-2">
-                      <Gamepad2 className="size-4 text-violet-400" />
-                      {locale === "vi" ? "Thư viện game cá nhân (Tài khoản thử nghiệm)" : isZh ? "个人测试游戏库" : "Personal Test Library"}
-                    </h3>
-                    <p className="text-xs text-zinc-400 mt-0.5">
-                      {locale === "vi"
-                        ? "Các tựa game đã được mua hoặc kích hoạt riêng cho tài khoản Admin này để chơi thử nghiệm."
-                        : "Games directly activated for this Admin account for testing purposes."}
+                    <p className="text-xs font-medium text-zinc-200">
+                      {isVi ? "Công khai ngày sở hữu game" : "Public Acquisition Date"}
+                    </p>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      {isVi
+                        ? "Hiển thị thời gian bạn đã mua hoặc nhận game trong thư viện."
+                        : "Display the timestamp of when each game was acquired."}
                     </p>
                   </div>
-                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-white/[0.04] text-zinc-400 self-start sm:self-auto">
-                    {games.length} game
-                  </span>
-                </div>
-
-                {games.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-6 text-center text-zinc-500">
-                    <Gamepad2 className="mb-2 size-8 opacity-20" />
-                    <p className="text-xs">
-                      {locale === "vi"
-                        ? "Tài khoản Admin chưa mua game nào để test. Bạn có thể mở Store để thử nghiệm quy trình mua game."
-                        : "No games in personal test library."}
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mt-2 text-violet-400 text-xs"
-                      onClick={() => router.push(`/${locale}/games`)}
-                    >
-                      {locale === "vi" ? "Thử nghiệm mua game tại Store" : "Test Store"}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {games.map(game => (
-                      <div
-                        key={game.gameId}
-                        className="group relative overflow-hidden rounded-xl border border-white/5 bg-zinc-950 transition-colors hover:border-violet-500/50 cursor-pointer"
-                        onClick={() => router.push(`/${locale}/game/${game.slug}`)}
-                      >
-                        <div className="aspect-video w-full overflow-hidden bg-zinc-900">
-                          {game.coverUrl ? (
-                            <img
-                              src={resolveUrl(game.coverUrl) ?? ""}
-                              referrerPolicy="no-referrer"
-                              alt={game.title}
-                              className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-                            />
-                          ) : (
-                            <div className="flex size-full items-center justify-center">
-                              <Gamepad2 className="size-10 text-zinc-700" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="p-4">
-                          <h3 className="truncate font-semibold text-zinc-200">{game.title}</h3>
-                          <p className="mt-1 text-xs text-zinc-500">
-                            {locale === "vi" ? "Mua lúc: " : isZh ? "购买时间：" : "Acquired: "}
-                            {formatDate(game.acquiredAt)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                </label>
               </div>
             </div>
-          ) : (
-            /* Normal User Library */
-            <div className="rounded-2xl border border-white/10 bg-zinc-900/50 p-4 md:p-6 backdrop-blur shadow-xl">
-              <h2 className="mb-6 text-xl font-semibold text-white">
-                {locale === "vi" ? "Lịch sử mua & Thư viện game" : isZh ? "购买记录与游戏库" : "Purchase History & Library"}
-              </h2>
 
-              {!isOwnProfile && !profile.isLibraryPublic ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
-                  <Gamepad2 className="mb-4 size-12 opacity-20" />
-                  <p>{locale === "vi" ? `Thư viện game của ${profile.fullName} đang để chế độ riêng tư.` : isZh ? `${profile.fullName} 的游戏库已设为私密。` : `${profile.fullName}'s library is private.`}</p>
-                </div>
-              ) : games.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12 text-center text-zinc-500">
-                  <Gamepad2 className="mb-4 size-12 opacity-20" />
-                  <p>{locale === "vi" ? "Bạn chưa có game nào trong thư viện." : isZh ? "您的游戏库中暂无游戏。" : "No games in your library yet."}</p>
-                  <Button
-                    variant="ghost"
-                    className="mt-2 text-violet-400"
-                    onClick={() => router.push(`/${locale}/games`)}
+            {/* Form Actions */}
+            <div className="flex items-center gap-3 pt-6 border-t border-zinc-800">
+              <button
+                type="button"
+                disabled={saving}
+                onClick={handleSave}
+                className="px-5 py-2 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-medium text-xs transition disabled:opacity-50"
+              >
+                {saving
+                  ? (isVi ? "Đang lưu..." : "Saving...")
+                  : (isVi ? "Lưu thay đổi" : isZh ? "保存修改" : "Save Changes")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab("library")}
+                className="px-4 py-2 rounded-lg border border-zinc-800 hover:border-zinc-700 text-xs font-medium text-zinc-400 hover:text-white transition"
+              >
+                {isVi ? "Hủy" : "Cancel"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: NOTIFICATIONS */}
+        {activeTab === "notifications" && isOwnProfile && (
+          <div className="space-y-4 max-w-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
+              <p className="text-xs text-zinc-400">
+                {isVi ? "Lịch sử thông báo hệ thống và giao dịch." : "Recent account notifications."}
+              </p>
+              {notifications.length > 0 && (
+                <div className="flex items-center gap-4 text-xs">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const unreads = notifications.filter((x) => !x.isRead);
+                      for (const n of unreads) {
+                        await markNotifRead(n.id);
+                      }
+                    }}
+                    className="text-zinc-400 hover:text-white transition"
                   >
-                    {locale === "vi" ? "Khám phá cửa hàng" : isZh ? "浏览商城" : "Browse Store"}
-                  </Button>
-                </div>
-              ) : (
-                <div className="grid gap-4 grid-cols-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {games.map(game => (
-                    <div
-                      key={game.gameId}
-                      className="group relative overflow-hidden rounded-xl border border-white/5 bg-zinc-950 transition-colors hover:border-violet-500/50 cursor-pointer"
-                      onClick={() => router.push(`/${locale}/game/${game.slug}`)}
-                    >
-                      <div className="aspect-video w-full overflow-hidden bg-zinc-900">
-                        {game.coverUrl ? (
-                          <img
-                            src={resolveUrl(game.coverUrl) ?? ""}
-                            referrerPolicy="no-referrer"
-                            alt={game.title}
-                            className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-                          />
-                        ) : (
-                          <div className="flex size-full items-center justify-center">
-                            <Gamepad2 className="size-10 text-zinc-700" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-4">
-                        <h3 className="truncate font-semibold text-zinc-200">{game.title}</h3>
-                        {(isOwnProfile || profile.isPurchaseHistoryPublic) && (
-                          <p className="mt-1 text-xs text-zinc-500">
-                            {locale === "vi" ? "Mua lúc: " : isZh ? "购买时间：" : "Acquired: "}
-                            {formatDate(game.acquiredAt)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    {isVi ? "Đọc tất cả" : "Mark all read"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearAllNotifs}
+                    className="text-zinc-400 hover:text-rose-400 transition"
+                  >
+                    {isVi ? "Xóa hết" : "Clear all"}
+                  </button>
                 </div>
               )}
             </div>
-          )}
 
-        </div>
-      </div>
+            {loadingNotifs ? (
+              <div className="py-12 text-center text-xs text-zinc-400">
+                {isVi ? "Đang tải thông báo..." : "Loading..."}
+              </div>
+            ) : notifications.length === 0 ? (
+              <div className="py-12 text-center text-xs text-zinc-400">
+                {isVi ? "Không có thông báo nào." : "No notifications."}
+              </div>
+            ) : (
+              <div className="divide-y divide-zinc-800/80">
+                {notifications.map((n) => (
+                  <div
+                    key={n.id}
+                    onClick={() => !n.isRead && markNotifRead(n.id)}
+                    className={`py-3 flex items-start justify-between gap-4 cursor-pointer transition ${
+                      n.isRead ? "opacity-60 hover:opacity-100" : "opacity-100"
+                    }`}
+                  >
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        {!n.isRead && (
+                          <span className="size-1.5 rounded-full bg-rose-500 shrink-0" />
+                        )}
+                        <h4 className="text-xs font-medium text-white truncate">
+                          {parseNotifText(n.title)}
+                        </h4>
+                      </div>
+                      <p className="text-xs text-zinc-400">
+                        {parseNotifText(n.message)}
+                      </p>
+                    </div>
+                    <span className="text-[11px] text-zinc-400 shrink-0">
+                      {formatDate(n.createdAt)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
-      {/* Avatar Cropper Modal (Facebook-style reposition & zoom) */}
+      </main>
+
+      {/* ===================== AVATAR CROPPER MODAL ===================== */}
       {isCropperOpen && cropperImageSrc && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-white/10 bg-zinc-900 p-6 shadow-2xl text-center flex flex-col items-center">
-            <h3 className="mb-2 text-xl font-bold text-white">
-              {locale === "vi" ? "Chỉnh sửa ảnh đại diện" : isZh ? "调整头像图片" : "Edit Profile Picture"}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4">
+          <div className="w-full max-w-sm border border-zinc-800 bg-zinc-950 p-6 rounded-xl text-center flex flex-col items-center">
+            <h3 className="text-sm font-semibold text-white mb-1">
+              {isVi ? "Căn chỉnh ảnh đại diện" : "Adjust Avatar"}
             </h3>
-            <p className="mb-6 text-xs text-zinc-400">
-              {locale === "vi" 
-                ? "Kéo để di chuyển và sử dụng thanh trượt để phóng to/thu nhỏ" 
-                : isZh
-                  ? "拖动以移动位置，滑动滑块进行缩放"
-                  : "Drag to reposition and use the slider to zoom"}
+            <p className="text-xs text-zinc-400 mb-4">
+              {isVi ? "Kéo để căn vị trí và dùng thanh trượt để phóng to" : "Drag to position and slide to zoom"}
             </p>
 
             {/* Viewport Circle Mask */}
-            <div 
-              className="relative size-[250px] overflow-hidden rounded-full border-2 border-violet-500/50 bg-zinc-950 cursor-grab select-none active:cursor-grabbing"
+            <div
+              className="relative size-[220px] overflow-hidden rounded-full border border-zinc-700 bg-zinc-900 cursor-grab select-none active:cursor-grabbing"
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
@@ -834,9 +907,9 @@ function ProfileContent() {
               onTouchMove={handleTouchMove}
               onTouchEnd={handleMouseUp}
             >
-              <img 
-                src={cropperImageSrc} 
-                alt="Reposition avatar" 
+              <img
+                src={cropperImageSrc}
+                alt="Crop avatar"
                 onLoad={onImageLoad}
                 style={{
                   width: imgSize.width,
@@ -845,46 +918,48 @@ function ProfileContent() {
                   left: "50%",
                   top: "50%",
                   position: "absolute",
-                  maxWidth: "none",
+                  maxWidth: "none"
                 }}
                 draggable={false}
               />
             </div>
 
-            {/* Slider zoom controls */}
-            <div className="mt-6 flex w-full items-center gap-3">
-              <span className="text-xs text-zinc-500">A</span>
-              <input 
-                type="range" 
-                min="1" 
-                max="3" 
-                step="0.01" 
-                value={scale} 
-                onChange={(e) => setScale(parseFloat(e.target.value))} 
-                className="w-full h-1.5 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-violet-500" 
+            {/* Slider zoom */}
+            <div className="mt-4 flex w-full items-center gap-3">
+              <span className="text-xs text-zinc-400 font-medium">1x</span>
+              <input
+                type="range"
+                min="1"
+                max="3"
+                step="0.01"
+                value={scale}
+                onChange={(e) => setScale(parseFloat(e.target.value))}
+                className="w-full h-1 bg-zinc-800 rounded appearance-none cursor-pointer accent-zinc-200"
               />
-              <span className="text-lg font-bold text-zinc-400">A</span>
+              <span className="text-xs text-zinc-400 font-medium">3x</span>
             </div>
 
-            {/* Action buttons */}
-            <div className="mt-6 flex w-full gap-3">
-              <Button 
-                variant="outline" 
+            {/* Actions */}
+            <div className="mt-6 flex w-full gap-2.5">
+              <button
+                type="button"
                 onClick={() => setIsCropperOpen(false)}
-                className="flex-1"
+                className="flex-1 py-1.5 rounded-lg border border-zinc-800 hover:border-zinc-700 text-xs font-medium text-zinc-300"
               >
-                {locale === "vi" ? "Hủy" : isZh ? "取消" : "Cancel"}
-              </Button>
-              <Button 
+                {isVi ? "Hủy" : "Cancel"}
+              </button>
+              <button
+                type="button"
                 onClick={cropAndUpload}
-                className="flex-1 bg-violet-600 hover:bg-violet-500 text-white font-medium"
+                className="flex-1 py-1.5 rounded-lg bg-zinc-100 hover:bg-zinc-200 text-zinc-950 font-medium text-xs transition"
               >
-                {locale === "vi" ? "Lưu" : isZh ? "保存" : "Save"}
-              </Button>
+                {isVi ? "Lưu ảnh" : "Save"}
+              </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

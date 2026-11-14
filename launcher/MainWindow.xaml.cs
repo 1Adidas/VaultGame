@@ -24,6 +24,9 @@ public partial class MainWindow : Window
     private readonly Dictionary<Guid, GameListItem> _downloadingItems = new();
     private readonly SemaphoreSlim _loadLibraryLock = new(1, 1);
 
+    private readonly List<NotificationDto> _notifications = new();
+    private readonly System.Windows.Threading.DispatcherTimer _notificationTimer;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -51,6 +54,19 @@ public partial class MainWindow : Window
         };
         _autoSyncTimer.Start();
 
+        _notificationTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(25)
+        };
+        _notificationTimer.Tick += async (s, e) =>
+        {
+            if (_session.User != null && !string.IsNullOrEmpty(_session.AccessToken) && viewMainSteam.Visibility == Visibility.Visible)
+            {
+                await LoadNotificationsAsync();
+            }
+        };
+        _notificationTimer.Start();
+
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
     }
@@ -60,6 +76,7 @@ public partial class MainWindow : Window
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         _autoSyncTimer.Stop();
+        _notificationTimer.Stop();
         CancelAllDownloads();
     }
 
@@ -81,10 +98,21 @@ public partial class MainWindow : Window
         // Auto login if we have a valid token
         if (!string.IsNullOrEmpty(_session.AccessToken) && _session.User != null)
         {
+            // Reject Admin account
+            if (_session.User.Roles != null && _session.User.Roles.Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase)))
+            {
+                _session.SavedEmail = string.Empty;
+                txtLoginEmail.Text = string.Empty;
+                ClearSessionAndShowLogin();
+                ShowLoginError("Tài khoản Quản trị viên (Admin) không được phép sử dụng trên Launcher. Vui lòng đăng nhập bằng tài khoản người chơi.");
+                return;
+            }
+
             _apiService.SetAuthToken(_session.AccessToken);
             UpdateUserProfileUi(_session.User);
             ShowMainSteamView();
             await LoadLibraryAsync();
+            _ = LoadNotificationsAsync();
 
             HandleDeepLink(App.LaunchArgument);
         }
@@ -258,6 +286,16 @@ public partial class MainWindow : Window
 
             var authResponse = await _apiService.LoginAsync(email, password);
 
+            // Reject Admin account
+            if (authResponse.User.Roles != null && authResponse.User.Roles.Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase)))
+            {
+                _session.SavedEmail = string.Empty;
+                _storageService.SaveSession(_session);
+                txtLoginEmail.Text = string.Empty;
+                ShowLoginError("Tài khoản Quản trị viên (Admin) không được phép đăng nhập trên Launcher. Vui lòng sử dụng tài khoản người chơi.");
+                return;
+            }
+
             _session.AccessToken = authResponse.AccessToken;
             _session.RefreshToken = authResponse.RefreshToken;
             _session.User = authResponse.User;
@@ -267,6 +305,7 @@ public partial class MainWindow : Window
             UpdateUserProfileUi(authResponse.User);
             ShowMainSteamView();
             await LoadLibraryAsync();
+            _ = LoadNotificationsAsync();
         }
         catch (Exception ex)
         {
@@ -288,6 +327,10 @@ public partial class MainWindow : Window
     private void ClearSessionAndShowLogin()
     {
         CancelAllDownloads();
+        popNotifications.IsOpen = false;
+        _notifications.Clear();
+        pnlNotificationsList.Children.Clear();
+        bdNotificationBadge.Visibility = Visibility.Collapsed;
         _storageService.ClearSession();
         _session.AccessToken = null;
         _session.RefreshToken = null;
@@ -958,6 +1001,216 @@ public partial class MainWindow : Window
     private void BtnClose_Click(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+
+    #endregion
+
+    #region Notifications Management
+
+    private async void BtnNotificationBell_Click(object sender, RoutedEventArgs e)
+    {
+        popNotifications.IsOpen = !popNotifications.IsOpen;
+        if (popNotifications.IsOpen)
+        {
+            await LoadNotificationsAsync();
+        }
+    }
+
+    private async Task LoadNotificationsAsync()
+    {
+        try
+        {
+            var notifs = await _apiService.GetNotificationsAsync();
+            _notifications.Clear();
+            _notifications.AddRange(notifs);
+
+            var unreadCount = _notifications.Count(n => !n.IsRead);
+            if (unreadCount > 0)
+            {
+                bdNotificationBadge.Visibility = Visibility.Visible;
+                txtNotificationBadgeCount.Text = unreadCount > 99 ? "99+" : unreadCount.ToString();
+            }
+            else
+            {
+                bdNotificationBadge.Visibility = Visibility.Collapsed;
+            }
+
+            RenderNotificationsList();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error loading notifications: {ex.Message}");
+        }
+    }
+
+    private void RenderNotificationsList()
+    {
+        pnlNotificationsList.Children.Clear();
+
+        if (_notifications.Count == 0)
+        {
+            var emptyPanel = new StackPanel
+            {
+                Margin = new Thickness(0, 30, 0, 30),
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            emptyPanel.Children.Add(new TextBlock
+            {
+                Text = "🔔",
+                FontSize = 24,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 8),
+                Opacity = 0.4
+            });
+            emptyPanel.Children.Add(new TextBlock
+            {
+                Text = "Không có thông báo mới",
+                Foreground = (Brush)FindResource("TextMutedBrush"),
+                FontSize = 11,
+                HorizontalAlignment = HorizontalAlignment.Center
+            });
+            pnlNotificationsList.Children.Add(emptyPanel);
+            return;
+        }
+
+        foreach (var n in _notifications)
+        {
+            var itemBorder = new Border
+            {
+                Background = n.IsRead ? new SolidColorBrush(Color.FromArgb(0x15, 0xFF, 0xFF, 0xFF)) : new SolidColorBrush(Color.FromArgb(0x35, 0x1E, 0x29, 0x3B)),
+                BorderBrush = n.IsRead ? new SolidColorBrush(Color.FromArgb(0x20, 0xFF, 0xFF, 0xFF)) : new SolidColorBrush(Color.FromArgb(0x70, 0x00, 0xE5, 0xFF)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(10, 8, 10, 8),
+                Margin = new Thickness(0, 0, 0, 6),
+                Cursor = Cursors.Hand,
+                Tag = n
+            };
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(14) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+            var dot = new System.Windows.Shapes.Ellipse
+            {
+                Width = 6,
+                Height = 6,
+                Fill = n.IsRead ? Brushes.Transparent : new SolidColorBrush(Color.FromRgb(0x00, 0xE5, 0xFF)),
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 4, 0, 0)
+            };
+            Grid.SetColumn(dot, 0);
+            grid.Children.Add(dot);
+
+            var stack = new StackPanel();
+            Grid.SetColumn(stack, 1);
+
+            var topRow = new Grid();
+            var titleBlock = new TextBlock
+            {
+                Text = FormatNotificationText(n.Title),
+                FontWeight = n.IsRead ? FontWeights.SemiBold : FontWeights.Bold,
+                Foreground = n.IsRead ? new SolidColorBrush(Color.FromRgb(0xE2, 0xE8, 0xF0)) : Brushes.White,
+                FontSize = 11,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(0, 0, 50, 0)
+            };
+            var timeBlock = new TextBlock
+            {
+                Text = FormatRelativeTime(n.CreatedAt),
+                FontSize = 9,
+                Foreground = (Brush)FindResource("TextMutedBrush"),
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Top
+            };
+            topRow.Children.Add(titleBlock);
+            topRow.Children.Add(timeBlock);
+            stack.Children.Add(topRow);
+
+            var msgBlock = new TextBlock
+            {
+                Text = FormatNotificationText(n.Message),
+                FontSize = 10,
+                Foreground = (Brush)FindResource("TextMutedBrush"),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 3, 0, 0)
+            };
+            stack.Children.Add(msgBlock);
+
+            grid.Children.Add(stack);
+            itemBorder.Child = grid;
+
+            itemBorder.MouseLeftButtonUp += async (s, e) =>
+            {
+                if (s is Border b && b.Tag is NotificationDto item && !item.IsRead)
+                {
+                    await _apiService.MarkNotificationAsReadAsync(item.Id);
+                    var idx = _notifications.FindIndex(x => x.Id == item.Id);
+                    if (idx >= 0)
+                    {
+                        _notifications[idx] = item with { IsRead = true };
+                    }
+                    var unread = _notifications.Count(x => !x.IsRead);
+                    bdNotificationBadge.Visibility = unread > 0 ? Visibility.Visible : Visibility.Collapsed;
+                    txtNotificationBadgeCount.Text = unread > 99 ? "99+" : unread.ToString();
+                    RenderNotificationsList();
+                }
+            };
+
+            pnlNotificationsList.Children.Add(itemBorder);
+        }
+    }
+
+    private async void BtnMarkAllRead_Click(object sender, RoutedEventArgs e)
+    {
+        var unreads = _notifications.Where(n => !n.IsRead).ToList();
+        if (unreads.Count == 0) return;
+
+        foreach (var item in unreads)
+        {
+            await _apiService.MarkNotificationAsReadAsync(item.Id);
+            var idx = _notifications.FindIndex(x => x.Id == item.Id);
+            if (idx >= 0)
+            {
+                _notifications[idx] = item with { IsRead = true };
+            }
+        }
+
+        bdNotificationBadge.Visibility = Visibility.Collapsed;
+        txtNotificationBadgeCount.Text = "0";
+        RenderNotificationsList();
+    }
+
+    private async void BtnClearAllNotifications_Click(object sender, RoutedEventArgs e)
+    {
+        if (_notifications.Count == 0) return;
+
+        await _apiService.ClearAllNotificationsAsync();
+        _notifications.Clear();
+        bdNotificationBadge.Visibility = Visibility.Collapsed;
+        txtNotificationBadgeCount.Text = "0";
+        RenderNotificationsList();
+    }
+
+    private static string FormatNotificationText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return string.Empty;
+        if (text.Contains(" / "))
+        {
+            var parts = text.Split(" / ");
+            return parts[0].Trim();
+        }
+        return text;
+    }
+
+    private static string FormatRelativeTime(DateTime dt)
+    {
+        var span = DateTime.UtcNow - dt.ToUniversalTime();
+        if (span.TotalSeconds < 60) return "vừa xong";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}p trước";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h trước";
+        if (span.TotalDays < 7) return $"{(int)span.TotalDays}d trước";
+        return dt.ToString("dd/MM/yyyy");
     }
 
     #endregion

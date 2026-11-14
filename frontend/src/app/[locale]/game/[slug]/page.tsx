@@ -818,12 +818,6 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
                       <button
                         type="button"
                         onClick={async () => {
-                          if (typeof window !== "undefined" && window.isSecureContext && !window.crossOriginIsolated) {
-                            const url = new URL(window.location.href);
-                            url.searchParams.set("autoplay", "demo");
-                            window.location.replace(url.toString());
-                            return;
-                          }
                           setIsPlayingDemo(true);
                           await playDemo();
                         }}

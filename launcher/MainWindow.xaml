@@ -167,10 +167,59 @@
                             </Grid>
 
                             <!-- User Info -->
-                            <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
+                            <StackPanel VerticalAlignment="Center" Margin="0,0,14,0">
                                 <TextBlock x:Name="txtUserName" Text="Gamer" FontWeight="Bold" FontSize="13" Foreground="White" />
                                 <TextBlock Text="Bản quyền chính hãng" FontSize="10" Foreground="#34D399" FontWeight="Medium" />
                             </StackPanel>
+
+                            <!-- Notifications Bell Button with Badge & Popup -->
+                            <Grid Margin="0,0,10,0" VerticalAlignment="Center">
+                                <Button x:Name="btnNotificationBell" Style="{StaticResource OutlineBtn}" Padding="9,6" Click="BtnNotificationBell_Click" ToolTip="Thông báo từ hệ thống">
+                                    <Grid>
+                                        <TextBlock Text="🔔" FontSize="12" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                                        <!-- Unread Dot/Badge -->
+                                        <Border x:Name="bdNotificationBadge" Visibility="Collapsed" Background="#EF4444" CornerRadius="6" MinWidth="13" Height="13" Padding="2,0" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="8,-7,-8,0">
+                                            <TextBlock x:Name="txtNotificationBadgeCount" Text="0" FontSize="8" FontWeight="Black" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        </Border>
+                                    </Grid>
+                                </Button>
+
+                                <!-- Notification Popup -->
+                                <Popup x:Name="popNotifications" PlacementTarget="{Binding ElementName=btnNotificationBell}" Placement="Bottom" StaysOpen="False" AllowsTransparency="True" PopupAnimation="Fade" VerticalOffset="6">
+                                    <Border Width="340" MaxHeight="420" Background="#0C101A" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="12">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="Black" BlurRadius="24" ShadowDepth="6" Opacity="0.75" />
+                                        </Border.Effect>
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="*" />
+                                            </Grid.RowDefinitions>
+
+                                            <!-- Popup Header -->
+                                            <Border Grid.Row="0" Background="#111726" CornerRadius="11,11,0,0" Padding="12,10" BorderBrush="{StaticResource BorderBrush}" BorderThickness="0,0,0,1">
+                                                <Grid>
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <TextBlock Text="🔔 " FontSize="11" />
+                                                        <TextBlock Text="THÔNG BÁO" FontWeight="Black" FontSize="11" Foreground="White" />
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                        <Button x:Name="btnMarkAllRead" Content="Đọc tất cả" Click="BtnMarkAllRead_Click" Style="{StaticResource LinkTextBtn}" FontSize="10" Margin="0,0,10,0" Foreground="#38BDF8" />
+                                                        <Button x:Name="btnClearAllNotifications" Content="Xóa" Click="BtnClearAllNotifications_Click" Style="{StaticResource LinkTextBtn}" FontSize="10" Foreground="#FDA4AF" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+
+                                            <!-- Popup Content: Notification List -->
+                                            <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="350" Padding="6">
+                                                <StackPanel x:Name="pnlNotificationsList">
+                                                    <!-- Rendered dynamically -->
+                                                </StackPanel>
+                                            </ScrollViewer>
+                                        </Grid>
+                                    </Border>
+                                </Popup>
+                            </Grid>
 
                             <!-- Logout Button -->
                             <Button Style="{StaticResource OutlineBtn}" Padding="10,6" Click="BtnLogout_Click" ToolTip="Đăng xuất khỏi thiết bị này">

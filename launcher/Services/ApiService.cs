@@ -311,4 +311,47 @@ public class ApiService
             return null;
         }
     }
+
+    public async Task<IReadOnlyList<NotificationDto>> GetNotificationsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await SendWithRetryAsync(() => _httpClient.GetAsync("/api/v1/notifications", ct), ct);
+            if (!response.IsSuccessStatusCode) return Array.Empty<NotificationDto>();
+
+            var responseString = await response.Content.ReadAsStringAsync(ct);
+            var result = JsonSerializer.Deserialize<ApiResponse<List<NotificationDto>>>(responseString, JsonOptions);
+            return result?.Data ?? (IReadOnlyList<NotificationDto>)Array.Empty<NotificationDto>();
+        }
+        catch
+        {
+            return Array.Empty<NotificationDto>();
+        }
+    }
+
+    public async Task<bool> MarkNotificationAsReadAsync(Guid id, CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await SendWithRetryAsync(() => _httpClient.PostAsync($"/api/v1/notifications/{id}/read", null, ct), ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> ClearAllNotificationsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using var response = await SendWithRetryAsync(() => _httpClient.DeleteAsync("/api/v1/notifications", ct), ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

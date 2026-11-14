@@ -85,6 +85,18 @@ public class InstalledGameMetadata
 
 public class ApiSessionExpiredException(string message) : Exception(message);
 
+public record NotificationDto(
+    Guid Id,
+    string Type,
+    string Title,
+    string Message,
+    bool IsRead,
+    DateTime CreatedAt,
+    string? RelatedEntityType = null,
+    Guid? RelatedEntityId = null,
+    string? Metadata = null
+);
+
 public class AppSession
 {
     public string ApiUrl { get; set; } = "http://127.0.0.1:5000";

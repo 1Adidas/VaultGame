@@ -16,6 +16,10 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration config)
     {
         var conn = config.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string not found");
+        if (!conn.Contains("SslMode", StringComparison.OrdinalIgnoreCase) && !conn.Contains("SSL Mode", StringComparison.OrdinalIgnoreCase))
+        {
+            conn = conn.TrimEnd(';') + ";SslMode=None;";
+        }
 
         services.AddDbContext<AppDbContext>(o =>
             o.UseMySql(conn, ServerVersion.AutoDetect(conn), mysqlOptions =>

@@ -84,6 +84,17 @@ api.interceptors.response.use(
       requestUrl.includes("/auth/google") ||
       requestUrl.includes("/auth/refresh");
 
+    if (error.response?.status === 500) {
+      console.error("[API 500 Internal Server Error]", {
+        url: requestUrl,
+        method: original?.method?.toUpperCase(),
+        params: original?.params,
+        payload: original?.data,
+        responseData: error.response?.data,
+        message: error.message
+      });
+    }
+
     if (error.response?.status === 401 && refreshToken && !original?._retry && !isAuthAttempt) {
       original._retry = true;
       try {
