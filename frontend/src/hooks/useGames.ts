@@ -29,6 +29,7 @@ export function useGames(filter: GameFilter = {}) {
       const { data } = await api.get<ApiResponse<{ items: GameListItem[]; page: number; pageSize: number; total: number }>>("/games", { params: { ...filter, locale } });
       return { games: data.data.items, meta: data.meta };
     },
+    staleTime: 1000 * 60 * 2,
   });
 }
 
@@ -42,6 +43,7 @@ export function useGame(slug: string) {
       return data.data;
     },
     enabled: !!slug,
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -52,6 +54,7 @@ export function useCategories() {
       const { data } = await api.get<ApiResponse<{ id: string; name: string; slug: string }[]>>("/games/categories");
       return data.data;
     },
+    staleTime: 1000 * 60 * 30,
   });
 }
 
@@ -113,5 +116,6 @@ export function useTags() {
       const { data } = await api.get<ApiResponse<{ id: string; name: string; slug: string }[]>>("/games/tags");
       return data.data;
     },
+    staleTime: 1000 * 60 * 30,
   });
 }

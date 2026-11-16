@@ -7,72 +7,112 @@ using Microsoft.EntityFrameworkCore;
 
 namespace GameVault.Infrastructure.Services;
 
-public class GameService(AppDbContext db) : IGameService
+public class GameService(AppDbContext db, ICacheService cache) : IGameService
 {
     public async Task<PagedResult<GameListDto>> GetGamesAsync(GameFilterRequest f, string locale = "vi", CancellationToken ct = default)
     {
         var targetStatus = f.Status ?? GameStatus.Published;
-        var q = db.Games.AsNoTracking()
+        var hasSearchText = !string.IsNullOrWhiteSpace(f.Q);
+
+        // Cache browse/popular queries that don't have custom search text
+        if (!hasSearchText)
+        {
+            var v = cache.GetGamesVersion();
+            var cacheKey = $"games:v{v}:{locale}:{targetStatus}:{f.CategoryId}:{f.Tag}:{f.MinPrice}:{f.MaxPrice}:{f.MaxMinAge}:{f.MinRating}:{f.Featured}:{f.HasDemo}:{f.Discounted}:{f.Sort}:{f.Page}:{f.PageSize}";
+            var cached = cache.Get<PagedResult<GameListDto>>(cacheKey);
+            if (cached is not null)
+            {
+                return cached;
+            }
+        }
+
+        // 1. Lightweight count query without heavy includes
+        var countQ = db.Games.AsNoTracking().Where(g => g.Status == targetStatus);
+
+        if (hasSearchText)
+        {
+            var term = f.Q!.Trim();
+            countQ = countQ.Where(g => EF.Functions.Like(g.Title, $"%{term}%") 
+                || EF.Functions.Like(g.ShortDescription, $"%{term}%")
+                || EF.Functions.Like(g.Developer, $"%{term}%"));
+        }
+        if (f.CategoryId.HasValue) countQ = countQ.Where(g => g.GameCategories.Any(gc => gc.CategoryId == f.CategoryId));
+        if (!string.IsNullOrWhiteSpace(f.Tag)) countQ = countQ.Where(g => g.GameTags.Any(gt => gt.Tag.Slug == f.Tag));
+        if (f.MinPrice.HasValue) countQ = countQ.Where(g => (g.DiscountPrice ?? g.Price) >= f.MinPrice);
+        if (f.MaxPrice.HasValue) countQ = countQ.Where(g => (g.DiscountPrice ?? g.Price) <= f.MaxPrice);
+        if (f.MaxMinAge.HasValue) countQ = countQ.Where(g => g.MinAge <= f.MaxMinAge);
+        if (f.MinRating.HasValue) countQ = countQ.Where(g => g.AvgRating >= f.MinRating);
+        if (f.Featured == true) countQ = countQ.Where(g => g.IsFeatured);
+        if (f.HasDemo == true) countQ = countQ.Where(g => g.UnityDemo != null && g.UnityDemo.IsActive);
+        if (f.Discounted == true) countQ = countQ.Where(g => g.DiscountPrice.HasValue && g.DiscountPrice < g.Price);
+
+        var total = await countQ.CountAsync(ct);
+
+        // 2. Fetch page items with navigation properties using split query
+        var itemsQ = countQ
             .Include(g => g.GameCategories).ThenInclude(gc => gc.Category)
             .Include(g => g.Images)
             .Include(g => g.GameTags).ThenInclude(gt => gt.Tag)
             .Include(g => g.UnityDemo)
-            .Where(g => g.Status == targetStatus);
+            .AsSplitQuery();
 
-        if (!string.IsNullOrWhiteSpace(f.Q))
+        itemsQ = f.Sort switch
         {
-            var term = f.Q.Trim().ToLower();
-            q = q.Where(g => g.Title.ToLower().Contains(term) || g.ShortDescription.ToLower().Contains(term)
-                || g.Developer.ToLower().Contains(term));
-        }
-        if (f.CategoryId.HasValue) q = q.Where(g => g.GameCategories.Any(gc => gc.CategoryId == f.CategoryId));
-        if (!string.IsNullOrWhiteSpace(f.Tag)) q = q.Where(g => g.GameTags.Any(gt => gt.Tag.Slug == f.Tag));
-        if (f.MinPrice.HasValue) q = q.Where(g => (g.DiscountPrice ?? g.Price) >= f.MinPrice);
-        if (f.MaxPrice.HasValue) q = q.Where(g => (g.DiscountPrice ?? g.Price) <= f.MaxPrice);
-        if (f.MaxMinAge.HasValue) q = q.Where(g => g.MinAge <= f.MaxMinAge);
-        if (f.MinRating.HasValue) q = q.Where(g => g.AvgRating >= f.MinRating);
-        if (f.Featured == true) q = q.Where(g => g.IsFeatured);
-        if (f.HasDemo == true) q = q.Where(g => g.UnityDemo != null && g.UnityDemo.IsActive);
-        if (f.Discounted == true) q = q.Where(g => g.DiscountPrice.HasValue && g.DiscountPrice < g.Price);
-
-        q = f.Sort switch
-        {
-            "price_asc" => q.OrderBy(g => g.DiscountPrice ?? g.Price),
-            "price_desc" => q.OrderByDescending(g => g.DiscountPrice ?? g.Price),
-            "rating" => q.OrderByDescending(g => g.AvgRating),
-            "title" => q.OrderBy(g => g.Title),
-            _ => q.OrderByDescending(g => g.PublishedAt ?? g.CreatedAt)
+            "price_asc" => itemsQ.OrderBy(g => g.DiscountPrice ?? g.Price),
+            "price_desc" => itemsQ.OrderByDescending(g => g.DiscountPrice ?? g.Price),
+            "rating" => itemsQ.OrderByDescending(g => g.AvgRating),
+            "title" => itemsQ.OrderBy(g => g.Title),
+            _ => itemsQ.OrderByDescending(g => g.PublishedAt ?? g.CreatedAt)
         };
 
-        var total = await q.CountAsync(ct);
-        var items = await q.Skip((f.Page - 1) * f.PageSize).Take(f.PageSize).ToListAsync(ct);
-        return new PagedResult<GameListDto>
+        var items = await itemsQ.Skip((f.Page - 1) * f.PageSize).Take(f.PageSize).ToListAsync(ct);
+        var result = new PagedResult<GameListDto>
         {
             Items = items.Select(x => MapList(x, locale)).ToList(),
             Page = f.Page,
             PageSize = f.PageSize,
             Total = total
         };
+
+        if (!hasSearchText)
+        {
+            var v = cache.GetGamesVersion();
+            var cacheKey = $"games:v{v}:{locale}:{targetStatus}:{f.CategoryId}:{f.Tag}:{f.MinPrice}:{f.MaxPrice}:{f.MaxMinAge}:{f.MinRating}:{f.Featured}:{f.HasDemo}:{f.Discounted}:{f.Sort}:{f.Page}:{f.PageSize}";
+            cache.Set(cacheKey, result, TimeSpan.FromMinutes(5));
+        }
+
+        return result;
     }
 
     public async Task<GameDetailDto?> GetBySlugAsync(string slug, Guid? userId, string locale = "vi", CancellationToken ct = default)
     {
-        var game = await db.Games.AsNoTracking()
-            .Include(g => g.GameCategories).ThenInclude(gc => gc.Category)
-            .Include(g => g.Images)
-            .Include(g => g.Videos)
-            .Include(g => g.Files)
-            .Include(g => g.UnityDemo)
-            .Include(g => g.GameTags).ThenInclude(gt => gt.Tag)
-            .FirstOrDefaultAsync(g => g.Slug == slug && (g.Status == GameStatus.Published || g.Status == GameStatus.Archived), ct);
-        if (game is null) return null;
+        var v = cache.GetGamesVersion();
+        var cacheKey = $"game:v{v}:{slug}:{NormalizeLocale(locale)}";
 
-        var owned = userId.HasValue && (
-            await db.UserGames.AnyAsync(ug => ug.UserId == userId && ug.GameId == game.Id, ct)
-            || await db.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.Role.Name == RoleNames.Admin, ct)
-        );
-        var wished = userId.HasValue && await db.Wishlists.AnyAsync(w => w.UserId == userId && w.GameId == game.Id, ct);
-        return MapDetail(game, owned, wished, locale);
+        var baseDetail = await cache.GetOrCreateAsync(cacheKey, async () =>
+        {
+            var game = await db.Games.AsNoTracking()
+                .Include(g => g.GameCategories).ThenInclude(gc => gc.Category)
+                .Include(g => g.Images)
+                .Include(g => g.Videos)
+                .Include(g => g.Files)
+                .Include(g => g.UnityDemo)
+                .Include(g => g.GameTags).ThenInclude(gt => gt.Tag)
+                .AsSplitQuery()
+                .FirstOrDefaultAsync(g => g.Slug == slug && (g.Status == GameStatus.Published || g.Status == GameStatus.Archived), ct);
+
+            return game is null ? null : MapDetail(game, false, false, locale);
+        }, TimeSpan.FromMinutes(5));
+
+        if (baseDetail is null) return null;
+        if (!userId.HasValue) return baseDetail;
+
+        // Fast user-specific checks (indexed queries)
+        var owned = await db.UserGames.AnyAsync(ug => ug.UserId == userId.Value && ug.GameId == baseDetail.Id, ct)
+            || await db.UserRoles.AnyAsync(ur => ur.UserId == userId.Value && ur.Role.Name == RoleNames.Admin, ct);
+        var wished = await db.Wishlists.AnyAsync(w => w.UserId == userId.Value && w.GameId == baseDetail.Id, ct);
+
+        return baseDetail with { IsOwned = owned, IsWishlisted = wished };
     }
 
     public async Task<Guid> IncrementDemoPlayAsync(string slug, Guid? userId, CancellationToken ct = default)
@@ -102,12 +142,22 @@ public class GameService(AppDbContext db) : IGameService
     }
 
     public async Task<IReadOnlyList<CategoryDto>> GetCategoriesAsync(CancellationToken ct = default)
-        => await db.Categories.AsNoTracking().Where(c => c.IsActive).OrderBy(c => c.SortOrder)
-            .Select(c => new CategoryDto(c.Id, c.Name, c.Slug)).ToListAsync(ct);
+    {
+        return await cache.GetOrCreateAsync("categories:all", async () =>
+        {
+            return await db.Categories.AsNoTracking().Where(c => c.IsActive).OrderBy(c => c.SortOrder)
+                .Select(c => new CategoryDto(c.Id, c.Name, c.Slug)).ToListAsync(ct);
+        }, TimeSpan.FromHours(1)) ?? [];
+    }
 
     public async Task<IReadOnlyList<TagDto>> GetTagsAsync(CancellationToken ct = default)
-        => await db.Tags.AsNoTracking().OrderBy(t => t.Name)
-            .Select(t => new TagDto(t.Id, t.Name, t.Slug)).ToListAsync(ct);
+    {
+        return await cache.GetOrCreateAsync("tags:all", async () =>
+        {
+            return await db.Tags.AsNoTracking().OrderBy(t => t.Name)
+                .Select(t => new TagDto(t.Id, t.Name, t.Slug)).ToListAsync(ct);
+        }, TimeSpan.FromHours(1)) ?? [];
+    }
 
     private static string NormalizeLocale(string? locale)
     {

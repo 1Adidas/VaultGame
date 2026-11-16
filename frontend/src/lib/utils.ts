@@ -40,7 +40,7 @@ export function formatDateTime(dateInput: string | Date | null | undefined): str
   const hours = String(d.getHours()).padStart(2, '0');
   const minutes = String(d.getMinutes()).padStart(2, '0');
   const seconds = String(d.getSeconds()).padStart(2, '0');
-  return `${hours}:${minutes}:${seconds} ${day}/${month}/${year}`;
+  return `${day}/${month}/${year} ${hours}:${minutes}:${seconds}`;
 }
 
 export function formatDateTimeShort(dateInput: string | Date | null | undefined): string {
@@ -56,7 +56,25 @@ export function formatDateTimeShort(dateInput: string | Date | null | undefined)
   const year = d.getFullYear();
   const hours = String(d.getHours()).padStart(2, '0');
   const minutes = String(d.getMinutes()).padStart(2, '0');
-  return `${hours}:${minutes} ${day}/${month}/${year}`;
+  return `${day}/${month}/${year} ${hours}:${minutes}`;
+}
+
+export function formatAnalyticsTime(dateInput: string | null | undefined): string {
+  if (!dateInput) return "";
+  const str = String(dateInput).trim();
+  const matchDaily = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (matchDaily) {
+    return `${matchDaily[3]}/${matchDaily[2]}/${matchDaily[1]}`;
+  }
+  const matchMonthly = str.match(/^(\d{4})-(\d{2})$/);
+  if (matchMonthly) {
+    return `${matchMonthly[2]}/${matchMonthly[1]}`;
+  }
+  const matchWeekly = str.match(/^(\d{2})-(\d{2})\s+to\s+(\d{2})-(\d{2})$/);
+  if (matchWeekly) {
+    return `${matchWeekly[2]}/${matchWeekly[1]} - ${matchWeekly[4]}/${matchWeekly[3]}`;
+  }
+  return formatDate(str);
 }
 
 export function resolveImageUrl(url?: string | null): string {

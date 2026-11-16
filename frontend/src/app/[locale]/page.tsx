@@ -199,13 +199,13 @@ export default function HomePage() {
 
             {/* Main Stage Grid: Hero Spotlight + Live Queue */}
             <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 min-h-[520px] lg:min-h-[580px]">
-              
+
               {/* Left 8 Columns: Hero Feature Details with Fluid Entrance */}
               <div
                 key={`${currentHero.id}-${rotationKey}`}
                 className="lg:col-span-8 p-6 sm:p-10 md:p-14 flex flex-col justify-end space-y-5 relative z-10"
               >
-                
+
                 {/* Cinema Editorial Stamp: Pure Typographic Craft (Zero icons, zero pulsing dots, zero generic pill badges) */}
                 <div className="flex flex-wrap items-center gap-3 text-xs tracking-[0.2em] uppercase font-bold text-zinc-400 animate-in fade-in slide-in-from-bottom-2 duration-500">
                   <span className="text-cyan-400 font-black tracking-[0.25em]">
@@ -236,8 +236,8 @@ export default function HomePage() {
                     (isVi
                       ? "Trải nghiệm tựa game bản quyền đỉnh cao với đồ họa vượt trội và cơ chế gameplay độc bản trên GameVault."
                       : isZh
-                      ? "在 GameVault 畅享顶尖正版数字力作，感受震撼画面与沉浸式玩法体验。"
-                      : "Experience premier authentic digital gaming with captivating gameplay and state-of-the-art visuals.")}
+                        ? "在 GameVault 畅享顶尖正版数字力作，感受震撼画面与沉浸式玩法体验。"
+                        : "Experience premier authentic digital gaming with captivating gameplay and state-of-the-art visuals.")}
                 </p>
 
                 {/* Price & Primary CTA Cluster */}
@@ -336,11 +336,10 @@ export default function HomePage() {
                           key={g.id}
                           type="button"
                           onClick={() => selectHero(idx)}
-                          className={`group relative w-full p-2.5 rounded-2xl border text-left transition-all duration-300 flex items-center gap-3 cursor-pointer select-none ${
-                            isCurrent
+                          className={`group relative w-full p-2.5 rounded-2xl border text-left transition-all duration-300 flex items-center gap-3 cursor-pointer select-none ${isCurrent
                               ? "bg-gradient-to-r from-cyan-500/15 via-white/[0.08] to-violet-500/10 border-cyan-400/50 shadow-[0_0_28px_rgba(0,242,254,0.2)] scale-[1.03] translate-x-1.5"
                               : "bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.06] hover:border-white/[0.12] hover:translate-x-1"
-                          }`}
+                            }`}
                         >
                           {/* Active Neon Accent Left Indicator */}
                           {isCurrent && (
@@ -350,15 +349,13 @@ export default function HomePage() {
                             </>
                           )}
 
-                          <span className={`text-[10px] font-mono font-bold shrink-0 transition-colors ${
-                            isCurrent ? "text-cyan-400" : "text-zinc-600 group-hover:text-zinc-400"
-                          }`}>
+                          <span className={`text-[10px] font-mono font-bold shrink-0 transition-colors ${isCurrent ? "text-cyan-400" : "text-zinc-600 group-hover:text-zinc-400"
+                            }`}>
                             0{idx + 1}
                           </span>
 
-                          <div className={`size-11 rounded-xl overflow-hidden bg-zinc-900 shrink-0 border relative transition-all duration-300 ${
-                            isCurrent ? "border-cyan-400/80 ring-2 ring-cyan-400/50 shadow-md shadow-cyan-400/20" : "border-white/10"
-                          }`}>
+                          <div className={`size-11 rounded-xl overflow-hidden bg-zinc-900 shrink-0 border relative transition-all duration-300 ${isCurrent ? "border-cyan-400/80 ring-2 ring-cyan-400/50 shadow-md shadow-cyan-400/20" : "border-white/10"
+                            }`}>
                             {g.primaryImageUrl && (
                               <img
                                 src={resolveImageUrl(g.primaryImageUrl)}
@@ -370,9 +367,8 @@ export default function HomePage() {
                           </div>
 
                           <div className="flex-1 min-w-0">
-                            <h4 className={`text-xs font-semibold truncate transition-colors ${
-                              isCurrent ? "text-cyan-300 font-bold" : "text-white group-hover:text-cyan-300"
-                            }`}>
+                            <h4 className={`text-xs font-semibold truncate transition-colors ${isCurrent ? "text-cyan-300 font-bold" : "text-white group-hover:text-cyan-300"
+                              }`}>
                               {g.title}
                             </h4>
                             <span className="text-[10px] text-zinc-400 block truncate mt-0.5">
@@ -413,8 +409,8 @@ export default function HomePage() {
               {isVi
                 ? "Những trò chơi được cộng đồng game thủ săn đón và tải nhiều nhất"
                 : isZh
-                ? "玩家社区最受追捧、下载量最高的热门力作"
-                : "Top recommended titles trending across the GameVault community"}
+                  ? "玩家社区最受追捧、下载量最高的热门力作"
+                  : "Top recommended titles trending across the GameVault community"}
             </p>
           </div>
           <Link
@@ -428,7 +424,7 @@ export default function HomePage() {
 
         {/* Bento Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          
+
           {/* Bento Flagship Spotlight Card (8 Cols) */}
           {heroGames[0] && (
             <div className="lg:col-span-8 rounded-3xl border border-white/[0.08] bg-[#0A0E18] p-6 sm:p-8 flex flex-col justify-between relative overflow-hidden group">
@@ -576,7 +572,6 @@ export default function HomePage() {
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 border-b border-white/[0.06] pb-6 mb-8">
           <div className="space-y-1.5 max-w-xl">
             <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-              <Zap className="size-3.5 text-emerald-400" />
               {isVi ? "Đấu Trường WebGL" : isZh ? "WebGL 试玩专区" : "Instant WebGL Arena"}
             </span>
             <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
@@ -586,8 +581,8 @@ export default function HomePage() {
               {isVi
                 ? "Khởi chạy trải nghiệm gameplay trực tiếp trên Chrome, Edge, Safari hoặc Firefox với đồ họa 3D thời gian thực."
                 : isZh
-                ? "直接在主流浏览器中体验即时 3D 游戏操作与核心玩法，完全免费免下载。"
-                : "Launch full 3D interactive gameplay directly inside your web browser. Completely free, no disk installation."}
+                  ? "直接在主流浏览器中体验即时 3D 游戏操作与核心玩法，完全免费免下载。"
+                  : "Launch full 3D interactive gameplay directly inside your web browser. Completely free, no disk installation."}
             </p>
           </div>
 
@@ -625,8 +620,8 @@ export default function HomePage() {
                 {isVi
                   ? "Các tựa game bản quyền đang áp dụng chính sách giảm giá tốt nhất"
                   : isZh
-                  ? "限时特惠折扣中的正版游戏精选"
-                  : "Authentic digital game licenses on limited-time discounts"}
+                    ? "限时特惠折扣中的正版游戏精选"
+                    : "Authentic digital game licenses on limited-time discounts"}
               </p>
             </div>
             <Link
@@ -659,8 +654,8 @@ export default function HomePage() {
                 {isVi
                   ? "Những tựa game bản quyền mới nhất vừa cập bến kho lưu trữ GameVault"
                   : isZh
-                  ? "刚刚登陆 GameVault 的正版力作"
-                  : "Latest authentic titles recently added to GameVault"}
+                    ? "刚刚登陆 GameVault 的正版力作"
+                    : "Latest authentic titles recently added to GameVault"}
               </p>
             </div>
             <Link
@@ -730,8 +725,8 @@ export default function HomePage() {
             {isVi
               ? "Phân phối bản quyền kỹ thuật số trực tiếp từ nhà phát triển và đối tác được ủy quyền."
               : isZh
-              ? "直接由游戏开发商及官方授权合作伙伴分发正版数字版权。"
-              : "Direct digital distribution authorized by developers and verified publishers."}
+                ? "直接由游戏开发商及官方授权合作伙伴分发正版数字版权。"
+                : "Direct digital distribution authorized by developers and verified publishers."}
           </p>
         </div>
 
@@ -743,8 +738,8 @@ export default function HomePage() {
             {isVi
               ? "Quét mã QR chuyển khoản ngân hàng 24/7, kích hoạt trò chơi tức thì vào kho cá nhân."
               : isZh
-              ? "24/7 全天候银行二维码极速转账，游戏即时秒级激活入库。"
-              : "Instant 24/7 banking QR transfer, activating games to your library immediately."}
+                ? "24/7 全天候银行二维码极速转账，游戏即时秒级激活入库。"
+                : "Instant 24/7 banking QR transfer, activating games to your library immediately."}
           </p>
         </div>
 
@@ -756,8 +751,8 @@ export default function HomePage() {
             {isVi
               ? "Trải nghiệm gameplay thời gian thực trực tiếp trên trình duyệt web chỉ bằng 1 cú nhấp chuột."
               : isZh
-              ? "只需一键点击，即可在网页浏览器中直接体验实时游戏玩法。"
-              : "Experience real-time gameplay directly in your web browser with a single click."}
+                ? "只需一键点击，即可在网页浏览器中直接体验实时游戏玩法。"
+                : "Experience real-time gameplay directly in your web browser with a single click."}
           </p>
         </div>
 
@@ -769,8 +764,8 @@ export default function HomePage() {
             {isVi
               ? "Trò chơi gắn liền vĩnh viễn với tài khoản của bạn, tải lại không giới hạn số lần trên mọi thiết bị."
               : isZh
-              ? "数字游戏授权永久绑定至您的个人账户，支持无限次多设备下载与自动更新。"
-              : "Digital licenses are permanently tied to your account with unlimited downloads on all devices."}
+                ? "数字游戏授权永久绑定至您的个人账户，支持无限次多设备下载与自动更新。"
+                : "Digital licenses are permanently tied to your account with unlimited downloads on all devices."}
           </p>
         </div>
       </section>

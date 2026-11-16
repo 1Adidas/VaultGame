@@ -1546,19 +1546,21 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
                       </button>
                     )}
 
-                    <button
-                      onClick={toggleWishlist}
-                      className={`btn-secondary w-full flex items-center justify-center gap-2 transition-colors ${
-                        isWishlisted ? "text-rose-400 border-rose-500/30 bg-rose-500/10" : ""
-                      }`}
-                    >
-                      <Heart className={`size-4 ${isWishlisted ? "fill-rose-400" : ""}`} />
-                      <span>
-                        {isWishlisted
-                          ? (isVi ? "Đã Lưu Yêu Thích" : isZh ? "已在愿望单" : "Wishlisted")
-                          : (isVi ? "Thêm Vào Yêu Thích" : isZh ? "加入愿望单" : "Add to Wishlist")}
-                      </span>
-                    </button>
+                    {!isAdmin && !g.isOwned && (
+                      <button
+                        onClick={toggleWishlist}
+                        className={`btn-secondary w-full flex items-center justify-center gap-2 transition-colors ${
+                          isWishlisted ? "text-rose-400 border-rose-500/30 bg-rose-500/10" : ""
+                        }`}
+                      >
+                        <Heart className={`size-4 ${isWishlisted ? "fill-rose-400" : ""}`} />
+                        <span>
+                          {isWishlisted
+                            ? (isVi ? "Đã Lưu Yêu Thích" : isZh ? "已在愿望单" : "Wishlisted")
+                            : (isVi ? "Thêm Vào Yêu Thích" : isZh ? "加入愿望单" : "Add to Wishlist")}
+                        </span>
+                      </button>
+                    )}
                   </>
                 )}
 

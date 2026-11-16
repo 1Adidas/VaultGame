@@ -45,6 +45,14 @@ export const setTokens = (access: string | null, refresh: string | null, remembe
   }
 };
 
+export const getStoredTokens = () => {
+  if (typeof window !== "undefined") {
+    loadTokens();
+    return { accessToken, refreshToken };
+  }
+  return { accessToken: null, refreshToken: null };
+};
+
 export const loadTokens = () => {
   if (typeof window !== "undefined") {
     const remember = localStorage.getItem("gv_remember") !== "false";

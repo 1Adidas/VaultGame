@@ -1,16 +1,30 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, Suspense } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import Script from "next/script";
 import Link from "next/link";
 import { useAuthStore } from "@/lib/auth/store";
 import { useToastStore } from "@/lib/toast/store";
-import { api } from "@/lib/api/client";
+import { api, getStoredTokens } from "@/lib/api/client";
 import { Mail, Lock, Eye, EyeOff, ArrowRight, ShieldCheck, Gamepad2, X } from "lucide-react";
 
 export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-[70vh] items-center justify-center">
+          <div className="size-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+        </div>
+      }
+    >
+      <LoginContent />
+    </Suspense>
+  );
+}
+
+function LoginContent() {
   const t = useTranslations("auth");
   const locale = useLocale();
   const isVi = locale === "vi";
@@ -18,17 +32,63 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectUrl = searchParams.get("redirect");
+  const isLauncher = searchParams.get("launcher") === "1" || searchParams.get("launcher") === "true";
+  const launcherPort = searchParams.get("port") || "45678";
+  const [launcherConnected, setLauncherConnected] = useState(false);
+  const hasSentSuccessRef = useRef(false);
+
   const user = useAuthStore((s) => s.user);
   const login = useAuthStore((s) => s.login);
   const loginWithGoogle = useAuthStore((s) => s.loginWithGoogle);
 
+  const sendToLauncher = useCallback(async (token: string, refreshToken?: string) => {
+    setLauncherConnected(true);
+    hasSentSuccessRef.current = true;
+
+    // Send token directly to local Launcher loopback listener (no browser prompt)
+    try {
+      await fetch(
+        `http://127.0.0.1:${launcherPort}/callback?token=${encodeURIComponent(token)}&refreshToken=${encodeURIComponent(refreshToken || "")}`,
+        { mode: "no-cors" }
+      ).catch(() => {});
+    } catch {}
+  }, [launcherPort]);
+
   useEffect(() => {
+    if (!isLauncher) return;
+
+    const notifyCancel = () => {
+      if (hasSentSuccessRef.current) return;
+      try {
+        navigator.sendBeacon(`http://127.0.0.1:${launcherPort}/cancel`);
+      } catch {
+        fetch(`http://127.0.0.1:${launcherPort}/cancel`, { mode: "no-cors", keepalive: true }).catch(() => {});
+      }
+    };
+
+    window.addEventListener("beforeunload", notifyCancel);
+    window.addEventListener("pagehide", notifyCancel);
+    return () => {
+      window.removeEventListener("beforeunload", notifyCancel);
+      window.removeEventListener("pagehide", notifyCancel);
+    };
+  }, [isLauncher, launcherPort]);
+
+  useEffect(() => {
+    if (user && isLauncher) {
+      const { accessToken, refreshToken } = getStoredTokens();
+      if (accessToken) {
+        sendToLauncher(accessToken, refreshToken || undefined);
+      }
+      return;
+    }
+
     if (user) {
       const destination = redirectUrl ? decodeURIComponent(redirectUrl) : `/${locale}`;
       const safeDestination = destination.startsWith("/") && !destination.startsWith("//") ? destination : `/${locale}`;
       router.replace(safeDestination);
     }
-  }, [user, redirectUrl, locale, router]);
+  }, [user, isLauncher, redirectUrl, locale, router, sendToLauncher]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -209,6 +269,20 @@ export default function LoginPage() {
     try {
       await loginWithGoogle(response.credential, rememberMeRef.current);
       const user = useAuthStore.getState().user;
+      const { accessToken, refreshToken } = getStoredTokens();
+
+      if (isLauncher && accessToken) {
+        useToastStore.getState().success(
+          isVi
+            ? "Đăng nhập Google thành công! Đang chuyển tiếp vào Launcher..."
+            : isZh
+              ? "Google 登录成功！正在跳转至启动器..."
+              : "Google sign-in successful! Connecting to Launcher..."
+        );
+        sendToLauncher(accessToken, refreshToken || undefined);
+        return;
+      }
+
       if (user) {
         const isAdmin = user.roles.includes("Admin");
         const msg = isAdmin
@@ -230,7 +304,7 @@ export default function LoginPage() {
     } catch (err: any) {
       setError(err.response?.data?.error?.message || "Google sign in failed");
     }
-  }, [loginWithGoogle, locale, router, redirectUrl, isVi, isZh]);
+  }, [loginWithGoogle, locale, router, redirectUrl, isVi, isZh, isLauncher, sendToLauncher]);
 
   const envGoogleClientId = (process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "").trim();
   const isGoogleAuthConfigured =
@@ -271,6 +345,20 @@ export default function LoginPage() {
     try {
       await login(email, password, rememberMe);
       const user = useAuthStore.getState().user;
+      const { accessToken, refreshToken } = getStoredTokens();
+
+      if (isLauncher && accessToken) {
+        useToastStore.getState().success(
+          isVi
+            ? "Đăng nhập thành công! Đang chuyển tiếp vào Launcher..."
+            : isZh
+              ? "登录成功！正在跳转至启动器..."
+              : "Login successful! Connecting to Launcher..."
+        );
+        sendToLauncher(accessToken, refreshToken || undefined);
+        return;
+      }
+
       if (user) {
         const isAdmin = user.roles.includes("Admin");
         const msg = isAdmin
@@ -309,9 +397,38 @@ export default function LoginPage() {
             </h1>
           </div>
 
-          {/* Form Card */}
-          <div className="rounded-3xl border border-white/[0.08] bg-[#0E131E] p-7 sm:p-8 shadow-2xl space-y-6">
-            <form onSubmit={submit} className="space-y-4">
+          {launcherConnected ? (
+            <div className="rounded-3xl border border-emerald-500/40 bg-[#0E131E] p-8 text-center space-y-4 shadow-2xl backdrop-blur-md animate-in fade-in zoom-in duration-300">
+              <div className="size-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto text-3xl font-bold shadow-lg shadow-emerald-500/10">
+                ✓
+              </div>
+              <h3 className="text-xl font-bold text-emerald-300">
+                {isVi ? "Đăng nhập thành công!" : isZh ? "登录成功！" : "Successfully Logged In!"}
+              </h3>
+              <p className="text-sm text-slate-300 max-w-sm mx-auto leading-relaxed">
+                {isVi
+                  ? "Tài khoản của bạn đã được kết nối với GameVault Launcher. Cửa sổ Launcher đã tự động mở sẵn trên máy, bạn có thể đóng tab trình duyệt này."
+                  : isZh
+                    ? "您的账户已成功关联 GameVault 启动器。启动器已自动在桌面打开，您可以关闭此标签页。"
+                    : "Your account is now connected. GameVault Launcher has automatically opened, you can safely close this tab."}
+              </p>
+              <div className="pt-2 flex justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    try { window.close(); } catch {}
+                    router.replace(`/${locale}`);
+                  }}
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:brightness-110 text-white font-bold text-xs shadow-lg shadow-emerald-900/40 transition-all cursor-pointer"
+                >
+                  {isVi ? "Về trang chủ Web" : isZh ? "浏览网页商城" : "Go to Web Store"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Form Card */
+            <div className="rounded-3xl border border-white/[0.08] bg-[#0E131E] p-7 sm:p-8 shadow-2xl space-y-6">
+              <form onSubmit={submit} className="space-y-4">
               
               {/* Email */}
               <div className="space-y-1.5">
@@ -423,17 +540,18 @@ export default function LoginPage() {
               </>
             )}
 
-            {/* Switch to Register */}
-            <div className="border-t border-white/[0.06] pt-5 text-center text-xs text-zinc-400">
-              <span>{isVi ? "Chưa có tài khoản Game Vault? " : isZh ? "还没有 Game Vault 账号？" : "Don't have an account? "}</span>
-              <Link
-                href={`/${locale}/register`}
-                className="font-bold text-white hover:underline ml-1"
-              >
-                {isVi ? "Đăng ký ngay" : isZh ? "立即注册" : "Create one"}
-              </Link>
+              {/* Switch to Register */}
+              <div className="border-t border-white/[0.06] pt-5 text-center text-xs text-zinc-400">
+                <span>{isVi ? "Chưa có tài khoản Game Vault? " : isZh ? "还没有 Game Vault 账号？" : "Don't have an account? "}</span>
+                <Link
+                  href={`/${locale}/register`}
+                  className="font-bold text-white hover:underline ml-1"
+                >
+                  {isVi ? "Đăng ký ngay" : isZh ? "立即注册" : "Create one"}
+                </Link>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Guarantees */}
           <div className="flex items-center justify-center gap-6 text-[11px] text-zinc-500">

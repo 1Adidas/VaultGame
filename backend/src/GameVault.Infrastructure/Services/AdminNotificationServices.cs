@@ -43,7 +43,7 @@ public class NotificationService(AppDbContext db) : INotificationService
     }
 }
 
-public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveService drive, GroqClient groq) : IAdminService
+public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveService drive, GroqClient groq, ICacheService cache) : IAdminService
 {
     public async Task<GameDetailDto> CreateGameAsync(CreateGameRequest request, CancellationToken ct = default)
     {
@@ -97,6 +97,7 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
                 game.GameTags.Add(new GameTag { TagId = tagId });
         db.Games.Add(game);
         await db.SaveChangesAsync(ct);
+        cache.InvalidateGames();
         var loaded = await db.Games.Include(g => g.GameCategories).ThenInclude(gc => gc.Category).Include(g => g.Images).Include(g => g.Videos).Include(g => g.Files)
             .Include(g => g.UnityDemo).Include(g => g.GameTags).ThenInclude(gt => gt.Tag)
             .FirstAsync(g => g.Id == game.Id, ct);
@@ -195,6 +196,7 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
         }
 
         await db.SaveChangesAsync(ct);
+        cache.InvalidateGames();
         var loaded = await db.Games.Include(g => g.GameCategories).ThenInclude(gc => gc.Category).Include(g => g.Images).Include(g => g.Videos).Include(g => g.Files)
             .Include(g => g.UnityDemo).Include(g => g.GameTags).ThenInclude(gt => gt.Tag)
             .FirstAsync(g => g.Id == id, ct);
@@ -310,6 +312,7 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
         // 6. Xóa game chính
         db.Games.Remove(game);
         await db.SaveChangesAsync(ct);
+        cache.InvalidateGames();
 
         // 7. Xóa thư mục chứa tệp vật lý của game trong wwwroot
         var uploadsRoot = GoogleDriveService.ResolveLocalUploadsRoot();
@@ -351,6 +354,7 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
         game.Status = GameStatus.Published;
         game.PublishedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        cache.InvalidateGames();
     }
 
 
@@ -359,15 +363,16 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
     {
         var revenue = await db.Orders.Where(o => o.Status == OrderStatus.Paid).SumAsync(o => o.TotalAmount, ct);
         var orders = await db.Orders.CountAsync(o => o.Status == OrderStatus.Paid, ct);
-        var users = await db.Users.CountAsync(ct);
+        var users = await db.Users.CountAsync(u => !u.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin), ct);
         var games = await db.Games.CountAsync(g => g.Status == GameStatus.Published, ct);
-        var downloads = await db.Games.SumAsync(g => g.DownloadCount, ct);
-        var demos = await db.Games.SumAsync(g => g.DemoPlayCount, ct);
+        var downloads = await db.UserGames.CountAsync(ug => !ug.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && ug.LastDownloadAt != null, ct);
+        var demos = await db.DemoPlayHistories.CountAsync(d => d.User == null || !d.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin), ct);
         var top = await db.Games.OrderByDescending(g => g.DownloadCount).Take(5)
             .Select(g => new TopGameDto(g.Id, g.Title, g.DownloadCount, 0)).ToListAsync(ct);
         var recentDemos = await db.DemoPlayHistories.AsNoTracking()
             .Include(d => d.Game)
             .Include(d => d.User)
+            .Where(d => d.User == null || !d.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin))
             .OrderByDescending(d => d.PlayedAt)
             .Take(20)
             .Select(d => new DemoPlayHistoryDto(
@@ -868,19 +873,19 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
 
         var dailyUserGames = await db.UserGames
             .AsNoTracking()
-            .Where(ug => ug.AcquiredAt >= start && ug.AcquiredAt <= end)
-            .Select(ug => ug.AcquiredAt.Date)
+            .Where(ug => !ug.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && ug.LastDownloadAt != null && ug.LastDownloadAt >= start && ug.LastDownloadAt <= end)
+            .Select(ug => ug.LastDownloadAt!.Value.Date)
             .ToListAsync(ct);
 
         var dailyUsers = await db.Users
             .AsNoTracking()
-            .Where(u => u.CreatedAt >= start && u.CreatedAt <= end)
+            .Where(u => !u.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && u.CreatedAt >= start && u.CreatedAt <= end)
             .Select(u => u.CreatedAt.Date)
             .ToListAsync(ct);
 
         var dailyDemos = await db.DemoPlayHistories
             .AsNoTracking()
-            .Where(d => d.PlayedAt >= start && d.PlayedAt <= end)
+            .Where(d => (d.User == null || !d.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin)) && d.PlayedAt >= start && d.PlayedAt <= end)
             .Select(d => d.PlayedAt.Date)
             .ToListAsync(ct);
 
@@ -940,7 +945,10 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
         }
 
         // User Stats (calculated in period)
-        var users = await db.Users.AsNoTracking().ToListAsync(ct);
+        var users = await db.Users
+            .AsNoTracking()
+            .Where(u => !u.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin))
+            .ToListAsync(ct);
         var userStatsList = new List<DetailedUserStatDto>();
 
         foreach (var u in users)
@@ -978,17 +986,17 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
         foreach (var g in allGames)
         {
             var wishlistCount = await db.Wishlists
-                .CountAsync(w => w.GameId == g.Id && w.AddedAt >= start && w.AddedAt <= end, ct);
+                .CountAsync(w => !w.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && w.GameId == g.Id && w.AddedAt >= start && w.AddedAt <= end, ct);
             var totalRev = await db.OrderItems
                 .Where(oi => oi.GameId == g.Id && oi.Order.Status == OrderStatus.Paid && (oi.Order.CompletedAt ?? oi.Order.CreatedAt) >= start && (oi.Order.CompletedAt ?? oi.Order.CreatedAt) <= end)
                 .SumAsync(oi => oi.LineTotal, ct);
             var downloadsCount = await db.UserGames
-                .CountAsync(ug => ug.GameId == g.Id && ug.AcquiredAt >= start && ug.AcquiredAt <= end, ct);
+                .CountAsync(ug => !ug.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && ug.GameId == g.Id && ug.LastDownloadAt != null && ug.LastDownloadAt >= start && ug.LastDownloadAt <= end, ct);
             var demoPlaysCount = await db.DemoPlayHistories
-                .CountAsync(d => d.GameId == g.Id && d.PlayedAt >= start && d.PlayedAt <= end, ct);
+                .CountAsync(d => (d.User == null || !d.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin)) && d.GameId == g.Id && d.PlayedAt >= start && d.PlayedAt <= end, ct);
 
             var demoUsersCount = await db.DemoPlayHistories
-                .Where(d => d.GameId == g.Id && d.UserId != null && d.PlayedAt >= start && d.PlayedAt <= end)
+                .Where(d => d.GameId == g.Id && d.UserId != null && !d.User!.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && d.PlayedAt >= start && d.PlayedAt <= end)
                 .Select(d => d.UserId)
                 .Distinct()
                 .CountAsync(ct);
@@ -997,7 +1005,7 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
             if (demoUsersCount > 0)
             {
                 var convertedDemoUsers = await db.UserGames
-                    .Where(ug => ug.GameId == g.Id && ug.AcquiredAt >= start && ug.AcquiredAt <= end && db.DemoPlayHistories.Any(d => d.GameId == g.Id && d.UserId == ug.UserId && d.PlayedAt >= start && d.PlayedAt <= end))
+                    .Where(ug => !ug.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && ug.GameId == g.Id && ug.AcquiredAt >= start && ug.AcquiredAt <= end && db.DemoPlayHistories.Any(d => d.GameId == g.Id && d.UserId == ug.UserId && d.PlayedAt >= start && d.PlayedAt <= end))
                     .Select(ug => ug.UserId)
                     .Distinct()
                     .CountAsync(ct);
@@ -1032,7 +1040,7 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
                 g.Id,
                 g.Title,
                 g.DemoPlays,
-                (int)(db.DemoPlayHistories.Where(d => d.GameId == g.Id && d.PlayedAt >= start && d.PlayedAt <= end).Average(d => d.PlayDurationSeconds) ?? 0)
+                (int)(db.DemoPlayHistories.Where(d => (d.User == null || !d.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin)) && d.GameId == g.Id && d.PlayedAt >= start && d.PlayedAt <= end).Average(d => d.PlayDurationSeconds) ?? 0)
             ))
             .ToList();
 
@@ -1042,7 +1050,7 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
             .Take(15)
             .Select(g => {
                 var wishlistUsersCount = db.Wishlists
-                    .Where(w => w.GameId == g.Id && w.AddedAt >= start && w.AddedAt <= end)
+                    .Where(w => !w.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && w.GameId == g.Id && w.AddedAt >= start && w.AddedAt <= end)
                     .Select(w => w.UserId)
                     .Distinct()
                     .Count();
@@ -1051,7 +1059,7 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
                 if (wishlistUsersCount > 0)
                 {
                     var convertedWishlistUsers = db.UserGames
-                        .Where(ug => ug.GameId == g.Id && ug.AcquiredAt >= start && ug.AcquiredAt <= end && db.Wishlists.Any(w => w.GameId == g.Id && w.UserId == ug.UserId && w.AddedAt >= start && w.AddedAt <= end))
+                        .Where(ug => !ug.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && ug.GameId == g.Id && ug.AcquiredAt >= start && ug.AcquiredAt <= end && db.Wishlists.Any(w => w.GameId == g.Id && w.UserId == ug.UserId && w.AddedAt >= start && w.AddedAt <= end))
                         .Select(ug => ug.UserId)
                         .Distinct()
                         .Count();
@@ -1087,15 +1095,15 @@ public class AdminService(AppDbContext db, IEmailService email, IGoogleDriveServ
             .CountAsync(ct);
 
         var downloads = await db.UserGames
-            .Where(ug => ug.AcquiredAt >= start && ug.AcquiredAt <= end)
+            .Where(ug => !ug.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && ug.LastDownloadAt != null && ug.LastDownloadAt >= start && ug.LastDownloadAt <= end)
             .CountAsync(ct);
 
         var registrations = await db.Users
-            .Where(u => u.CreatedAt >= start && u.CreatedAt <= end)
+            .Where(u => !u.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin) && u.CreatedAt >= start && u.CreatedAt <= end)
             .CountAsync(ct);
 
         var demoPlays = await db.DemoPlayHistories
-            .Where(d => d.PlayedAt >= start && d.PlayedAt <= end)
+            .Where(d => (d.User == null || !d.User.UserRoles.Any(ur => ur.Role.Name == RoleNames.Admin)) && d.PlayedAt >= start && d.PlayedAt <= end)
             .CountAsync(ct);
 
         return new AnalyticsTimeSummaryDto(revenue, orders, downloads, registrations, demoPlays);

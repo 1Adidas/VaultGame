@@ -62,7 +62,7 @@ function ProfileContent() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [games, setGames] = useState<LibraryGame[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"library" | "settings" | "notifications">("library");
+  const [activeTab, setActiveTab] = useState<"library" | "settings">("library");
   const [gameSearch, setGameSearch] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
 
@@ -79,10 +79,6 @@ function ProfileContent() {
   const [avatarError, setAvatarError] = useState(false);
   const [avatarRetry, setAvatarRetry] = useState(0);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-
-  // Notifications states
-  const [notifications, setNotifications] = useState<any[]>([]);
-  const [loadingNotifs, setLoadingNotifs] = useState(false);
 
   useEffect(() => {
     setAvatarError(false);
@@ -270,26 +266,6 @@ function ProfileContent() {
     fetchProfileData();
   }, [user, router, locale, targetId, isOwnProfile]);
 
-  useEffect(() => {
-    if (!isOwnProfile || activeTab !== "notifications") return;
-
-    const fetchNotifs = async () => {
-      setLoadingNotifs(true);
-      try {
-        const res = await api.get("/notifications");
-        if (res.data?.data) {
-          setNotifications(res.data.data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch notifications on profile page", err);
-      } finally {
-        setLoadingNotifs(false);
-      }
-    };
-
-    fetchNotifs();
-  }, [isOwnProfile, activeTab]);
-
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -336,35 +312,6 @@ function ProfileContent() {
     }
   };
 
-  const markNotifRead = async (id: string) => {
-    try {
-      await api.post(`/notifications/${id}/read`);
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === id ? { ...n, isRead: true } : n))
-      );
-    } catch (err) {
-      console.error("Failed to mark notification read", err);
-    }
-  };
-
-  const clearAllNotifs = async () => {
-    try {
-      await api.delete("/notifications");
-      setNotifications([]);
-    } catch (err) {
-      console.error("Failed to clear notifications", err);
-    }
-  };
-
-  const parseNotifText = (text: string | null | undefined): string => {
-    if (!text) return "";
-    if (!text.includes(" / ")) return text;
-    const parts = text.split(" / ");
-    if (locale === "vi") return parts[0]?.trim() || text;
-    if (locale === "zh") return parts[2]?.trim() || parts[1]?.trim() || parts[0]?.trim() || text;
-    return parts[1]?.trim() || parts[0]?.trim() || text;
-  };
-
   const filteredGames = useMemo(() => {
     if (!gameSearch.trim()) return games;
     return games.filter((g) =>
@@ -383,7 +330,6 @@ function ProfileContent() {
   if (!profile) return null;
 
   const isAdmin = profile.roles.includes("Admin");
-  const unreadNotifCount = notifications.filter((n) => !n.isRead).length;
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-10 sm:py-14 text-zinc-100">
@@ -531,34 +477,17 @@ function ProfileContent() {
         </button>
 
         {isOwnProfile && (
-          <>
-            <button
-              type="button"
-              onClick={() => setActiveTab("settings")}
-              className={`pb-3 font-medium transition -mb-px ${
-                activeTab === "settings"
-                  ? "border-b-2 border-white text-white"
-                  : "border-b-2 border-transparent text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              {isVi ? "Cài đặt & Quyền riêng tư" : isZh ? "设置与隐私" : "Settings & Privacy"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveTab("notifications")}
-              className={`pb-3 font-medium transition -mb-px flex items-center gap-2 ${
-                activeTab === "notifications"
-                  ? "border-b-2 border-white text-white"
-                  : "border-b-2 border-transparent text-zinc-400 hover:text-zinc-200"
-              }`}
-            >
-              <span>{isVi ? "Thông báo" : isZh ? "通知" : "Notifications"}</span>
-              {unreadNotifCount > 0 && (
-                <span className="size-1.5 rounded-full bg-rose-500" />
-              )}
-            </button>
-          </>
+          <button
+            type="button"
+            onClick={() => setActiveTab("settings")}
+            className={`pb-3 font-medium transition -mb-px ${
+              activeTab === "settings"
+                ? "border-b-2 border-white text-white"
+                : "border-b-2 border-transparent text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            {isVi ? "Cài đặt & Quyền riêng tư" : isZh ? "设置与隐私" : "Settings & Privacy"}
+          </button>
         )}
       </nav>
 
@@ -807,79 +736,6 @@ function ProfileContent() {
                 {isVi ? "Hủy" : "Cancel"}
               </button>
             </div>
-          </div>
-        )}
-
-        {/* TAB 3: NOTIFICATIONS */}
-        {activeTab === "notifications" && isOwnProfile && (
-          <div className="space-y-4 max-w-2xl">
-            <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
-              <p className="text-xs text-zinc-400">
-                {isVi ? "Lịch sử thông báo hệ thống và giao dịch." : "Recent account notifications."}
-              </p>
-              {notifications.length > 0 && (
-                <div className="flex items-center gap-4 text-xs">
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const unreads = notifications.filter((x) => !x.isRead);
-                      for (const n of unreads) {
-                        await markNotifRead(n.id);
-                      }
-                    }}
-                    className="text-zinc-400 hover:text-white transition"
-                  >
-                    {isVi ? "Đọc tất cả" : "Mark all read"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={clearAllNotifs}
-                    className="text-zinc-400 hover:text-rose-400 transition"
-                  >
-                    {isVi ? "Xóa hết" : "Clear all"}
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {loadingNotifs ? (
-              <div className="py-12 text-center text-xs text-zinc-400">
-                {isVi ? "Đang tải thông báo..." : "Loading..."}
-              </div>
-            ) : notifications.length === 0 ? (
-              <div className="py-12 text-center text-xs text-zinc-400">
-                {isVi ? "Không có thông báo nào." : "No notifications."}
-              </div>
-            ) : (
-              <div className="divide-y divide-zinc-800/80">
-                {notifications.map((n) => (
-                  <div
-                    key={n.id}
-                    onClick={() => !n.isRead && markNotifRead(n.id)}
-                    className={`py-3 flex items-start justify-between gap-4 cursor-pointer transition ${
-                      n.isRead ? "opacity-60 hover:opacity-100" : "opacity-100"
-                    }`}
-                  >
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        {!n.isRead && (
-                          <span className="size-1.5 rounded-full bg-rose-500 shrink-0" />
-                        )}
-                        <h4 className="text-xs font-medium text-white truncate">
-                          {parseNotifText(n.title)}
-                        </h4>
-                      </div>
-                      <p className="text-xs text-zinc-400">
-                        {parseNotifText(n.message)}
-                      </p>
-                    </div>
-                    <span className="text-[11px] text-zinc-400 shrink-0">
-                      {formatDate(n.createdAt)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
 

@@ -22,6 +22,8 @@ export default function WishlistPage() {
     if (!isHydrated) return;
     if (!user) {
       router.replace(`/${locale}/login`);
+    } else if (user.roles?.includes("Admin")) {
+      router.replace(`/${locale}/admin`);
     }
   }, [user, isHydrated, locale, router]);
 
@@ -43,6 +45,31 @@ export default function WishlistPage() {
             <div key={i} className="aspect-[4/3] rounded-2xl bg-[#0E131E] border border-white/5" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (user.roles?.includes("Admin")) {
+    return (
+      <div className="rounded-2xl border border-white/[0.08] bg-[#0E131E] p-16 text-center space-y-4 shadow-xl">
+        <div className="size-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-zinc-400">
+          <Heart className="size-8" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold text-white">
+            {isVi ? "Tài khoản Quản trị viên (Admin)" : "Administrator Account"}
+          </h3>
+          <p className="text-xs text-zinc-400 max-w-md mx-auto">
+            {isVi
+              ? "Tài khoản Quản trị viên sở hữu toàn quyền quản lý và truy cập tất cả game trên hệ thống, không sử dụng tính năng Danh sách yêu thích."
+              : "Admin accounts manage the entire platform and own full game access, so wishlists are not used."}
+          </p>
+        </div>
+        <Link href={`/${locale}/admin`} className="inline-block pt-2">
+          <button className="btn-primary">
+            <span>{isVi ? "Về Bảng Quản Trị" : "Go to Admin Dashboard"}</span>
+          </button>
+        </Link>
       </div>
     );
   }

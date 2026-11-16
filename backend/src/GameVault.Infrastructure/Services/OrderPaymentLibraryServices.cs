@@ -508,22 +508,30 @@ public class LibraryService(AppDbContext db, IGoogleDriveService drive) : ILibra
         var isAdmin = await db.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.Role.Name == RoleNames.Admin, ct);
         if (isAdmin)
         {
-            var allGameIds = await db.Games.Select(g => g.Id).ToListAsync(ct);
-            var ownedGameIds = await db.UserGames.Where(ug => ug.UserId == userId).Select(ug => ug.GameId).ToListAsync(ct);
-            var missing = allGameIds.Except(ownedGameIds).ToList();
-            if (missing.Any())
+            var ownedDict = await db.UserGames.AsNoTracking()
+                .Where(ug => ug.UserId == userId)
+                .ToDictionaryAsync(ug => ug.GameId, ct);
+
+            var games = await db.Games.AsNoTracking()
+                .Include(g => g.Images)
+                .Include(g => g.Files)
+                .Where(g => g.Status == GameStatus.Published)
+                .OrderByDescending(g => g.CreatedAt)
+                .ToListAsync(ct);
+
+            return games.Select(g =>
             {
-                foreach (var gId in missing)
-                {
-                    db.UserGames.Add(new UserGame
-                    {
-                        UserId = userId,
-                        GameId = gId,
-                        AcquiredAt = DateTime.UtcNow
-                    });
-                }
-                await db.SaveChangesAsync(ct);
-            }
+                ownedDict.TryGetValue(g.Id, out var owned);
+                return new LibraryGameDto(
+                    g.Id,
+                    g.Title,
+                    g.Slug,
+                    g.Images.Where(i => i.IsPrimary).Select(i => i.Url).FirstOrDefault() ?? g.Images.Select(i => i.Url).FirstOrDefault(),
+                    owned?.AcquiredAt ?? g.CreatedAt,
+                    g.Files.Where(f => f.IsActive).OrderByDescending(f => f.CreatedAt).Select(f => f.Version).FirstOrDefault() ?? "1.0.0",
+                    owned?.LastDownloadAt
+                );
+            }).ToList();
         }
 
         return await db.UserGames.AsNoTracking()
@@ -543,19 +551,10 @@ public class LibraryService(AppDbContext db, IGoogleDriveService drive) : ILibra
     public async Task<DownloadLinkDto> GetDownloadLinkAsync(Guid userId, Guid gameId, CancellationToken ct = default)
     {
         var owned = await db.UserGames.FirstOrDefaultAsync(ug => ug.UserId == userId && ug.GameId == gameId, ct);
-        if (owned == null)
+        var isAdmin = await db.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.Role.Name == RoleNames.Admin, ct);
+        if (owned == null && !isAdmin)
         {
-            var isAdmin = await db.UserRoles.AnyAsync(ur => ur.UserId == userId && ur.Role.Name == RoleNames.Admin, ct);
-            if (isAdmin)
-            {
-                owned = new UserGame { UserId = userId, GameId = gameId, AcquiredAt = DateTime.UtcNow };
-                db.UserGames.Add(owned);
-                await db.SaveChangesAsync(ct);
-            }
-            else
-            {
-                throw new AppException("NOT_OWNED", "Game not in library", 403);
-            }
+            throw new AppException("NOT_OWNED", "Game not in library", 403);
         }
 
         var file = await db.GameFiles.Where(f => f.GameId == gameId && f.IsActive).OrderByDescending(f => f.CreatedAt).FirstOrDefaultAsync(ct)
@@ -576,9 +575,16 @@ public class LibraryService(AppDbContext db, IGoogleDriveService drive) : ILibra
             url = file.DownloadUrl ?? throw new AppException("FILE_NOT_FOUND", "Download URL missing", 404);
         }
 
-        owned.LastDownloadAt = DateTime.UtcNow;
-        var game = await db.Games.FindAsync([gameId], ct);
-        if (game is not null) game.DownloadCount++;
+        if (owned != null)
+        {
+            owned.LastDownloadAt = DateTime.UtcNow;
+        }
+
+        if (!isAdmin)
+        {
+            var game = await db.Games.FindAsync([gameId], ct);
+            if (game is not null) game.DownloadCount++;
+        }
         await db.SaveChangesAsync(ct);
         return new DownloadLinkDto(url, DateTime.UtcNow.AddMinutes(15), file.FileName, file.FileSizeBytes);
     }

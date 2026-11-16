@@ -4,10 +4,13 @@ import { useLocale } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ShieldCheck, Zap, Headphones } from "lucide-react";
+import { useAuthStore } from "@/lib/auth/store";
 
 export function Footer() {
   const locale = useLocale();
   const pathname = usePathname();
+  const user = useAuthStore((s) => s.user);
+  const isAdmin = Boolean(user?.roles?.includes("Admin"));
   const isVi = locale === "vi";
   const isZh = locale === "zh";
 
@@ -45,12 +48,23 @@ export function Footer() {
           {/* Member Links */}
           <div className="space-y-3">
             <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-300">
-              {isVi ? "Tài Khoản" : isZh ? "用户中心" : "Account"}
+              {isAdmin
+                ? (isVi ? "Quản Trị" : isZh ? "管理中心" : "Administration")
+                : (isVi ? "Tài Khoản" : isZh ? "用户中心" : "Account")}
             </h4>
             <ul className="space-y-2 text-xs text-zinc-400">
-              <li><Link href={`/${locale}/library`} className="hover:text-white transition-colors">{isVi ? "Thư viện game" : isZh ? "我的游戏库" : "My Library"}</Link></li>
-              <li><Link href={`/${locale}/orders`} className="hover:text-white transition-colors">{isVi ? "Lịch sử mua hàng" : isZh ? "购买记录" : "Order History"}</Link></li>
-              <li><Link href={`/${locale}/wishlist`} className="hover:text-white transition-colors">{isVi ? "Danh sách yêu thích" : isZh ? "愿望单" : "Wishlist"}</Link></li>
+              {isAdmin ? (
+                <>
+                  <li><Link href={`/${locale}/admin`} className="hover:text-white transition-colors">{isVi ? "Bảng quản trị" : isZh ? "管理控制台" : "Admin Dashboard"}</Link></li>
+                  <li><Link href={`/${locale}/profile`} className="hover:text-white transition-colors">{isVi ? "Hồ sơ của tôi" : isZh ? "个人中心" : "My Profile"}</Link></li>
+                </>
+              ) : (
+                <>
+                  <li><Link href={`/${locale}/library`} className="hover:text-white transition-colors">{isVi ? "Thư viện game" : isZh ? "我的游戏库" : "My Library"}</Link></li>
+                  <li><Link href={`/${locale}/orders`} className="hover:text-white transition-colors">{isVi ? "Lịch sử mua hàng" : isZh ? "购买记录" : "Order History"}</Link></li>
+                  <li><Link href={`/${locale}/wishlist`} className="hover:text-white transition-colors">{isVi ? "Danh sách yêu thích" : isZh ? "愿望单" : "Wishlist"}</Link></li>
+                </>
+              )}
             </ul>
           </div>
 

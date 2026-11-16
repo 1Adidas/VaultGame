@@ -1,9 +1,13 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
+using System.Net;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using GameVault.Launcher.Models;
@@ -75,6 +79,8 @@ public partial class MainWindow : Window
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        App.Log($"MainWindow_Closing called! Cancel={e.Cancel}");
+        StopAuthHttpListener();
         _autoSyncTimer.Stop();
         _notificationTimer.Stop();
         CancelAllDownloads();
@@ -90,6 +96,7 @@ public partial class MainWindow : Window
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
+        App.Log("MainWindow_Loaded called.");
         if (!string.IsNullOrEmpty(_session.SavedEmail))
         {
             txtLoginEmail.Text = _session.SavedEmail;
@@ -122,7 +129,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void HandleDeepLink(string? arg)
+    public async void HandleDeepLink(string? arg)
     {
         try
         {
@@ -139,6 +146,16 @@ public partial class MainWindow : Window
 
         if (string.IsNullOrEmpty(arg)) return;
 
+        App.Log($"HandleDeepLink received: {arg}");
+
+        // 1. Authentication deep link: gamevault://auth?token=...&refreshToken=...
+        if (arg.StartsWith("gamevault://auth", StringComparison.OrdinalIgnoreCase))
+        {
+            await ProcessAuthDeepLinkAsync(arg);
+            return;
+        }
+
+        // 2. Launch or Open game in library
         // format: gamevault://launch/{gameId} hoặc gamevault://open/{gameId}
         string? rawId = null;
         if (arg.StartsWith("gamevault://launch/", StringComparison.OrdinalIgnoreCase))
@@ -160,6 +177,277 @@ public partial class MainWindow : Window
             }
         }
     }
+
+    private static Dictionary<string, string> ParseQueryString(string query)
+    {
+        var dict = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(query)) return dict;
+        if (query.StartsWith("?")) query = query.Substring(1);
+
+        var pairs = query.Split('&', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var pair in pairs)
+        {
+            var kv = pair.Split('=', 2);
+            var key = Uri.UnescapeDataString(kv[0]);
+            var val = kv.Length > 1 ? Uri.UnescapeDataString(kv[1]) : "";
+            dict[key] = val;
+        }
+        return dict;
+    }
+
+    private async Task ProcessAuthDeepLinkAsync(string uriString)
+    {
+        try
+        {
+            string? token = null;
+            string? refreshToken = null;
+
+            var qIndex = uriString.IndexOf('?');
+            if (qIndex >= 0)
+            {
+                var queryParams = ParseQueryString(uriString.Substring(qIndex + 1));
+                token = queryParams.GetValueOrDefault("token");
+                refreshToken = queryParams.GetValueOrDefault("refreshToken");
+            }
+
+            if (string.IsNullOrEmpty(token))
+            {
+                var raw = uriString.Replace("gamevault://auth/", "", StringComparison.OrdinalIgnoreCase)
+                                   .Replace("gamevault://auth", "", StringComparison.OrdinalIgnoreCase)
+                                   .Trim('/', '?');
+                if (!string.IsNullOrEmpty(raw) && !raw.Contains("="))
+                {
+                    token = raw;
+                }
+            }
+
+            if (string.IsNullOrEmpty(token))
+            {
+                ShowLoginError("Liên kết xác thực không chứa mã đăng nhập hợp lệ.");
+                return;
+            }
+
+            await CompleteLoginWithTokenAsync(token, refreshToken);
+        }
+        catch (Exception ex)
+        {
+            App.Log($"ProcessAuthDeepLinkAsync error: {ex.Message}");
+            ShowLoginError($"Lỗi xác thực: {ex.Message}");
+        }
+    }
+
+    public async Task CompleteLoginWithTokenAsync(string token, string? refreshToken)
+    {
+        try
+        {
+            _apiService.SetAuthToken(token);
+            var user = await _apiService.GetProfileAsync();
+            if (user == null)
+            {
+                ShowLoginError("Không thể xác thực thông tin tài khoản với máy chủ.");
+                return;
+            }
+
+            if (user.Roles != null && user.Roles.Any(r => string.Equals(r, "Admin", StringComparison.OrdinalIgnoreCase)))
+            {
+                _session.SavedEmail = string.Empty;
+                _storageService.SaveSession(_session);
+                txtLoginEmail.Text = string.Empty;
+                ClearSessionAndShowLogin();
+                ShowLoginError("Tài khoản Quản trị viên (Admin) không được phép sử dụng trên Launcher. Vui lòng đăng nhập bằng tài khoản người chơi.");
+                return;
+            }
+
+            _session.AccessToken = token;
+            if (!string.IsNullOrEmpty(refreshToken))
+            {
+                _session.RefreshToken = refreshToken;
+            }
+            _session.User = user;
+            _session.SavedEmail = user.Email;
+            _storageService.SaveSession(_session);
+
+            txtLoginEmail.Text = user.Email;
+            txtLoginPassword.Password = string.Empty;
+            pnlLoginError.Visibility = Visibility.Collapsed;
+
+            UpdateUserProfileUi(user);
+            ShowMainSteamView();
+            await LoadLibraryAsync();
+            _ = LoadNotificationsAsync();
+
+            try
+            {
+                if (WindowState == WindowState.Minimized)
+                {
+                    WindowState = WindowState.Normal;
+                }
+                Activate();
+                Topmost = true;
+                Topmost = false;
+                Focus();
+            }
+            catch { }
+        }
+        catch (Exception ex)
+        {
+            App.Log($"CompleteLoginWithTokenAsync error: {ex.Message}");
+            ShowLoginError($"Đăng nhập thất bại: {ex.Message}");
+        }
+    }
+
+    #region Web & Google SSO HTTP Listener
+
+    private HttpListener? _authHttpListener;
+    private CancellationTokenSource? _authHttpCts;
+
+    private void BtnGoogleLogin_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            StopAuthHttpListener();
+
+            int port = 45678;
+            _authHttpCts = new CancellationTokenSource();
+
+            try
+            {
+                _authHttpListener = new HttpListener();
+                _authHttpListener.Prefixes.Add($"http://127.0.0.1:{port}/");
+                _authHttpListener.Start();
+                _ = ListenForAuthCallbackAsync(_authHttpListener, _authHttpCts.Token);
+            }
+            catch (Exception ex)
+            {
+                App.Log($"Could not start HttpListener: {ex.Message}");
+                _authHttpListener = null;
+            }
+
+            var webUrl = !string.IsNullOrWhiteSpace(_session.WebUrl)
+                ? _session.WebUrl
+                : "http://localhost:3000";
+            webUrl = webUrl.Replace("127.0.0.1", "localhost");
+            if (!webUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                webUrl = "http://localhost:3000";
+            }
+            var loginUrl = $"{webUrl.TrimEnd('/')}/vi/login?launcher=1&port={port}";
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = loginUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            ShowLoginError($"Không thể mở trình duyệt: {ex.Message}");
+        }
+    }
+
+    private void PnlLoginError_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        pnlLoginError.Visibility = Visibility.Collapsed;
+        txtLoginError.Text = string.Empty;
+    }
+
+    private async Task ListenForAuthCallbackAsync(HttpListener listener, CancellationToken ct)
+    {
+        try
+        {
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+            while (!linkedCts.IsCancellationRequested && listener.IsListening)
+            {
+                var contextTask = listener.GetContextAsync();
+                using (linkedCts.Token.Register(() => { try { listener.Stop(); } catch { } }))
+                {
+                    var context = await contextTask;
+                    var req = context.Request;
+                    var res = context.Response;
+
+                    res.Headers.Add("Access-Control-Allow-Origin", "*");
+                    res.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+                    res.Headers.Add("Access-Control-Allow-Headers", "*");
+
+                    if (req.HttpMethod == "OPTIONS")
+                    {
+                        res.StatusCode = 200;
+                        res.Close();
+                        continue;
+                    }
+
+                    var rawUrl = req.RawUrl ?? "";
+                    if (rawUrl.StartsWith("/cancel", StringComparison.OrdinalIgnoreCase) || req.Url?.AbsolutePath.Equals("/cancel", StringComparison.OrdinalIgnoreCase) == true)
+                    {
+                        res.StatusCode = 200;
+                        try { res.Close(); } catch { }
+                        break;
+                    }
+
+                    var query = req.Url?.Query ?? "";
+                    var queryParams = ParseQueryString(query);
+                    var token = queryParams.GetValueOrDefault("token");
+                    var refreshToken = queryParams.GetValueOrDefault("refreshToken");
+
+                    var responseHtml = """
+                        <!DOCTYPE html>
+                        <html>
+                        <head><meta charset="utf-8"><title>GameVault Launcher</title></head>
+                        <body style="background:#0b0f19;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+                          <div style="text-align:center;padding:40px;background:#131b2e;border-radius:16px;border:1px solid #2a3a5a;max-width:400px;box-shadow:0 20px 40px rgba(0,0,0,0.5);">
+                            <div style="font-size:48px;margin-bottom:16px;">🎮</div>
+                            <h2 style="color:#00e5ff;margin:0 0 10px;">Đăng Nhập Thành Công!</h2>
+                            <p style="color:#94a3b8;font-size:14px;line-height:1.5;">Bạn đã liên kết thành công với GameVault Launcher. Bạn có thể đóng tab này và bắt đầu trải nghiệm trò chơi.</p>
+                          </div>
+                        </body>
+                        </html>
+                        """;
+                    var buffer = Encoding.UTF8.GetBytes(responseHtml);
+                    res.ContentType = "text/html; charset=utf-8";
+                    res.ContentLength64 = buffer.Length;
+                    await res.OutputStream.WriteAsync(buffer, ct);
+                    res.OutputStream.Close();
+
+                    if (!string.IsNullOrEmpty(token))
+                    {
+                        await Dispatcher.InvokeAsync(() => CompleteLoginWithTokenAsync(token, refreshToken));
+                        break;
+                    }
+                }
+            }
+        }
+        catch { }
+        finally
+        {
+            StopAuthHttpListener();
+        }
+    }
+
+    private void StopAuthHttpListener()
+    {
+        try
+        {
+            _authHttpCts?.Cancel();
+            _authHttpCts?.Dispose();
+            _authHttpCts = null;
+        }
+        catch { }
+
+        try
+        {
+            if (_authHttpListener?.IsListening == true)
+            {
+                _authHttpListener.Stop();
+                _authHttpListener.Close();
+            }
+            _authHttpListener = null;
+        }
+        catch { }
+    }
+
+    #endregion
 
     #region View Switching & User Profile
 
@@ -280,6 +568,7 @@ public partial class MainWindow : Window
                 _apiService.UpdateBaseUrl(customApiUrl);
             }
 
+            StopAuthHttpListener();
             btnLogin.IsEnabled = false;
             btnLogin.Content = "ĐANG XÁC THỰC...";
             pnlLoginError.Visibility = Visibility.Collapsed;
@@ -320,6 +609,9 @@ public partial class MainWindow : Window
 
     private void ShowLoginError(string message)
     {
+        pnlLoginError.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x0E, 0x14));
+        pnlLoginError.BorderBrush = (Brush)FindResource("DangerBrush");
+        txtLoginError.Foreground = new SolidColorBrush(Color.FromRgb(0xFD, 0xA4, 0xAF));
         txtLoginError.Text = message;
         pnlLoginError.Visibility = Visibility.Visible;
     }
@@ -973,17 +1265,42 @@ public partial class MainWindow : Window
 
     #region Custom Window Chrome Controls
 
+    private bool _isCustomMaximized = false;
+    private Rect _normalBounds = new(100, 100, 1220, 780);
+
     private void TitleBar_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (e.ChangedButton == MouseButton.Left)
         {
             if (e.ClickCount == 2)
             {
-                BtnMaximize_Click(sender, e);
+                ToggleMaximize();
             }
             else
             {
-                DragMove();
+                if (_isCustomMaximized)
+                {
+                    // Dragging when maximized: smoothly restore to normal and position under cursor
+                    var dpi = VisualTreeHelper.GetDpi(this);
+                    var scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+                    var scaleY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+
+                    var mousePos = PointToScreen(e.GetPosition(this));
+                    var mouseX = mousePos.X / scaleX;
+                    var mouseY = mousePos.Y / scaleY;
+                    var prevRatio = ActualWidth > 0 ? e.GetPosition(this).X / ActualWidth : 0.5;
+
+                    ToggleMaximize();
+
+                    Left = Math.Max(0, mouseX - (ActualWidth * prevRatio));
+                    Top = Math.Max(0, mouseY - 20);
+                }
+
+                try
+                {
+                    DragMove();
+                }
+                catch { }
             }
         }
     }
@@ -995,13 +1312,141 @@ public partial class MainWindow : Window
 
     private void BtnMaximize_Click(object sender, RoutedEventArgs e)
     {
-        WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        ToggleMaximize();
     }
 
     private void BtnClose_Click(object sender, RoutedEventArgs e)
     {
         Close();
     }
+
+    private void ToggleMaximize()
+    {
+        if (_isCustomMaximized)
+        {
+            // Restore to normal size
+            _isCustomMaximized = false;
+
+            Left = _normalBounds.Left;
+            Top = _normalBounds.Top;
+            Width = _normalBounds.Width;
+            Height = _normalBounds.Height;
+
+            if (RootBorder != null)
+            {
+                RootBorder.CornerRadius = new CornerRadius(14);
+                RootBorder.BorderThickness = new Thickness(1.5);
+            }
+            if (BtnMaximize != null)
+            {
+                BtnMaximize.Content = "□";
+                BtnMaximize.ToolTip = "Phóng to";
+            }
+        }
+        else
+        {
+            // Save current position and dimensions
+            if (!double.IsNaN(Left) && !double.IsNaN(Top) && ActualWidth > 0 && ActualHeight > 0)
+            {
+                _normalBounds = new Rect(Left, Top, ActualWidth, ActualHeight);
+            }
+
+            _isCustomMaximized = true;
+
+            var workArea = GetCurrentWorkArea();
+            Left = workArea.Left;
+            Top = workArea.Top;
+            Width = workArea.Width;
+            Height = workArea.Height;
+
+            if (RootBorder != null)
+            {
+                RootBorder.CornerRadius = new CornerRadius(0);
+                RootBorder.BorderThickness = new Thickness(0);
+            }
+            if (BtnMaximize != null)
+            {
+                BtnMaximize.Content = "❐";
+                BtnMaximize.ToolTip = "Khôi phục kích thước";
+            }
+        }
+    }
+
+    protected override void OnStateChanged(EventArgs e)
+    {
+        base.OnStateChanged(e);
+        if (WindowState == WindowState.Maximized)
+        {
+            // Intercept Win+Up or OS-level maximize and use custom WorkArea maximize
+            WindowState = WindowState.Normal;
+            if (!_isCustomMaximized)
+            {
+                ToggleMaximize();
+            }
+        }
+    }
+
+    private Rect GetCurrentWorkArea()
+    {
+        try
+        {
+            var handle = new WindowInteropHelper(this).Handle;
+            if (handle != IntPtr.Zero)
+            {
+                var hMonitor = MonitorFromWindow(handle, MONITOR_DEFAULTTONEAREST);
+                if (hMonitor != IntPtr.Zero)
+                {
+                    var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+                    if (GetMonitorInfo(hMonitor, ref mi))
+                    {
+                        var dpi = VisualTreeHelper.GetDpi(this);
+                        var scaleX = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+                        var scaleY = dpi.DpiScaleY > 0 ? dpi.DpiScaleY : 1.0;
+
+                        return new Rect(
+                            mi.rcWork.left / scaleX,
+                            mi.rcWork.top / scaleY,
+                            Math.Abs(mi.rcWork.right - mi.rcWork.left) / scaleX,
+                            Math.Abs(mi.rcWork.bottom - mi.rcWork.top) / scaleY
+                        );
+                    }
+                }
+            }
+        }
+        catch { }
+
+        return SystemParameters.WorkArea;
+    }
+
+    #endregion
+
+    #region Win32 Monitor Info for WorkArea
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    public struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public int dwFlags;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 0)]
+    public struct RECT
+    {
+        public int left;
+        public int top;
+        public int right;
+        public int bottom;
+    }
+
+    private const uint MONITOR_DEFAULTTONEAREST = 0x00000002;
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr handle, uint flags);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
 
     #endregion
 

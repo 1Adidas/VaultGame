@@ -12,535 +12,14 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Hosting;
 
 namespace GameVault.API.Controllers;
 
 [ApiController]
-[Route("api/v1/auth")]
-[EnableRateLimiting("auth")]
-public class AuthController(IAuthService auth) : ControllerBase
-{
-    [HttpPost("register")]
-    public async Task<ActionResult<ApiResponse<AuthResponse>>> Register(RegisterRequest request, CancellationToken ct)
-        => Ok(ApiResponse<AuthResponse>.Ok(await auth.RegisterAsync(request, ct)));
-
-    [HttpPost("login")]
-    public async Task<ActionResult<ApiResponse<AuthResponse>>> Login(LoginRequest request, CancellationToken ct)
-        => Ok(ApiResponse<AuthResponse>.Ok(await auth.LoginAsync(request, ct)));
-
-    [HttpPost("google")]
-    public async Task<ActionResult<ApiResponse<AuthResponse>>> GoogleLogin(GoogleLoginRequest request, CancellationToken ct)
-        => Ok(ApiResponse<AuthResponse>.Ok(await auth.LoginWithGoogleAsync(request, ct)));
-
-    [HttpPost("refresh")]
-    public async Task<ActionResult<ApiResponse<AuthResponse>>> Refresh(RefreshTokenRequest request, CancellationToken ct)
-        => Ok(ApiResponse<AuthResponse>.Ok(await auth.RefreshAsync(request, ct)));
-
-    [HttpPost("resend-verification")]
-    public async Task<ActionResult<ApiResponse<object>>> ResendVerification(ResendVerificationRequest request, CancellationToken ct)
-    {
-        await auth.ResendVerificationEmailAsync(request, ct);
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-
-    [HttpPost("forgot-password")]
-    public async Task<ActionResult<ApiResponse<object>>> ForgotPassword(ForgotPasswordRequest request, CancellationToken ct)
-    {
-        await auth.ForgotPasswordAsync(request, ct);
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-
-    [HttpPost("verify-reset-code")]
-    public async Task<ActionResult<ApiResponse<object>>> VerifyResetCode(VerifyResetCodeRequest request, CancellationToken ct)
-    {
-        var isValid = await auth.VerifyResetCodeAsync(request.Email, request.Code, ct);
-        if (!isValid)
-        {
-            return BadRequest(ApiResponse<object>.Fail("AUTH_INVALID_TOKEN", "Mã xác nhận không hợp lệ hoặc đã hết hạn!"));
-        }
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-
-    [HttpPost("reset-password")]
-    public async Task<ActionResult<ApiResponse<object>>> ResetPassword(ResetPasswordRequest request, CancellationToken ct)
-    {
-        await auth.ResetPasswordAsync(request, ct);
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-
-    [Authorize]
-    [HttpPost("logout")]
-    public async Task<ActionResult<ApiResponse<object>>> Logout(CancellationToken ct)
-    {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        await auth.LogoutAsync(userId, ct);
-        return Ok(ApiResponse<object>.Ok(new { }));
-    }
-}
-
-[ApiController]
-[Route("api/v1/games")]
-public class GamesController(IGameService games) : ControllerBase
-{
-    [HttpGet]
-    public async Task<ActionResult<ApiResponse<PagedResult<GameListDto>>>> List(
-        [FromQuery] GameFilterRequest filter, 
-        [FromHeader(Name = "Accept-Language")] string? localeHeader, 
-        [FromQuery] string? locale,
-        CancellationToken ct)
-    {
-        var effectiveLocale = !string.IsNullOrWhiteSpace(locale) ? locale : localeHeader;
-        var result = await games.GetGamesAsync(filter, effectiveLocale ?? "vi", ct);
-        return Ok(ApiResponse<PagedResult<GameListDto>>.Ok(result, new ApiMeta(result.Page, result.PageSize, result.Total)));
-    }
-
-    [HttpGet("categories")]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<CategoryDto>>>> Categories(CancellationToken ct)
-        => Ok(ApiResponse<IReadOnlyList<CategoryDto>>.Ok(await games.GetCategoriesAsync(ct)));
-
-    [HttpGet("tags")]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<TagDto>>>> Tags(CancellationToken ct)
-        => Ok(ApiResponse<IReadOnlyList<TagDto>>.Ok(await games.GetTagsAsync(ct)));
-
-    [HttpGet("{slug}")]
-    public async Task<ActionResult<ApiResponse<GameDetailDto>>> Detail(
-        string slug, 
-        [FromHeader(Name = "Accept-Language")] string? localeHeader, 
-        [FromQuery] string? locale,
-        CancellationToken ct)
-    {
-        Guid? userId = User.Identity?.IsAuthenticated == true ? Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!) : null;
-        var effectiveLocale = !string.IsNullOrWhiteSpace(locale) ? locale : localeHeader;
-        var game = await games.GetBySlugAsync(slug, userId, effectiveLocale ?? "vi", ct);
-        return game is null ? NotFound(ApiResponse<GameDetailDto>.Fail("GAME_NOT_FOUND", "Game not found")) : Ok(ApiResponse<GameDetailDto>.Ok(game));
-    }
-
-    [HttpPost("{slug}/demo-play")]
-    public async Task<ActionResult<ApiResponse<object>>> DemoPlay(string slug, CancellationToken ct)
-    {
-        Guid? userId = User.Identity?.IsAuthenticated == true ? Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!) : null;
-        var historyId = await games.IncrementDemoPlayAsync(slug, userId, ct);
-        return Ok(ApiResponse<object>.Ok(new { historyId }));
-    }
-
-    [HttpPut("demo-play/{historyId:guid}")]
-    public async Task<ActionResult<ApiResponse<object>>> UpdateDemoPlayDuration(Guid historyId, [FromBody] UpdateDemoDurationRequest request, CancellationToken ct)
-    {
-        await games.UpdateDemoPlayDurationAsync(historyId, request.DurationSeconds, ct);
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-
-    [HttpGet("{slug}/reviews")]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<ReviewDto>>>> Reviews(string slug, CancellationToken ct)
-        => Ok(ApiResponse<IReadOnlyList<ReviewDto>>.Ok(await HttpContext.RequestServices.GetRequiredService<IReviewService>().GetByGameSlugAsync(slug, ct)));
-}
-
-[ApiController]
-[Route("api/v1")]
-public class ReviewsController(IReviewService reviews) : ControllerBase
-{
-    [Authorize]
-    [HttpPost("games/{gameId:guid}/reviews")]
-    public async Task<ActionResult<ApiResponse<ReviewDto>>> Create(Guid gameId, CreateReviewRequest request, CancellationToken ct)
-    {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        return Ok(ApiResponse<ReviewDto>.Ok(await reviews.CreateAsync(gameId, userId, request, ct)));
-    }
-
-    [Authorize]
-    [HttpPut("reviews/{reviewId:guid}")]
-    public async Task<ActionResult<ApiResponse<ReviewDto>>> Update(Guid reviewId, UpdateReviewRequest request, CancellationToken ct)
-    {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        return Ok(ApiResponse<ReviewDto>.Ok(await reviews.UpdateAsync(reviewId, userId, request, ct)));
-    }
-
-    [Authorize]
-    [HttpDelete("reviews/{reviewId:guid}")]
-    public async Task<ActionResult<ApiResponse<object>>> Delete(Guid reviewId, CancellationToken ct)
-    {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var isAdmin = User.IsInRole("Admin");
-        await reviews.DeleteAsync(reviewId, userId, isAdmin, ct);
-        return Ok(ApiResponse<object>.Ok(new { }));
-    }
-}
-
-[ApiController]
-[Authorize]
-[Route("api/v1/wishlist")]
-public class WishlistController(IWishlistService wishlist) : ControllerBase
-{
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-    [HttpGet]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<GameListDto>>>> Get(CancellationToken ct)
-        => Ok(ApiResponse<IReadOnlyList<GameListDto>>.Ok(await wishlist.GetAsync(UserId, ct)));
-
-    [HttpPost("{gameId:guid}")]
-    public async Task<ActionResult<ApiResponse<object>>> Add(Guid gameId, CancellationToken ct)
-    {
-        await wishlist.AddAsync(UserId, gameId, ct);
-        return Ok(ApiResponse<object>.Ok(new { }));
-    }
-
-    [HttpDelete("{gameId:guid}")]
-    public async Task<ActionResult<ApiResponse<object>>> Remove(Guid gameId, CancellationToken ct)
-    {
-        await wishlist.RemoveAsync(UserId, gameId, ct);
-        return Ok(ApiResponse<object>.Ok(new { }));
-    }
-}
-
-[ApiController]
-[Authorize]
-[Route("api/v1/orders")]
-public class OrdersController(IOrderService orders, IPaymentService payments) : ControllerBase
-{
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-    [HttpPost]
-    public async Task<ActionResult<ApiResponse<OrderDto>>> Create(CreateOrderRequest request, CancellationToken ct)
-        => Ok(ApiResponse<OrderDto>.Ok(await orders.CreateAsync(UserId, request, ct)));
-
-    [HttpGet]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<OrderDto>>>> List(CancellationToken ct)
-        => Ok(ApiResponse<IReadOnlyList<OrderDto>>.Ok(await orders.GetByUserAsync(UserId, ct)));
-
-    [HttpGet("{id:guid}")]
-    public async Task<ActionResult<ApiResponse<OrderDto>>> Get(Guid id, CancellationToken ct)
-    {
-        var order = await orders.GetByIdAsync(UserId, id, ct);
-        return order is null ? NotFound() : Ok(ApiResponse<OrderDto>.Ok(order));
-    }
-
-    [HttpPost("{id:guid}/pay")]
-    public async Task<ActionResult<ApiResponse<PaymentDto>>> Pay(Guid id, CancellationToken ct)
-        => Ok(ApiResponse<PaymentDto>.Ok(await payments.InitiatePaymentAsync(UserId, id, ct)));
-
-    [HttpPost("{id:guid}/resend")]
-    public async Task<ActionResult<ApiResponse<object>>> ResendReceipt(Guid id, CancellationToken ct)
-    {
-        await orders.ResendReceiptEmailAsync(UserId, id, ct);
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-
-    [HttpPost("{id:guid}/cancel-request")]
-    public async Task<ActionResult<ApiResponse<object>>> RequestCancellation(Guid id, RequestCancellationRequest request, CancellationToken ct)
-    {
-        await orders.RequestCancellationAsync(UserId, id, request, ct);
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-
-    [HttpPost("{id:guid}/cancel")]
-    public async Task<ActionResult<ApiResponse<object>>> CancelPending(Guid id, CancellationToken ct)
-    {
-        await orders.CancelPendingOrderAsync(UserId, id, ct);
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-}
-
-[ApiController]
-[Route("api/v1/payments")]
-public class PaymentsController(IPaymentService payments, SePaySimulatorService sepay) : ControllerBase
-{
-    [Authorize]
-    [HttpGet("{id:guid}/status")]
-    public async Task<ActionResult<ApiResponse<PaymentStatusDto>>> Status(Guid id, CancellationToken ct)
-    {
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        return Ok(ApiResponse<PaymentStatusDto>.Ok(await payments.GetStatusAsync(userId, id, ct)));
-    }
-
-    // SePay Webhook endpoints - supports root / (when ngrok routes root), /webhook, and /api/v1/webhooks/sepay
-    [HttpPost("/")]
-    [HttpPost("")]
-    [HttpPost("/webhook")]
-    [HttpPost("/webhooks")]
-    [HttpPost("/api/webhook")]
-    [HttpPost("/api/webhooks")]
-    [HttpPost("/api/v1/webhooks/sepay")]
-    [HttpPost("/api/v1/webhook/sepay")]
-    [HttpPost("/api/v1/payments/webhook")]
-    [HttpPost("/api/v1/payments/webhooks")]
-    [HttpPost("webhooks/sepay")]
-    [HttpPost("webhook/sepay")]
-    public async Task<ActionResult> Webhook(CancellationToken ct)
-    {
-        if (!sepay.IsWebhookSecretConfigured)
-        {
-            return StatusCode(503, ApiResponse<object>.Fail("WEBHOOK_NOT_CONFIGURED", "SePay webhook secret is not configured"));
-        }
-
-        Request.EnableBuffering();
-
-        using var reader = new StreamReader(Request.Body, System.Text.Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
-        var rawBody = await reader.ReadToEndAsync(ct);
-        Request.Body.Position = 0;
-
-        bool isRequestAuthenticated = false;
-        if (Request.Headers.TryGetValue("X-SePay-Signature", out var signatureHeader))
-        {
-            Request.Headers.TryGetValue("X-SePay-Timestamp", out var timestampHeader);
-            if (!sepay.VerifySePayWebhookSignature(rawBody, signatureHeader.ToString(), timestampHeader.ToString()))
-            {
-                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_INVALID", "Invalid signature"));
-            }
-            isRequestAuthenticated = true;
-        }
-        else if (Request.Headers.TryGetValue("Authorization", out var authHeader))
-        {
-            if (!sepay.VerifyApiKey(authHeader.ToString()))
-            {
-                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_INVALID", "Invalid API key"));
-            }
-            isRequestAuthenticated = true;
-        }
-
-        var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-        SePayWebhookBody? sePayBody = null;
-        try
-        {
-            sePayBody = JsonSerializer.Deserialize<SePayWebhookBody>(rawBody, options);
-        }
-        catch { }
-
-        if (sePayBody != null && (sePayBody.TransferAmount > 0 || !string.IsNullOrEmpty(sePayBody.Content) || !string.IsNullOrEmpty(sePayBody.Code)))
-        {
-            if (!isRequestAuthenticated)
-            {
-                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_UNAUTHORIZED", "Missing webhook signature or API key"));
-            }
-
-            if (!string.IsNullOrWhiteSpace(sePayBody.TransferType) &&
-                !string.Equals(sePayBody.TransferType, "in", StringComparison.OrdinalIgnoreCase))
-            {
-                return Ok(new { success = true, ignored = true });
-            }
-
-            var orderCode = sePayBody.Code ?? "";
-            if (string.IsNullOrEmpty(orderCode) && !string.IsNullOrEmpty(sePayBody.Content))
-            {
-                var match = System.Text.RegularExpressions.Regex.Match(sePayBody.Content, @"\bGV[A-Za-z0-9]{8}\b", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                if (!match.Success)
-                {
-                    match = System.Text.RegularExpressions.Regex.Match(sePayBody.Content, @"\b[A-Za-z0-9]{8,10}\b");
-                }
-                if (match.Success)
-                {
-                    orderCode = match.Value.ToUpper();
-                }
-            }
-
-            var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var txId = sePayBody.Id > 0 ? sePayBody.Id.ToString() : (sePayBody.ReferenceCode ?? Guid.NewGuid().ToString("n")[..8].ToUpper());
-            var payload = new SePayWebhookPayload(
-                TransactionId: txId,
-                OrderCode: orderCode,
-                Amount: sePayBody.TransferAmount,
-                Status: "success",
-                Timestamp: timestamp,
-                Signature: sepay.ComputeSignature(txId, orderCode, sePayBody.TransferAmount, timestamp)
-            );
-
-            await payments.HandleWebhookAsync(payload, ct);
-            return Ok(new { success = true, received = true });
-        }
-
-        SePayWebhookPayload? directPayload = null;
-        try
-        {
-            directPayload = JsonSerializer.Deserialize<SePayWebhookPayload>(rawBody, options);
-        }
-        catch { }
-
-        if (directPayload == null || string.IsNullOrWhiteSpace(directPayload.OrderCode))
-        {
-            return BadRequest(ApiResponse<object>.Fail("INVALID_BODY", "Invalid request payload"));
-        }
-
-        if (!isRequestAuthenticated)
-        {
-            if (!sepay.VerifySignature(directPayload))
-            {
-                return Unauthorized(ApiResponse<object>.Fail("WEBHOOK_INVALID", "Missing or invalid webhook signature"));
-            }
-        }
-        else if (string.IsNullOrWhiteSpace(directPayload.Signature))
-        {
-            directPayload = directPayload with
-            {
-                Signature = sepay.ComputeSignature(directPayload.TransactionId, directPayload.OrderCode, directPayload.Amount, directPayload.Timestamp)
-            };
-        }
-
-        await payments.HandleWebhookAsync(directPayload, ct);
-        return Ok(new { success = true, received = true });
-    }
-}
-
-[ApiController]
-[Authorize]
-[Route("api/v1/library")]
-public class LibraryController(ILibraryService library, AppDbContext db) : ControllerBase
-{
-    private Guid? CurrentUserId
-    {
-        get
-        {
-            var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            return string.IsNullOrEmpty(idClaim) ? null : Guid.Parse(idClaim);
-        }
-    }
-
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-    [HttpGet]
-    [AllowAnonymous]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<LibraryGameDto>>>> Get([FromQuery] Guid? userId, CancellationToken ct)
-    {
-        var targetUserId = userId ?? CurrentUserId;
-        if (targetUserId == null)
-            return Unauthorized(ApiResponse<IReadOnlyList<LibraryGameDto>>.Fail("UNAUTHORIZED", "Not logged in"));
-
-        var isOwn = targetUserId.Value == CurrentUserId;
-        
-        if (!isOwn)
-        {
-            var targetUser = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == targetUserId.Value, ct);
-            if (targetUser == null)
-                return NotFound(ApiResponse<IReadOnlyList<LibraryGameDto>>.Fail("USER_NOT_FOUND", "User not found"));
-
-            if (!targetUser.IsLibraryPublic)
-            {
-                return Ok(ApiResponse<IReadOnlyList<LibraryGameDto>>.Ok(new List<LibraryGameDto>()));
-            }
-        }
-
-        return Ok(ApiResponse<IReadOnlyList<LibraryGameDto>>.Ok(await library.GetLibraryAsync(targetUserId.Value, ct)));
-    }
-
-    [HttpGet("{gameId:guid}/download")]
-    public async Task<ActionResult<ApiResponse<DownloadLinkDto>>> Download(Guid gameId, CancellationToken ct)
-        => Ok(ApiResponse<DownloadLinkDto>.Ok(await library.GetDownloadLinkAsync(UserId, gameId, ct)));
-
-    [HttpDelete("{gameId:guid}")]
-    public async Task<ActionResult<ApiResponse<object>>> Remove(Guid gameId, CancellationToken ct)
-    {
-        await library.RemoveFromLibraryAsync(UserId, gameId, ct);
-        return Ok(ApiResponse<object>.Ok(new { }));
-    }
-}
-
-[ApiController]
-[Authorize]
-[Route("api/v1/notifications")]
-public class NotificationsController(INotificationService notifications) : ControllerBase
-{
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-    [HttpGet]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<NotificationDto>>>> Get(CancellationToken ct)
-        => Ok(ApiResponse<IReadOnlyList<NotificationDto>>.Ok(await notifications.GetAsync(UserId, ct)));
-
-    [HttpPost("{id:guid}/read")]
-    public async Task<ActionResult<ApiResponse<object>>> MarkRead(Guid id, CancellationToken ct)
-    {
-        await notifications.MarkReadAsync(UserId, id, ct);
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-
-    [HttpDelete]
-    public async Task<ActionResult<ApiResponse<object>>> ClearAll(CancellationToken ct)
-    {
-        await notifications.ClearAllAsync(UserId, ct);
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-}
-
-public class AiSettings
-{
-    public string AvatarUrl { get; set; } = "/uploads/ai/default-bot.png";
-}
-
-[ApiController]
-[Route("api/v1/ai")]
-public class AiController(IAiService ai) : ControllerBase
-{
-    private Guid? UserId
-    {
-        get
-        {
-            var idClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            return string.IsNullOrEmpty(idClaim) ? null : Guid.Parse(idClaim);
-        }
-    }
-
-    [Authorize(Roles = "Admin")]
-    [HttpGet("available-models")]
-    public async Task<ActionResult<ApiResponse<object>>> ListModels([FromQuery] string apiKey, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(apiKey)) return BadRequest(ApiResponse<object>.Fail("KEY_MISSING", "apiKey is required"));
-        using var client = new HttpClient();
-        try
-        {
-            var response = await client.GetAsync($"https://generativelanguage.googleapis.com/v1beta/models?key={Uri.EscapeDataString(apiKey.Trim())}", ct);
-            var content = await response.Content.ReadAsStringAsync(ct);
-            if (!response.IsSuccessStatusCode) return StatusCode((int)response.StatusCode, ApiResponse<object>.Fail("API_ERROR", content));
-            var parsed = JsonSerializer.Deserialize<object>(content);
-            return Ok(ApiResponse<object>.Ok(parsed));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Fail("ERROR", ex.Message));
-        }
-    }
-
-    [AllowAnonymous]
-    [HttpGet("settings")]
-    public async Task<ActionResult<ApiResponse<AiSettings>>> GetSettings([FromServices] IWebHostEnvironment env)
-    {
-        var settingsPath = Path.Combine(env.WebRootPath, "uploads", "ai", "settings.json");
-        if (System.IO.File.Exists(settingsPath))
-        {
-            try
-            {
-                var content = await System.IO.File.ReadAllTextAsync(settingsPath);
-                var settings = JsonSerializer.Deserialize<AiSettings>(content, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-                if (settings != null) return Ok(ApiResponse<AiSettings>.Ok(settings));
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error reading AI settings: {ex.Message}");
-            }
-        }
-        return Ok(ApiResponse<AiSettings>.Ok(new AiSettings()));
-    }
-
-    [AllowAnonymous]
-    [EnableRateLimiting("ai")]
-    [HttpPost("chat")]
-    public async Task<ActionResult<ApiResponse<AiChatResponse>>> Chat(AiChatRequest request, CancellationToken ct)
-        => Ok(ApiResponse<AiChatResponse>.Ok(await ai.ChatAsync(UserId, request, ct)));
-
-    [Authorize]
-    [HttpGet("history")]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<object>>>> History([FromQuery] Guid? sessionId, CancellationToken ct)
-        => Ok(ApiResponse<IReadOnlyList<object>>.Ok(await ai.GetHistoryAsync(UserId, sessionId, ct)));
-
-    [Authorize]
-    [HttpDelete("history/{sessionId:guid}")]
-    public async Task<ActionResult<ApiResponse<object>>> DeleteSession(Guid sessionId, CancellationToken ct)
-    {
-        await ai.DeleteSessionAsync(UserId, sessionId, ct);
-        return Ok(ApiResponse<object>.Ok(new { }));
-    }
-}
-
-[ApiController]
 [Authorize(Roles = "Admin")]
 [Route("api/v1/admin")]
-public class AdminController(IAdminService admin, IGoogleDriveService drive, AppDbContext db) : ControllerBase
+public class AdminController(IAdminService admin, IGoogleDriveService drive, AppDbContext db, ICacheService cache) : ControllerBase
 {
     [HttpGet("dashboard/stats")]
     public async Task<ActionResult<ApiResponse<AdminStatsDto>>> Stats(CancellationToken ct)
@@ -613,6 +92,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
         }
 
         await db.SaveChangesAsync(ct);
+        cache.InvalidateGames();
         return Ok(ApiResponse<object>.Ok(new { success = true, status = game.Status }));
     }
 
@@ -781,6 +261,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
                     break;
             }
             await db.SaveChangesAsync(ct);
+            cache.InvalidateGames();
             return Ok(ApiResponse<object>.Ok(new { fileId, url }));
         }
         catch (Exception ex)
@@ -811,6 +292,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
         }
         db.GameImages.RemoveRange(images);
         await db.SaveChangesAsync(ct);
+        cache.InvalidateGames();
         return Ok(ApiResponse<object>.Ok(new { success = true }));
     }
 
@@ -826,6 +308,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
             }
             db.GameImages.Remove(img);
             await db.SaveChangesAsync(ct);
+            cache.InvalidateGames();
         }
         return Ok(ApiResponse<object>.Ok(new { success = true }));
     }
@@ -843,6 +326,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
         }
         db.GameVideos.RemoveRange(videos);
         await db.SaveChangesAsync(ct);
+        cache.InvalidateGames();
         return Ok(ApiResponse<object>.Ok(new { success = true }));
     }
 
@@ -873,6 +357,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
             }
             
             await db.SaveChangesAsync(ct);
+            cache.InvalidateGames();
         }
         return Ok(ApiResponse<object>.Ok(new { success = true }));
     }
@@ -890,6 +375,7 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
         }
         db.GameFiles.RemoveRange(files);
         await db.SaveChangesAsync(ct);
+        cache.InvalidateGames();
         return Ok(ApiResponse<object>.Ok(new { success = true }));
     }
     [HttpPost("migrate-uploads-to-drive")]
@@ -1541,103 +1027,5 @@ public class AdminController(IAdminService admin, IGoogleDriveService drive, App
             .ThenBy(GetDepth)
             .ThenBy(f => f.Length)
             .FirstOrDefault();
-    }
-}
-
-[ApiController]
-[Authorize]
-[Route("api/v1/dev")]
-public class DevController(IPaymentService payments, IHostEnvironment env) : ControllerBase
-{
-    [HttpPost("simulate-payment/{paymentId:guid}")]
-    public async Task<ActionResult<ApiResponse<object>>> SimulatePayment(Guid paymentId, CancellationToken ct)
-    {
-        if (!env.IsDevelopment()) return NotFound();
-        var userId = Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var isAdmin = User.IsInRole("Admin");
-        await payments.SimulatePaymentAsync(paymentId, userId, isAdmin, ct);
-        return Ok(ApiResponse<object>.Ok(new { success = true }));
-    }
-}
-
-[ApiController]
-[Route("api/v1/users")]
-[Authorize]
-public class UsersController(AppDbContext db, IGoogleDriveService drive) : ControllerBase
-{
-    private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-    [HttpGet("profile")]
-    public async Task<ActionResult<ApiResponse<UserProfileDto>>> GetProfile(CancellationToken ct)
-    {
-        var user = await db.Users
-            .Include(u => u.UserRoles)
-            .ThenInclude(ur => ur.Role)
-            .FirstOrDefaultAsync(u => u.Id == UserId, ct);
-
-        if (user is null) return NotFound();
-
-        var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
-        var profile = new UserProfileDto(user.Id, user.Email, user.FullName, user.AvatarUrl, user.DateOfBirth, user.CreatedAt, roles, user.IsLibraryPublic, user.IsPurchaseHistoryPublic);
-        
-        return Ok(ApiResponse<UserProfileDto>.Ok(profile));
-    }
-
-    [HttpPut("profile")]
-    public async Task<ActionResult<ApiResponse<UserProfileDto>>> UpdateProfile(UpdateProfileRequest request, CancellationToken ct)
-    {
-        var user = await db.Users
-            .Include(u => u.UserRoles)
-            .ThenInclude(ur => ur.Role)
-            .FirstOrDefaultAsync(u => u.Id == UserId, ct);
-
-        if (user is null) return NotFound();
-
-        user.FullName = request.FullName;
-        user.DateOfBirth = request.DateOfBirth;
-        if (request.AvatarUrl != null)
-        {
-            user.AvatarUrl = request.AvatarUrl;
-        }
-        user.IsLibraryPublic = request.IsLibraryPublic;
-        user.IsPurchaseHistoryPublic = request.IsPurchaseHistoryPublic;
-
-        await db.SaveChangesAsync(ct);
-
-        var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
-        var profile = new UserProfileDto(user.Id, user.Email, user.FullName, user.AvatarUrl, user.DateOfBirth, user.CreatedAt, roles, user.IsLibraryPublic, user.IsPurchaseHistoryPublic);
-        
-        return Ok(ApiResponse<UserProfileDto>.Ok(profile));
-    }
-
-    [HttpPost("avatar")]
-    public async Task<ActionResult<ApiResponse<object>>> UploadAvatar(IFormFile file, CancellationToken ct)
-    {
-        await using var stream = file.OpenReadStream();
-        var (_, url) = await drive.UploadAsync(stream, file.FileName, file.ContentType, $"avatars/{UserId}", ct);
-        
-        var user = await db.Users.FindAsync([UserId], ct);
-        if (user is not null)
-        {
-            user.AvatarUrl = url;
-            await db.SaveChangesAsync(ct);
-        }
-        return Ok(ApiResponse<object>.Ok(new { url }));
-    }
-
-    [HttpGet("profile/{id:guid}")]
-    public async Task<ActionResult<ApiResponse<UserProfileDto>>> GetPublicProfile(Guid id, CancellationToken ct)
-    {
-        var user = await db.Users
-            .Include(u => u.UserRoles)
-            .ThenInclude(ur => ur.Role)
-            .FirstOrDefaultAsync(u => u.Id == id, ct);
-
-        if (user is null) return NotFound(ApiResponse<UserProfileDto>.Fail("USER_NOT_FOUND", "User not found"));
-
-        var roles = user.UserRoles.Select(ur => ur.Role.Name).ToList();
-        var profile = new UserProfileDto(user.Id, user.Email, user.FullName, user.AvatarUrl, user.DateOfBirth, user.CreatedAt, roles, user.IsLibraryPublic, user.IsPurchaseHistoryPublic);
-        
-        return Ok(ApiResponse<UserProfileDto>.Ok(profile));
     }
 }

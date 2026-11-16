@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useLocale } from "next-intl";
 import { formatPrice, resolveImageUrl } from "@/lib/utils";
 import { Star, Gamepad2 } from "lucide-react";
@@ -33,11 +34,14 @@ export function GameCard({ game }: { game: GameListItem }) {
         {/* Clean Media Container */}
         <div className="relative aspect-[16/10] w-full overflow-hidden rounded-xl bg-[#080B11]">
           {game.primaryImageUrl ? (
-            <img
+            <Image
               src={resolveImageUrl(game.primaryImageUrl)}
               referrerPolicy="no-referrer"
               alt={game.title}
+              fill
+              sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw"
               className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              unoptimized={game.primaryImageUrl.includes("drive.google.com") || game.primaryImageUrl.includes("googleusercontent.com")}
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center bg-zinc-900 text-zinc-600">

@@ -25,6 +25,9 @@ public static class DependencyInjection
             o.UseMySql(conn, ServerVersion.AutoDetect(conn), mysqlOptions =>
                 mysqlOptions.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 
+        services.AddMemoryCache();
+        services.AddSingleton<ICacheService, MemoryCacheService>();
+
         services.AddTransient<GroqClient>();
         services.AddScoped<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IAuthService, AuthService>();
@@ -326,29 +329,6 @@ public static class DependencyInjection
             adminUser.UserRoles.Add(new UserRole { Role = adminRole });
             await db.SaveChangesAsync();
         }
-
-        // Automatically grant all games to the admin user for testing / dev mode
-        var allGames = await db.Games.ToListAsync();
-        var existingUserGameIds = await db.UserGames
-            .Where(ug => ug.UserId == adminUser.Id)
-            .Select(ug => ug.GameId)
-            .ToListAsync();
-
-        var missingGames = allGames.Where(g => !existingUserGameIds.Contains(g.Id)).ToList();
-        if (missingGames.Any())
-        {
-            foreach (var g in missingGames)
-            {
-                db.UserGames.Add(new UserGame
-                {
-                    UserId = adminUser.Id,
-                    GameId = g.Id,
-                    AcquiredAt = DateTime.UtcNow
-                });
-            }
-            await db.SaveChangesAsync();
-        }
-
 
         // Seed categories if not present
         if (!await db.Categories.AnyAsync())
