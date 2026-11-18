@@ -49,7 +49,7 @@ public partial class App : Application
             Log($"[WARNING] UnobservedTaskException: {args.Exception}");
         };
 
-        Log($"App starting up. Args: {string.Join(" ", e.Args)}");
+        Log($"App starting up. Args: {SanitizeLogMessage(string.Join(" ", e.Args))}");
 
         const string appGuid = "GameVault-Launcher-Singleton-9589ee38";
         _mutex = new Mutex(true, appGuid, out bool isNewInstance);
@@ -93,12 +93,22 @@ public partial class App : Application
         base.OnExit(e);
     }
 
+    public static string SanitizeLogMessage(string message)
+    {
+        if (string.IsNullOrEmpty(message)) return message;
+        return System.Text.RegularExpressions.Regex.Replace(
+            message,
+            @"(token|refreshToken)=[^&\s]+",
+            "$1=[REDACTED]",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    }
+
     public static void Log(string message)
     {
         try
         {
             var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "gamevault_launcher.log");
-            System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {message}{Environment.NewLine}");
+            System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}] {SanitizeLogMessage(message)}{Environment.NewLine}");
         }
         catch { }
     }

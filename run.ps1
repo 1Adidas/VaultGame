@@ -97,17 +97,17 @@ if (Test-Path "frontend\.env.local") {
     }
 }
 
-# Update frontend/.env.development
+# Update frontend/.env.development and only clear Next.js cache if API URL changed
 $envPath = "frontend\.env.development"
 $envContent = "NEXT_PUBLIC_API_URL=$apiUrl"
+$previousEnvContent = if (Test-Path $envPath) { (Get-Content -Path $envPath -Raw -ErrorAction SilentlyContinue).Trim() } else { "" }
 Set-Content -Path $envPath -Value $envContent -Force
 "$webUrl/vi" | Set-Content -Path "access_link.txt" -Force
 
 Write-Host " -> Updated frontend/.env.development API URL to: $apiUrl" -ForegroundColor Yellow
 
-# Clean Next.js cache to avoid stale environment variable bundling
-if (Test-Path "frontend\.next") {
-    Write-Host " -> Clearing Next.js cache to apply new API URL..." -ForegroundColor Yellow
+if ($previousEnvContent -ne $envContent -and (Test-Path "frontend\.next")) {
+    Write-Host " -> API URL changed; clearing Next.js cache to apply new API URL..." -ForegroundColor Yellow
     Remove-Item -Recurse -Force "frontend\.next"
 }
 

@@ -49,7 +49,10 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
   const categoryIdParam = searchParams.get("categoryId");
 
   const { data: categories } = useCategories();
-  const { data: allGamesData } = useGames({ pageSize: 50 });
+  const { data: allGamesData, refetch: refetchRouletteGames } = useGames(
+    { pageSize: 50 },
+    { enabled: false, staleTime: 1000 * 60 * 5 }
+  );
 
   const [rolledGame, setRolledGame] = useState<GameListItem | null>(null);
   const [isRolling, setIsRolling] = useState(false);
@@ -62,16 +65,31 @@ export function AppSidebar({ isOpen, onClose }: AppSidebarProps) {
   const effectiveUser = mounted ? user : null;
   const visibleCategories = mounted ? categories : undefined;
 
-  const handleRollRoulette = () => {
-    const pool = allGamesData?.games;
-    if (!pool || pool.length === 0) return;
+  const handleRollRoulette = async () => {
+    if (isRolling) return;
     setIsRolling(true);
+
+    let pool = allGamesData?.games;
+    if (!pool || pool.length === 0) {
+      try {
+        const res = await refetchRouletteGames();
+        pool = res.data?.games;
+      } catch {
+        setIsRolling(false);
+        return;
+      }
+    }
+
+    if (!pool || pool.length === 0) {
+      setIsRolling(false);
+      return;
+    }
 
     let count = 0;
     const maxIterations = 8;
     const interval = setInterval(() => {
-      const randomIdx = Math.floor(Math.random() * pool.length);
-      setRolledGame(pool[randomIdx]);
+      const randomIdx = Math.floor(Math.random() * pool!.length);
+      setRolledGame(pool![randomIdx]);
       count++;
       if (count >= maxIterations) {
         clearInterval(interval);

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -11,14 +12,58 @@ namespace GameVault.Launcher.Services;
 public class GameManagerService
 {
     private readonly StorageService _storageService;
+    private readonly DrmShieldService _drmShield;
     private readonly HttpClient _downloadClient;
+    private readonly ConcurrentDictionary<Guid, (Process Process, string ExecutablePath)> _runningGames = new();
     public const string DRM_AUTH_ARGUMENT = "--gv-auth-key=GameVaultSecret2026";
 
     public GameManagerService(StorageService storageService)
     {
         _storageService = storageService;
+        _drmShield = new DrmShieldService();
         _downloadClient = new HttpClient { Timeout = TimeSpan.FromMinutes(30) };
         _downloadClient.DefaultRequestHeaders.TryAddWithoutValidation("ngrok-skip-browser-warning", "1");
+    }
+
+    public bool HasRunningGames => _runningGames.Values.Any(entry =>
+    {
+        try { return !entry.Process.HasExited; }
+        catch { return false; }
+    });
+
+    public void EnsureAllInstalledGamesProtected()
+    {
+        var installed = _storageService.LoadInstalledGames();
+        _drmShield.ProtectAllIdleGames(installed.Values);
+    }
+
+    public void StopAllRunningGamesAndRelock()
+    {
+        foreach (var kvp in _runningGames.ToArray())
+        {
+            var (proc, exePath) = kvp.Value;
+            try
+            {
+                if (!proc.HasExited)
+                {
+                    proc.CloseMainWindow();
+                    if (!proc.WaitForExit(2000))
+                    {
+                        proc.Kill(entireProcessTree: true);
+                        proc.WaitForExit(3000);
+                    }
+                }
+            }
+            catch { }
+            finally
+            {
+                _runningGames.TryRemove(kvp.Key, out _);
+                try { proc.Dispose(); } catch { }
+                _drmShield.RestoreStub(exePath);
+            }
+        }
+
+        EnsureAllInstalledGamesProtected();
     }
 
     public bool IsGameInstalled(Guid gameId, out InstalledGameMetadata? metadata)
@@ -380,6 +425,13 @@ public class GameManagerService
             var exePath = SelectPrimaryExecutable(targetDir, sanitizedSlug, game.Title)
                 ?? CreateSampleDrmGameExecutable(targetDir, game.Title);
 
+            // 4b. Apply GameVault DRM Shield (encrypt original .exe -> .gvbin and place DRM Stub)
+            if (exePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+            {
+                progress.Report((99, "Đang kích hoạt bảo vệ bản quyền GameVault DRM..."));
+                await Task.Run(() => _drmShield.ProtectExecutable(game.GameId, game.Title, exePath), ct);
+            }
+
             // 5. Save metadata
             var meta = new InstalledGameMetadata
             {
@@ -405,6 +457,23 @@ public class GameManagerService
 
     public void UninstallGame(Guid gameId)
     {
+        if (_runningGames.TryRemove(gameId, out var running))
+        {
+            try
+            {
+                if (!running.Process.HasExited)
+                {
+                    running.Process.Kill(entireProcessTree: true);
+                    running.Process.WaitForExit(3000);
+                }
+            }
+            catch { }
+            finally
+            {
+                try { running.Process.Dispose(); } catch { }
+            }
+        }
+
         var installed = _storageService.LoadInstalledGames();
         if (installed.TryGetValue(gameId, out var metadata))
         {
@@ -420,29 +489,94 @@ public class GameManagerService
         }
     }
 
-    public Process LaunchGame(InstalledGameMetadata metadata)
+    public Process LaunchGame(InstalledGameMetadata metadata, string? gameTitle = null)
     {
-        if (!File.Exists(metadata.ExecutablePath))
+        if (!File.Exists(metadata.ExecutablePath) && !_drmShield.HasEncryptedPayload(metadata.ExecutablePath))
         {
             throw new FileNotFoundException("Không tìm thấy file chạy (.exe) của trò chơi. Hãy tải lại game.");
         }
 
-        // DRM Protection: Pass secret token so the game knows it was launched from GameVault Launcher
-        var psi = new ProcessStartInfo
+        // If this game is already running via Launcher, return the existing process instead of double-unlocking
+        if (_runningGames.TryGetValue(metadata.GameId, out var existing))
         {
-            FileName = metadata.ExecutablePath,
-            Arguments = DRM_AUTH_ARGUMENT,
-            WorkingDirectory = Path.GetDirectoryName(metadata.ExecutablePath) ?? string.Empty,
-            UseShellExecute = true
-        };
-
-        var process = Process.Start(psi);
-        if (process == null)
-        {
-            throw new Exception("Không thể khởi động tiến trình trò chơi.");
+            try
+            {
+                if (!existing.Process.HasExited)
+                {
+                    return existing.Process;
+                }
+            }
+            catch { }
+            _runningGames.TryRemove(metadata.GameId, out _);
         }
 
-        return process;
+        var isExe = metadata.ExecutablePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+        var unlockedByShield = false;
+
+        if (isExe)
+        {
+            unlockedByShield = _drmShield.UnlockForLaunch(
+                metadata.GameId,
+                string.IsNullOrWhiteSpace(gameTitle) ? metadata.Slug : gameTitle,
+                metadata.ExecutablePath);
+        }
+
+        try
+        {
+            // DRM Protection: Pass secret token so DRM-aware games also verify Launcher origin
+            var psi = new ProcessStartInfo
+            {
+                FileName = metadata.ExecutablePath,
+                Arguments = DRM_AUTH_ARGUMENT,
+                WorkingDirectory = Path.GetDirectoryName(metadata.ExecutablePath) ?? string.Empty,
+                UseShellExecute = !isExe
+            };
+
+            var process = Process.Start(psi);
+            if (process == null)
+            {
+                throw new Exception("Không thể khởi động tiến trình trò chơi.");
+            }
+
+            if (unlockedByShield)
+            {
+                _runningGames[metadata.GameId] = (process, metadata.ExecutablePath);
+                try
+                {
+                    process.EnableRaisingEvents = true;
+                    process.Exited += (_, _) =>
+                    {
+                        _runningGames.TryRemove(metadata.GameId, out _);
+                        Task.Run(() =>
+                        {
+                            Thread.Sleep(400);
+                            _drmShield.RestoreStub(metadata.ExecutablePath);
+                        });
+                    };
+                }
+                catch
+                {
+                    // Fallback watcher if EnableRaisingEvents fails
+                    _ = Task.Run(() =>
+                    {
+                        try { process.WaitForExit(); } catch { }
+                        _runningGames.TryRemove(metadata.GameId, out _);
+                        Thread.Sleep(400);
+                        _drmShield.RestoreStub(metadata.ExecutablePath);
+                    });
+                }
+            }
+
+            return process;
+        }
+        catch
+        {
+            if (unlockedByShield)
+            {
+                _drmShield.RestoreStub(metadata.ExecutablePath);
+            }
+            throw;
+        }
     }
 
     public static string CreateSampleDrmGameExecutable(string targetDir, string gameTitle)

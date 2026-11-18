@@ -22,13 +22,24 @@ interface Props {
   onClose: () => void;
 }
 
+interface PaymentInitData {
+  id: string;
+  status?: string;
+  qrImageUrl?: string;
+  expiresAt?: string;
+  orderCode?: string;
+  amount?: number;
+}
+
+const inFlightPayRequests = new Map<string, Promise<PaymentInitData>>();
+
 export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
   const t = useTranslations("payment");
   const locale = useLocale();
   const isVi = locale === "vi";
   const isZh = locale === "zh";
 
-  const [payment, setPayment] = useState<{ id: string; qrImageUrl?: string; expiresAt?: string; orderCode?: string; amount?: number } | null>(null);
+  const [payment, setPayment] = useState<PaymentInitData | null>(null);
   const [status, setStatus] = useState("pending");
   const [loading, setLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(180);
@@ -37,6 +48,9 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
 
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const isMountedRef = useRef(true);
+  const onSuccessRef = useRef(onSuccess);
+  onSuccessRef.current = onSuccess;
 
   const copyToClipboard = (text: string, fieldName: string) => {
     navigator.clipboard.writeText(text);
@@ -46,16 +60,41 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
     }, 2000);
   };
 
-  const startPayment = async () => {
+  const handlePaymentConfirmed = () => {
+    setStatus("success");
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
+    onSuccessRef.current();
+  };
+
+  const startPayment = async (forceNew = false) => {
     setLoading(true);
     setIsExpired(false);
     setTimeLeft(180);
     try {
-      const { data } = await api.post<ApiResponse<{ id: string; qrImageUrl?: string; expiresAt?: string; orderCode?: string; amount?: number }>>(`/orders/${orderId}/pay`);
-      setPayment(data.data);
-      
-      if (data.data.expiresAt) {
-        const expiresTime = new Date(data.data.expiresAt).getTime();
+      let requestPromise = !forceNew ? inFlightPayRequests.get(orderId) : undefined;
+      if (!requestPromise) {
+        requestPromise = api
+          .post<ApiResponse<PaymentInitData>>(`/orders/${orderId}/pay`)
+          .then(({ data }) => data.data)
+          .finally(() => {
+            inFlightPayRequests.delete(orderId);
+          });
+        inFlightPayRequests.set(orderId, requestPromise);
+      }
+
+      const paymentData = await requestPromise;
+      if (!isMountedRef.current) return;
+
+      setPayment(paymentData);
+
+      if (paymentData.status?.toLowerCase() === "success") {
+        handlePaymentConfirmed();
+        return;
+      }
+
+      if (paymentData.expiresAt) {
+        const expiresTime = new Date(paymentData.expiresAt).getTime();
         const now = new Date().getTime();
         const diffSeconds = Math.max(0, Math.floor((expiresTime - now) / 1000));
         if (diffSeconds > 0) {
@@ -63,22 +102,26 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
         }
       }
 
-      startPolling(data.data.id);
+      startPolling(paymentData.id);
       startCountdown();
 
       if (process.env.NEXT_PUBLIC_SEPAY_SIMULATE === "true") {
         setTimeout(async () => {
           try {
-            await api.post(`/dev/simulate-payment/${data.data.id}`);
+            await api.post(`/dev/simulate-payment/${paymentData.id}`);
           } catch (error) {
             console.error("Simulated payment failed:", error);
           }
         }, 8000);
       }
     } catch (error) {
-      console.error("Payment initiation failed:", error);
+      if (isMountedRef.current) {
+        console.error("Payment initiation failed:", error);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -104,19 +147,18 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
     pollIntervalRef.current = setInterval(async () => {
       try {
         const { data } = await api.get<ApiResponse<{ status: string }>>(`/payments/${paymentId}/status`);
-        if (data.data.status === "Success") {
-          setStatus("success");
-          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-          if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
-          onSuccess();
+        if (isMountedRef.current && data.data.status?.toLowerCase() === "success") {
+          handlePaymentConfirmed();
         }
       } catch { /* continue polling */ }
     }, 2000);
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
     startPayment();
     return () => {
+      isMountedRef.current = false;
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
       if (countdownIntervalRef.current) clearInterval(countdownIntervalRef.current);
     };
@@ -210,7 +252,7 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
                     {isVi ? "Mã QR đã hết thời gian hiệu lực" : isZh ? "支付码已超过有效支付时间" : "QR Code has expired"}
                   </p>
                   <button
-                    onClick={startPayment}
+                    onClick={() => startPayment(true)}
                     className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5"
                   >
                     <RefreshCw className="size-3" />
@@ -280,7 +322,7 @@ export function QRPaymentModal({ orderId, onSuccess, onClose }: Props) {
             <p className="text-xs text-rose-400">
               {isVi ? "Có lỗi xảy ra khi tạo giao dịch thanh toán." : isZh ? "创建支付订单时发生错误。" : "An error occurred initiating payment."}
             </p>
-            <button onClick={startPayment} className="btn-primary text-xs">
+            <button onClick={() => startPayment(true)} className="btn-primary text-xs">
               {isVi ? "Thử lại" : isZh ? "重试" : "Retry"}
             </button>
           </div>

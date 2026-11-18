@@ -1,10 +1,15 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import dynamic from "next/dynamic";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { Navbar } from "@/components/layout/Navbar";
 import { Footer } from "@/components/layout/Footer";
-import { FloatingAiDock } from "@/components/ai/FloatingAiDock";
+
+const FloatingAiDock = dynamic(
+  () => import("@/components/ai/FloatingAiDock").then((m) => m.FloatingAiDock),
+  { ssr: false }
+);
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);

@@ -20,7 +20,7 @@ export interface GameFilter {
   status?: string;
 }
 
-export function useGames(filter: GameFilter = {}) {
+export function useGames(filter: GameFilter = {}, options?: { enabled?: boolean; staleTime?: number }) {
   const locale = useLocale();
 
   return useQuery({
@@ -29,7 +29,8 @@ export function useGames(filter: GameFilter = {}) {
       const { data } = await api.get<ApiResponse<{ items: GameListItem[]; page: number; pageSize: number; total: number }>>("/games", { params: { ...filter, locale } });
       return { games: data.data.items, meta: data.meta };
     },
-    staleTime: 1000 * 60 * 2,
+    enabled: options?.enabled ?? true,
+    staleTime: options?.staleTime ?? 1000 * 60 * 2,
   });
 }
 

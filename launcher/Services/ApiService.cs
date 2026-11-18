@@ -39,6 +39,8 @@ public class ApiService
             Timeout = TimeSpan.FromSeconds(30)
         };
         client.DefaultRequestHeaders.TryAddWithoutValidation("ngrok-skip-browser-warning", "1");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-GameVault-Client", "GameVault-Launcher");
+        client.DefaultRequestHeaders.TryAddWithoutValidation("X-GameVault-Launcher-Key", "GV-Launcher-2026-Secret");
         if (existingAuth != null)
         {
             client.DefaultRequestHeaders.Authorization = existingAuth;

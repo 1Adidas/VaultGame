@@ -30,10 +30,10 @@ export default function SupportHubPage() {
           ? "购买后如何激活并下载游戏？"
           : "How do I activate and download games after purchase?",
       a: isVi 
-        ? "Ngay sau khi giao dịch thành công qua VietQR hoặc nhận game miễn phí, trò chơi sẽ được tự động thêm vào 'Thư viện game' của bạn ngay lập tức. Bạn chỉ cần vào Thư viện và bấm nút 'Tải game'." 
+        ? "Ngay sau khi giao dịch thành công qua VietQR hoặc nhận game miễn phí, trò chơi sẽ được tự động thêm vào 'Thư viện game' của bạn. Tất cả game trên Game Vault được tải xuống, cài đặt tự động và khởi chạy độc quyền thông qua ứng dụng GameVault Launcher (Windows)." 
         : isZh
-          ? "通过 VietQR 支付成功或领取免费游戏后，该游戏会立即自动加入您的“游戏库”。您只需前往游戏库并点击“下载游戏”按钮即可。"
-          : "Immediately after successful payment via VietQR or claiming a free game, the title is added to your 'My Library' instantaneously. Just visit your Library and click 'Download'."
+          ? "通过 VietQR 支付成功或领取免费游戏后，该游戏会立即自动加入您的“游戏库”。Game Vault 的所有游戏均通过 GameVault 启动器（Windows）专属自动下载、安装和运行。"
+          : "Immediately after successful payment via VietQR or claiming a free game, the title is added to your 'My Library'. All games on Game Vault are automatically downloaded, installed, and launched exclusively through the GameVault Launcher app (Windows)."
     },
     {
       q: isVi

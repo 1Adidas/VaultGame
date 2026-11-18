@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using GameVault.Application.Common;
@@ -348,30 +349,69 @@ public class SePaySimulatorService(IConfiguration config)
 
 public class PaymentService(AppDbContext db, SePaySimulatorService sepay, INotificationService notifications, IEmailService email, IConfiguration config) : IPaymentService
 {
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> OrderLocks = new();
+
     public async Task<PaymentDto> InitiatePaymentAsync(Guid userId, Guid orderId, CancellationToken ct = default)
     {
-        var order = await db.Orders.Include(o => o.Payment).FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId, ct)
-            ?? throw new AppException("ORDER_NOT_FOUND", "Order not found", 404);
-        if (order.Status != OrderStatus.Pending) throw new AppException("ORDER_INVALID", "Order is not pending", 400);
-        if (order.Payment is not null && order.Payment.Status == PaymentStatus.Pending && order.Payment.ExpiresAt > DateTime.UtcNow)
-            return MapPayment(order.Payment, order.OrderCode);
-
-        var expiryMin = int.Parse(config["SePay:PaymentExpiryMinutes"] ?? "3");
-        var qrContent = sepay.BuildQrContent(order.OrderCode, order.TotalAmount);
-        var qrImageUrl = sepay.BuildQrImageUrl(order.OrderCode, order.TotalAmount);
-        var payment = new Payment
+        var orderLock = OrderLocks.GetOrAdd(orderId, _ => new SemaphoreSlim(1, 1));
+        await orderLock.WaitAsync(ct);
+        try
         {
-            OrderId = orderId,
-            TransactionId = Guid.NewGuid().ToString("n")[..8].ToUpper(),
-            Amount = order.TotalAmount,
-            QrContent = qrContent,
-            QrImageUrl = qrImageUrl,
-            ExpiresAt = DateTime.UtcNow.AddMinutes(expiryMin),
-            Status = PaymentStatus.Pending
-        };
-        db.Payments.Add(payment);
-        await db.SaveChangesAsync(ct);
-        return MapPayment(payment, order.OrderCode);
+            var order = await db.Orders.FirstOrDefaultAsync(o => o.Id == orderId && o.UserId == userId, ct)
+                ?? throw new AppException("ORDER_NOT_FOUND", "Order not found", 404);
+
+            var existingPayment = await db.Payments
+                .Where(p => p.OrderId == orderId)
+                .OrderByDescending(p => p.Status == PaymentStatus.Success)
+                .ThenByDescending(p => p.ExpiresAt)
+                .FirstOrDefaultAsync(ct);
+
+            if (order.Status == OrderStatus.Paid && existingPayment is not null)
+            {
+                return MapPayment(existingPayment, order.OrderCode);
+            }
+
+            if (order.Status != OrderStatus.Pending)
+                throw new AppException("ORDER_INVALID", "Order is not pending", 400);
+
+            if (existingPayment is not null && existingPayment.Status == PaymentStatus.Pending && existingPayment.ExpiresAt > DateTime.UtcNow)
+                return MapPayment(existingPayment, order.OrderCode);
+
+            var expiryMin = int.Parse(config["SePay:PaymentExpiryMinutes"] ?? "3");
+            var qrContent = sepay.BuildQrContent(order.OrderCode, order.TotalAmount);
+            var qrImageUrl = sepay.BuildQrImageUrl(order.OrderCode, order.TotalAmount);
+
+            if (existingPayment is not null)
+            {
+                existingPayment.TransactionId = Guid.NewGuid().ToString("n")[..8].ToUpper();
+                existingPayment.Amount = order.TotalAmount;
+                existingPayment.QrContent = qrContent;
+                existingPayment.QrImageUrl = qrImageUrl;
+                existingPayment.ExpiresAt = DateTime.UtcNow.AddMinutes(expiryMin);
+                existingPayment.Status = PaymentStatus.Pending;
+                existingPayment.PaidAt = null;
+                await db.SaveChangesAsync(ct);
+                return MapPayment(existingPayment, order.OrderCode);
+            }
+
+            var payment = new Payment
+            {
+                OrderId = orderId,
+                TransactionId = Guid.NewGuid().ToString("n")[..8].ToUpper(),
+                Amount = order.TotalAmount,
+                QrContent = qrContent,
+                QrImageUrl = qrImageUrl,
+                ExpiresAt = DateTime.UtcNow.AddMinutes(expiryMin),
+                Status = PaymentStatus.Pending
+            };
+            db.Payments.Add(payment);
+            await db.SaveChangesAsync(ct);
+            return MapPayment(payment, order.OrderCode);
+        }
+        finally
+        {
+            orderLock.Release();
+        }
     }
 
     public async Task<PaymentStatusDto> GetStatusAsync(Guid userId, Guid paymentId, CancellationToken ct = default)
@@ -379,7 +419,13 @@ public class PaymentService(AppDbContext db, SePaySimulatorService sepay, INotif
         var payment = await db.Payments.Include(p => p.Order)
             .FirstOrDefaultAsync(p => p.Id == paymentId && p.Order.UserId == userId, ct)
             ?? throw new AppException("PAYMENT_NOT_FOUND", "Payment not found", 404);
-        return new PaymentStatusDto(payment.Id, payment.Status, payment.PaidAt);
+
+        var effectiveStatus = payment.Order.Status == OrderStatus.Paid
+            ? PaymentStatus.Success
+            : payment.Status;
+        var effectivePaidAt = payment.PaidAt ?? (payment.Order.Status == OrderStatus.Paid ? payment.Order.CompletedAt : null);
+
+        return new PaymentStatusDto(payment.Id, effectiveStatus, effectivePaidAt);
     }
 
     public async Task HandleWebhookAsync(SePayWebhookPayload payload, CancellationToken ct = default)
@@ -424,13 +470,24 @@ public class PaymentService(AppDbContext db, SePaySimulatorService sepay, INotif
 
     private async Task CompletePayment(Order order, Payment payment, string transactionId, CancellationToken ct)
     {
-        if (payment.Status == PaymentStatus.Success) return;
+        if (payment.Status == PaymentStatus.Success || order.Status == OrderStatus.Paid) return;
 
+        var paidAt = DateTime.UtcNow;
         payment.Status = PaymentStatus.Success;
-        payment.PaidAt = DateTime.UtcNow;
+        payment.PaidAt = paidAt;
         payment.TransactionId = transactionId;
         order.Status = OrderStatus.Paid;
-        order.CompletedAt = DateTime.UtcNow;
+        order.CompletedAt = paidAt;
+
+        var siblingPendingPayments = await db.Payments
+            .Where(p => p.OrderId == order.Id && p.Id != payment.Id && p.Status == PaymentStatus.Pending)
+            .ToListAsync(ct);
+        foreach (var sibling in siblingPendingPayments)
+        {
+            sibling.Status = PaymentStatus.Success;
+            sibling.PaidAt = paidAt;
+        }
+
         foreach (var item in order.Items)
         {
             if (!await db.UserGames.AnyAsync(ug => ug.UserId == order.UserId && ug.GameId == item.GameId, ct))
@@ -561,11 +618,26 @@ public class LibraryService(AppDbContext db, IGoogleDriveService drive) : ILibra
             ?? throw new AppException("FILE_NOT_FOUND", "No download file available", 404);
 
         string url;
-        if (!string.IsNullOrEmpty(file.GoogleDriveFileId))
+        var isLocalDownloadUrl = !string.IsNullOrWhiteSpace(file.DownloadUrl)
+            && (file.DownloadUrl.StartsWith("/uploads/", StringComparison.OrdinalIgnoreCase)
+                || file.DownloadUrl.StartsWith("uploads/", StringComparison.OrdinalIgnoreCase));
+
+        if (isLocalDownloadUrl)
         {
-            url = await drive.GetDownloadUrlAsync(file.GoogleDriveFileId, ct);
-            if ((url == $"/uploads/{file.GoogleDriveFileId}" || url == $"/uploads/{Uri.EscapeDataString(file.GoogleDriveFileId)}")
-                && !string.IsNullOrEmpty(file.DownloadUrl))
+            url = file.DownloadUrl!.StartsWith("/") ? file.DownloadUrl : "/" + file.DownloadUrl;
+        }
+        else if (!string.IsNullOrEmpty(file.GoogleDriveFileId))
+        {
+            try
+            {
+                url = await drive.GetDownloadUrlAsync(file.GoogleDriveFileId, ct);
+                if ((url == $"/uploads/{file.GoogleDriveFileId}" || url == $"/uploads/{Uri.EscapeDataString(file.GoogleDriveFileId)}")
+                    && !string.IsNullOrEmpty(file.DownloadUrl))
+                {
+                    url = file.DownloadUrl;
+                }
+            }
+            catch when (!string.IsNullOrEmpty(file.DownloadUrl))
             {
                 url = file.DownloadUrl;
             }

@@ -10,6 +10,10 @@ import { formatPrice, formatDate, formatDateTimeShort, resolveImageUrl as resolv
 import { Button } from "@/components/ui/button";
 import { UnityWebGLPlayer } from "@/components/demo/UnityWebGLPlayer";
 import { QRPaymentModal } from "@/components/payment/QRPaymentModal";
+import {
+  LaunchInLauncherModal,
+  triggerGameVaultLauncher,
+} from "@/components/launcher/LaunchInLauncherModal";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/lib/auth/store";
 import {
@@ -126,6 +130,7 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
   const [isPlayingDemo, setIsPlayingDemo] = useState(false);
   const [isWishlisted, setIsWishlisted] = useState(false);
   const [showConfirmBuy, setShowConfirmBuy] = useState(false);
+  const [showLauncherModal, setShowLauncherModal] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const [showFullDesc, setShowFullDesc] = useState(false);
 
@@ -1517,12 +1522,24 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
                         {isVi ? "Sắp Ra Mắt" : isZh ? "即将发售" : "Coming Soon"}
                       </button>
                     ) : g.isOwned ? (
-                      <Link href={`/${locale}/library`} className="block w-full">
-                        <button className="btn-secondary w-full flex items-center justify-center gap-2 text-emerald-400 border-emerald-500/20">
-                          <CheckCircle className="size-4" />
-                          <span>{isVi ? "Đã Sở Hữu (Vào Thư Viện)" : isZh ? "已拥有 (前往游戏库)" : "Owned (Go to Library)"}</span>
+                      <div className="space-y-2.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            triggerGameVaultLauncher(g.id as string);
+                            setShowLauncherModal(true);
+                          }}
+                          className="h-11 w-full rounded-lg bg-white text-zinc-950 hover:bg-zinc-200 active:scale-[0.99] text-sm font-semibold transition-colors cursor-pointer"
+                        >
+                          {isVi ? "Mở trong Launcher" : isZh ? "在启动器中打开" : "Open in Launcher"}
                         </button>
-                      </Link>
+                        <Link
+                          href={`/${locale}/library`}
+                          className="block w-full text-center py-1.5 text-xs font-medium text-zinc-400 hover:text-white underline underline-offset-4 decoration-white/20 hover:decoration-white transition-colors"
+                        >
+                          {isVi ? "Đã sở hữu · Xem trong thư viện" : isZh ? "已拥有 · 查看游戏库" : "Owned · View in library"}
+                        </Link>
+                      </div>
                     ) : !user ? (
                       <Link href={`/${locale}/login?redirect=${encodeURIComponent(typeof window !== "undefined" ? window.location.pathname : "")}`} className="block w-full">
                         <button className="btn-primary w-full text-center">
@@ -1712,6 +1729,15 @@ export default function GameDetailPage({ params }: { params: Promise<{ locale: s
             setShowPay(false);
             router.push(`/${locale}/library`);
           }}
+        />
+      )}
+
+      {/* ─── Launch in GameVault Launcher Modal ─── */}
+      {showLauncherModal && (
+        <LaunchInLauncherModal
+          gameId={g.id as string}
+          gameTitle={localizedTitle}
+          onClose={() => setShowLauncherModal(false)}
         />
       )}
 

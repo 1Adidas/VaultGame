@@ -2,14 +2,30 @@
 
 import { useLibrary } from "@/hooks/useGames";
 import { api } from "@/lib/api/client";
-import { Download, Trash2, Gamepad2, ArrowRight, Play, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { LayoutGrid, List, MoreHorizontal } from "lucide-react";
 import { useLocale } from "next-intl";
 import Link from "next/link";
-import { formatDateTimeShort, resolveImageUrl } from "@/lib/utils";
+import { formatDate, formatDateTimeShort, resolveImageUrl } from "@/lib/utils";
 import { useAuthStore } from "@/lib/auth/store";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  LaunchInLauncherModal,
+  triggerGameVaultLauncher,
+} from "@/components/launcher/LaunchInLauncherModal";
+
+type SortMode = "recent" | "az" | "downloaded";
+type ViewMode = "grid" | "list";
+
+interface LibraryItem {
+  gameId: string;
+  title: string;
+  slug?: string;
+  coverUrl?: string | null;
+  acquiredAt?: string;
+  version?: string;
+  lastDownloadAt?: string | null;
+}
 
 export default function LibraryPage() {
   const locale = useLocale();
@@ -19,7 +35,11 @@ export default function LibraryPage() {
   const { user, isHydrated } = useAuthStore();
   const { data, isLoading, refetch } = useLibrary();
 
-  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<SortMode>("recent");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [launcherTarget, setLauncherTarget] = useState<{ id: string; title: string } | null>(null);
+  const menuContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -32,24 +52,40 @@ export default function LibraryPage() {
     }
   }, [user, isHydrated, locale, router]);
 
-  const download = async (gameId: string) => {
-    try {
-      const { data: res } = await api.get(`/library/${gameId}/download`);
-      const url = (res as { data: { url: string } }).data.url;
-      window.open(url.startsWith("http") ? url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"}${url}`, "_blank");
-      refetch();
-    } catch (error: any) {
-      console.error("Failed to download", error);
-      alert(isVi ? "Không thể tải game. Vui lòng thử lại sau." : isZh ? "获取下载链接失败，请稍后重试。" : "Failed to fetch download link. Please try again later.");
-    }
+  useEffect(() => {
+    if (!openMenuId) return;
+
+    const handlePointerDown = (e: MouseEvent) => {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenuId(null);
+    };
+
+    document.addEventListener("mousedown", handlePointerDown);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openMenuId]);
+
+  const openInLauncher = (gameId: string, title: string) => {
+    setOpenMenuId(null);
+    triggerGameVaultLauncher(gameId);
+    setLauncherTarget({ id: gameId, title });
   };
+
   const removeFromLibrary = async (gameId: string, title: string) => {
-    const confirmMessage = isVi 
+    setOpenMenuId(null);
+    const confirmMessage = isVi
       ? `Bạn có chắc chắn muốn gỡ game "${title}" khỏi thư viện?`
       : isZh
       ? `确定要从您的游戏库中移除《${title}》吗？`
       : `Are you sure you want to remove "${title}" from your library?`;
-    
+
     if (!window.confirm(confirmMessage)) return;
 
     try {
@@ -62,173 +98,385 @@ export default function LibraryPage() {
     }
   };
 
+  const items = useMemo(() => (data ?? []) as unknown as LibraryItem[], [data]);
+
+  const sortedItems = useMemo(() => {
+    const list = [...items];
+    if (sortBy === "az") {
+      list.sort((a, b) => (a.title || "").localeCompare(b.title || "", locale));
+    } else if (sortBy === "downloaded") {
+      list.sort((a, b) => {
+        const ta = a.lastDownloadAt ? new Date(a.lastDownloadAt).getTime() : 0;
+        const tb = b.lastDownloadAt ? new Date(b.lastDownloadAt).getTime() : 0;
+        if (tb !== ta) return tb - ta;
+        return new Date(b.acquiredAt || 0).getTime() - new Date(a.acquiredAt || 0).getTime();
+      });
+    } else {
+      list.sort(
+        (a, b) => new Date(b.acquiredAt || 0).getTime() - new Date(a.acquiredAt || 0).getTime()
+      );
+    }
+    return list;
+  }, [items, sortBy, locale]);
+
   if (!isHydrated || !user || isLoading || user?.roles.includes("Admin")) {
     return (
       <div className="w-full space-y-8 animate-pulse">
-        <div className="h-10 w-64 rounded-xl bg-[#0E131E]" />
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="aspect-[4/3] rounded-2xl bg-[#0E131E] border border-white/5" />
+        <div className="space-y-2 border-b border-white/[0.08] pb-5">
+          <div className="h-8 w-44 rounded bg-white/[0.06]" />
+          <div className="h-4 w-72 rounded bg-white/[0.04]" />
+        </div>
+        <div className="grid grid-cols-1 gap-x-6 gap-y-9 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="space-y-2.5">
+              <div className="aspect-video rounded-md bg-white/[0.05]" />
+              <div className="h-4 w-2/3 rounded bg-white/[0.05]" />
+              <div className="h-3 w-1/3 rounded bg-white/[0.04]" />
+            </div>
           ))}
         </div>
       </div>
     );
   }
 
-  const items = data ?? [];
-  const filteredItems = items.filter((item: any) =>
-    item.title?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
   return (
-    <div className="w-full space-y-8">
-      
-      {/* ─── Header & Search Bar ─── */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/[0.08] pb-6">
-        <div className="space-y-1">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-0.5 text-xs font-semibold text-zinc-300">
-            <Gamepad2 className="size-3.5" />
-            <span>{isVi ? "Kho Game Của Bạn" : isZh ? "已拥有的游戏" : "Owned Collection"}</span>
-          </div>
-          <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight">
-            {isVi ? "Thư Viện Trò Chơi" : isZh ? "我的游戏库" : "My Game Library"}
+    <div className="w-full space-y-7">
+      {/* Epic-style Clean Header & Toolbar */}
+      <header className="space-y-5 border-b border-white/[0.08] pb-5">
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-[-0.02em]">
+            {isVi ? "Thư Viện" : isZh ? "游戏库" : "Library"}
           </h1>
-          <p className="text-xs sm:text-sm text-zinc-400">
-            {isVi
-              ? `Bạn đang sở hữu ${items.length} tựa game bản quyền chính hãng.`
-              : isZh
-              ? `您当前拥有 ${items.length} 款官方正版数字授权游戏。`
-              : `You own ${items.length} digital licensed games.`}
-          </p>
+          <span className="text-sm font-medium text-zinc-400 tabular-nums">
+            {items.length}
+          </span>
         </div>
 
         {items.length > 0 && (
-          <div className="relative w-full sm:w-64">
-            <input
-              type="text"
-              placeholder={isVi ? "Lọc game trong thư viện..." : isZh ? "搜索已拥有的游戏..." : "Search your library..."}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-[#0E131E] px-3.5 py-2 pl-9 text-xs text-white placeholder:text-zinc-600 outline-none focus:border-white/30"
-            />
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Sort Selector */}
+            <div className="flex items-center gap-2 text-xs">
+              <label htmlFor="library-sort" className="text-zinc-400">
+                {isVi ? "Sắp xếp:" : isZh ? "排序：" : "Sort by:"}
+              </label>
+              <select
+                id="library-sort"
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortMode)}
+                className="bg-transparent text-xs font-medium text-zinc-100 outline-none cursor-pointer pr-1 py-1 rounded hover:text-white focus-visible:ring-1 focus-visible:ring-white/30"
+              >
+                <option value="recent" className="bg-[#0D111A] text-zinc-100">
+                  {isVi ? "Mới thêm gần đây" : isZh ? "最近添加" : "Recently Added"}
+                </option>
+                <option value="az" className="bg-[#0D111A] text-zinc-100">
+                  {isVi ? "Tên A – Z" : isZh ? "名称 A – Z" : "Alphabetical A – Z"}
+                </option>
+                <option value="downloaded" className="bg-[#0D111A] text-zinc-100">
+                  {isVi ? "Tải gần nhất" : isZh ? "最近下载" : "Recently Downloaded"}
+                </option>
+              </select>
+            </div>
+
+            {/* Grid / List View Switcher */}
+            <div
+              role="group"
+              aria-label={isVi ? "Chế độ hiển thị" : isZh ? "视图切换" : "View mode"}
+              className="flex items-center gap-1"
+            >
+              <button
+                type="button"
+                onClick={() => setViewMode("grid")}
+                aria-pressed={viewMode === "grid"}
+                aria-label={isVi ? "Dạng lưới" : isZh ? "网格视图" : "Grid view"}
+                className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                  viewMode === "grid"
+                    ? "text-white bg-white/[0.1]"
+                    : "text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]"
+                }`}
+              >
+                <LayoutGrid className="size-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("list")}
+                aria-pressed={viewMode === "list"}
+                aria-label={isVi ? "Dạng danh sách" : isZh ? "列表视图" : "List view"}
+                className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                  viewMode === "list"
+                    ? "text-white bg-white/[0.1]"
+                    : "text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]"
+                }`}
+              >
+                <List className="size-4" />
+              </button>
+            </div>
           </div>
         )}
-      </div>
+      </header>
 
-      {/* ─── Content Grid ─── */}
+      {/* Empty State */}
       {items.length === 0 ? (
-        <div className="rounded-2xl border border-white/[0.08] bg-[#0E131E] p-16 text-center space-y-4 shadow-xl">
-          <div className="size-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-zinc-400">
-            <Gamepad2 className="size-8" />
+        <section className="py-16 max-w-md space-y-4">
+          <h2 className="text-lg font-semibold text-white tracking-[-0.01em]">
+            {isVi ? "Thư viện của bạn chưa có trò chơi nào" : isZh ? "您的游戏库暂无游戏" : "Your library is empty"}
+          </h2>
+          <p className="text-sm text-zinc-400 leading-relaxed">
+            {isVi
+              ? "Trò chơi sau khi mua hoặc nhận miễn phí trên cửa hàng sẽ hiển thị tại đây để bạn cài đặt và chơi qua GameVault Launcher."
+              : isZh
+              ? "在商城购买或领取免费游戏后，游戏将显示在此处并通过 GameVault 启动器安装运行。"
+              : "Games you buy or claim on the store appear here so you can install and launch them in GameVault Launcher."}
+          </p>
+          <div className="pt-2">
+            <Link
+              href={`/${locale}/games`}
+              className="inline-flex h-10 items-center justify-center rounded-md bg-zinc-100 px-5 text-sm font-semibold text-zinc-950 hover:bg-white transition-colors"
+            >
+              {isVi ? "Khám phá cửa hàng" : isZh ? "浏览游戏商城" : "Browse Store"}
+            </Link>
           </div>
-          <div className="space-y-1">
-            <h3 className="text-lg font-bold text-white">
-              {isVi ? "Thư viện của bạn đang trống" : isZh ? "您的游戏库为空" : "Your library is empty"}
-            </h3>
-            <p className="text-xs text-zinc-400 max-w-sm mx-auto">
-              {isVi
-                ? "Khám phá ngay hàng trăm tựa game hấp dẫn hoặc nhận game miễn phí trên Game Vault."
-                : isZh
-                ? "即刻探索 Game Vault 海量精彩游戏大作或免费领取正版游戏。"
-                : "Explore our catalog of genuine digital titles and free games on Game Vault."}
-            </p>
-          </div>
-          <Link href={`/${locale}/games`} className="inline-block pt-2">
-            <button className="btn-primary flex items-center gap-2">
-              <span>{isVi ? "Khám Phá Cửa Hàng" : isZh ? "探索游戏商城" : "Browse Games Store"}</span>
-              <ArrowRight className="size-4" />
-            </button>
-          </Link>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {filteredItems.map((item) => {
-            const g = item as Record<string, any>;
+        </section>
+      ) : viewMode === "grid" ? (
+        /* Epic-style Borderless Grid View */
+        <section className="grid grid-cols-1 gap-x-6 gap-y-9 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {sortedItems.map((g) => {
             const coverUrl = resolveImageUrl(g.coverUrl);
+            const isMenuOpen = openMenuId === g.gameId;
+            const statusText = g.lastDownloadAt
+              ? `${isVi ? "Tải " : isZh ? "下载于 " : "Downloaded "}${formatDateTimeShort(g.lastDownloadAt)}`
+              : g.acquiredAt
+              ? `${isVi ? "Đã sở hữu " : isZh ? "入库于 " : "Added "}${formatDate(g.acquiredAt)}`
+              : null;
 
             return (
-              <div
+              <article key={g.gameId} className="group flex flex-col">
+                {/* Artwork: Click directly to launch in Launcher (Epic pattern) */}
+                <button
+                  type="button"
+                  onClick={() => openInLauncher(g.gameId, g.title)}
+                  className="relative block aspect-video w-full overflow-hidden rounded-md bg-zinc-900 text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+                >
+                  {coverUrl ? (
+                    <img
+                      src={coverUrl}
+                      referrerPolicy="no-referrer"
+                      alt={g.title}
+                      className="size-full object-cover transition duration-200 ease-out group-hover:scale-[1.03] group-hover:brightness-110"
+                    />
+                  ) : (
+                    <div className="flex size-full items-center justify-center text-xs text-zinc-500">
+                      {g.title}
+                    </div>
+                  )}
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-14 bg-gradient-to-t from-black/75 via-black/25 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100 flex items-end px-3 pb-2.5">
+                    <span className="text-xs font-medium text-white">
+                      {isVi ? "Mở trong Launcher" : isZh ? "在启动器中打开" : "Open in Launcher"}
+                    </span>
+                  </div>
+                </button>
+
+                {/* Title + Epic-style ··· Overflow Menu */}
+                <div className="mt-3 flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <Link
+                      href={`/${locale}/game/${g.slug || ""}`}
+                      className="block truncate text-sm font-semibold text-zinc-100 hover:text-white transition-colors"
+                    >
+                      {g.title}
+                    </Link>
+
+                    <div className="flex items-center gap-2 text-xs text-zinc-400">
+                      <button
+                        type="button"
+                        onClick={() => openInLauncher(g.gameId, g.title)}
+                        className="font-medium text-zinc-300 hover:text-white underline-offset-4 hover:underline transition-colors cursor-pointer"
+                      >
+                        {isVi ? "Cài đặt / Chơi" : isZh ? "安装 / 启动" : "Install / Play"}
+                      </button>
+                      <span className="text-zinc-600" aria-hidden="true">·</span>
+                      <span className="font-mono text-[11px] text-zinc-400 tabular-nums">
+                        v{g.version ?? "1.0.0"}
+                      </span>
+                    </div>
+
+                    {statusText && (
+                      <p className="text-[11px] text-zinc-500 truncate">{statusText}</p>
+                    )}
+                  </div>
+
+                  {/* Overflow Menu */}
+                  <div
+                    className="relative shrink-0"
+                    ref={isMenuOpen ? menuContainerRef : null}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setOpenMenuId(isMenuOpen ? null : g.gameId)}
+                      aria-haspopup="menu"
+                      aria-expanded={isMenuOpen}
+                      aria-label={isVi ? `Tùy chọn cho ${g.title}` : `Options for ${g.title}`}
+                      className="p-1.5 -mr-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </button>
+
+                    {isMenuOpen && (
+                      <div
+                        role="menu"
+                        className="absolute right-0 mt-1.5 w-48 rounded-lg border border-white/[0.1] bg-[#121622] py-1 shadow-xl z-30"
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => openInLauncher(g.gameId, g.title)}
+                          className="w-full px-3 py-2 text-left text-xs font-medium text-zinc-100 hover:bg-white/[0.07] transition-colors cursor-pointer"
+                        >
+                          {isVi ? "Mở trong Launcher" : isZh ? "在启动器中打开" : "Open in Launcher"}
+                        </button>
+                        <Link
+                          role="menuitem"
+                          href={`/${locale}/game/${g.slug || ""}`}
+                          onClick={() => setOpenMenuId(null)}
+                          className="block w-full px-3 py-2 text-left text-xs text-zinc-300 hover:text-white hover:bg-white/[0.07] transition-colors"
+                        >
+                          {isVi ? "Xem trang cửa hàng" : isZh ? "前往商店页面" : "Go to Store Page"}
+                        </Link>
+                        <div className="my-1 border-t border-white/[0.07]" />
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => removeFromLibrary(g.gameId, g.title)}
+                          className="w-full px-3 py-2 text-left text-xs text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        >
+                          {isVi ? "Gỡ khỏi thư viện" : isZh ? "移出游戏库" : "Remove from Library"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      ) : (
+        /* Epic-style Clean List View */
+        <section className="divide-y divide-white/[0.07]">
+          {sortedItems.map((g) => {
+            const coverUrl = resolveImageUrl(g.coverUrl);
+            const isMenuOpen = openMenuId === g.gameId;
+            const statusText = g.lastDownloadAt
+              ? `${isVi ? "Tải gần nhất " : isZh ? "上次下载 " : "Downloaded "}${formatDateTimeShort(g.lastDownloadAt)}`
+              : g.acquiredAt
+              ? `${isVi ? "Đã sở hữu " : isZh ? "入库于 " : "Added "}${formatDate(g.acquiredAt)}`
+              : "";
+
+            return (
+              <article
                 key={g.gameId}
-                className="group rounded-2xl border border-white/[0.08] bg-[#0E131E] overflow-hidden flex flex-col justify-between shadow-xl transition-all duration-300 hover:border-white/20 hover:-translate-y-1"
+                className="flex items-center justify-between gap-4 py-3.5 hover:bg-white/[0.02] -mx-3 px-3 rounded-lg transition-colors"
               >
-                <div>
-                  {/* Media container */}
-                  <div className="relative aspect-video w-full overflow-hidden bg-[#080B11]">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => openInLauncher(g.gameId, g.title)}
+                    className="w-24 sm:w-28 aspect-video shrink-0 overflow-hidden rounded bg-zinc-900 cursor-pointer"
+                  >
                     {coverUrl ? (
                       <img
                         src={coverUrl}
                         referrerPolicy="no-referrer"
                         alt={g.title}
-                        className="size-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        className="size-full object-cover"
                       />
                     ) : (
-                      <div className="flex size-full items-center justify-center text-zinc-700">
-                        <Gamepad2 className="size-12" />
+                      <div className="flex size-full items-center justify-center text-[10px] text-zinc-500">
+                        {g.title}
                       </div>
                     )}
-                    <div className="absolute top-3 right-3">
-                      <span className="rounded-md bg-black/60 backdrop-blur-md px-2 py-0.5 text-[10px] font-bold text-zinc-300 border border-white/10">
-                        v{g.version ?? "1.0.0"}
-                      </span>
+                  </button>
+
+                  <div className="min-w-0 space-y-0.5">
+                    <Link
+                      href={`/${locale}/game/${g.slug || ""}`}
+                      className="block truncate text-sm font-semibold text-zinc-100 hover:text-white transition-colors"
+                    >
+                      {g.title}
+                    </Link>
+                    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-zinc-400">
+                      <span className="font-mono text-[11px] tabular-nums">v{g.version ?? "1.0.0"}</span>
+                      {statusText && (
+                        <>
+                          <span className="text-zinc-600" aria-hidden="true">·</span>
+                          <span>{statusText}</span>
+                        </>
+                      )}
                     </div>
                   </div>
+                </div>
 
-                  {/* Body Info */}
-                  <div className="p-5 space-y-2">
-                    <Link href={`/${locale}/game/${g.slug || ""}`}>
-                      <h3 className="font-bold text-white text-base truncate hover:underline">
-                        {g.title}
-                      </h3>
-                    </Link>
-                    {g.lastDownloadAt ? (
-                      <p className="text-[11px] text-zinc-500">
-                        {isVi ? "Lần tải gần nhất: " : isZh ? "上次下载： " : "Last download: "}{formatDateTimeShort(g.lastDownloadAt)}
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-emerald-400 font-medium">
-                        {isVi ? "Sẵn sàng để tải xuống" : isZh ? "已就绪，可随时下载" : "Ready to download"}
-                      </p>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => openInLauncher(g.gameId, g.title)}
+                    className="h-8 px-3.5 rounded-md bg-white/[0.08] hover:bg-white/[0.15] text-xs font-medium text-white transition-colors cursor-pointer"
+                  >
+                    {isVi ? "Mở trong Launcher" : isZh ? "在启动器中打开" : "Open in Launcher"}
+                  </button>
+
+                  <div
+                    className="relative"
+                    ref={isMenuOpen ? menuContainerRef : null}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setOpenMenuId(isMenuOpen ? null : g.gameId)}
+                      aria-haspopup="menu"
+                      aria-expanded={isMenuOpen}
+                      aria-label={isVi ? `Tùy chọn cho ${g.title}` : `Options for ${g.title}`}
+                      className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+                    >
+                      <MoreHorizontal className="size-4" />
+                    </button>
+
+                    {isMenuOpen && (
+                      <div
+                        role="menu"
+                        className="absolute right-0 mt-1.5 w-48 rounded-lg border border-white/[0.1] bg-[#121622] py-1 shadow-xl z-30"
+                      >
+                        <Link
+                          role="menuitem"
+                          href={`/${locale}/game/${g.slug || ""}`}
+                          onClick={() => setOpenMenuId(null)}
+                          className="block w-full px-3 py-2 text-left text-xs text-zinc-300 hover:text-white hover:bg-white/[0.07] transition-colors"
+                        >
+                          {isVi ? "Xem trang cửa hàng" : isZh ? "前往商店页面" : "Go to Store Page"}
+                        </Link>
+                        <div className="my-1 border-t border-white/[0.07]" />
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => removeFromLibrary(g.gameId, g.title)}
+                          className="w-full px-3 py-2 text-left text-xs text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                        >
+                          {isVi ? "Gỡ khỏi thư viện" : isZh ? "移出游戏库" : "Remove from Library"}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
-                {/* Actions bottom */}
-                <div className="p-5 pt-0 flex flex-col gap-2">
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <a
-                      href={`gamevault://open/${g.gameId}`}
-                      className="btn-primary text-xs flex items-center justify-center gap-1.5 !bg-emerald-600 hover:!bg-emerald-500 !text-white"
-                      title={isVi ? "Mở GameVault Launcher trên máy tính" : "Open GameVault Launcher"}
-                    >
-                      <Gamepad2 className="size-3.5" />
-                      <span>{isVi ? "Mở Launcher" : isZh ? "启动器打开" : "Open Launcher"}</span>
-                    </a>
-
-                    <button
-                      onClick={() => download(g.gameId)}
-                      className="btn-secondary text-xs flex items-center justify-center gap-1.5 hover:text-white"
-                      title={isVi ? "Tải gói cài đặt trực tiếp qua trình duyệt" : "Download directly"}
-                    >
-                      <Download className="size-3.5" />
-                      <span>{isVi ? "Tải Trực Tiếp" : isZh ? "直接下载" : "Direct Download"}</span>
-                    </button>
-                  </div>
-
-                  <button
-                    onClick={() => removeFromLibrary(g.gameId, g.title)}
-                    className="btn-secondary text-xs flex items-center justify-center gap-1.5 hover:text-rose-400 hover:border-rose-500/20"
-                    title={isVi ? "Gỡ khỏi thư viện" : isZh ? "从游戏库移除" : "Remove from library"}
-                  >
-                    <Trash2 className="size-3.5" />
-                    <span>{isVi ? "Gỡ Bỏ" : isZh ? "移除" : "Remove"}</span>
-                  </button>
-                </div>
-              </div>
+              </article>
             );
           })}
-        </div>
+        </section>
       )}
 
+      {launcherTarget && (
+        <LaunchInLauncherModal
+          gameId={launcherTarget.id}
+          gameTitle={launcherTarget.title}
+          onClose={() => setLauncherTarget(null)}
+        />
+      )}
     </div>
   );
 }

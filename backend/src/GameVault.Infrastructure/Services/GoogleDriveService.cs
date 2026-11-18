@@ -218,29 +218,33 @@ public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
     }
 
 
+    private string? TryResolveLocalUploadUrl(string fileId)
+    {
+        if (!Directory.Exists(LocalRoot)) return null;
+
+        var exactFiles = Directory.GetFiles(LocalRoot, $"{fileId}*", SearchOption.AllDirectories);
+        var files = exactFiles.Length > 0
+            ? exactFiles
+            : Directory.GetFiles(LocalRoot, $"*{fileId}*", SearchOption.AllDirectories);
+        if (files.Length == 0) return null;
+
+        var installerSeg = $"{Path.DirectorySeparatorChar}installer{Path.DirectorySeparatorChar}";
+        var matched = files.FirstOrDefault(f => f.Contains(installerSeg, StringComparison.OrdinalIgnoreCase))
+            ?? files[0];
+        var relPath = Path.GetRelativePath(LocalRoot, matched).Replace('\\', '/');
+        var encoded = string.Join("/", relPath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString));
+        return $"/uploads/{encoded}";
+    }
+
     public async Task<string> GetDownloadUrlAsync(string fileId, CancellationToken ct = default)
     {
-        if (IsLocalFallback())
+        // Local storage GUIDs are never Google Drive file IDs; resolve locally first
+        if (IsLocalFallback() || Guid.TryParse(fileId, out _))
         {
-            if (Directory.Exists(LocalRoot))
-            {
-                var exactFiles = Directory.GetFiles(LocalRoot, $"{fileId}*", SearchOption.AllDirectories);
-                var files = exactFiles.Length > 0
-                    ? exactFiles
-                    : Directory.GetFiles(LocalRoot, $"*{fileId}*", SearchOption.AllDirectories);
-                if (files.Length > 0)
-                {
-                    var installerSeg = $"{Path.DirectorySeparatorChar}installer{Path.DirectorySeparatorChar}";
-                    var matched = files.FirstOrDefault(f => f.Contains(installerSeg, StringComparison.OrdinalIgnoreCase))
-                        ?? files[0];
-                    var relPath = Path.GetRelativePath(LocalRoot, matched).Replace('\\', '/');
-                    var encoded = string.Join("/", relPath.Split('/', StringSplitOptions.RemoveEmptyEntries).Select(Uri.EscapeDataString));
-                    return $"/uploads/{encoded}";
-                }
-            }
-            return $"/uploads/{Uri.EscapeDataString(fileId)}";
+            return TryResolveLocalUploadUrl(fileId) ?? $"/uploads/{Uri.EscapeDataString(fileId)}";
         }
-        else
+
+        try
         {
             var service = GetDriveService();
             var request = service.Files.Get(fileId);
@@ -248,6 +252,16 @@ public class GoogleDriveService(IConfiguration config) : IGoogleDriveService
             var file = await request.ExecuteAsync(ct);
             return file.WebContentLink
                 ?? $"https://drive.usercontent.google.com/download?id={Uri.EscapeDataString(fileId)}&export=download&confirm=t";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[GoogleDrive Warning] GetDownloadUrlAsync failed for '{fileId}': {ex.Message}");
+            var localFallback = TryResolveLocalUploadUrl(fileId);
+            if (!string.IsNullOrEmpty(localFallback))
+            {
+                return localFallback;
+            }
+            return $"https://drive.usercontent.google.com/download?id={Uri.EscapeDataString(fileId)}&export=download&confirm=t";
         }
     }
 

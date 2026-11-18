@@ -75,20 +75,16 @@ function LoginContent() {
   }, [isLauncher, launcherPort]);
 
   useEffect(() => {
-    if (user && isLauncher) {
-      const { accessToken, refreshToken } = getStoredTokens();
-      if (accessToken) {
-        sendToLauncher(accessToken, refreshToken || undefined);
-      }
-      return;
-    }
+    // When opened from GameVault Launcher, never auto-forward an existing browser session
+    // so the user can explicitly choose Google Sign-In, another account, or continue with the active browser account.
+    if (isLauncher) return;
 
     if (user) {
       const destination = redirectUrl ? decodeURIComponent(redirectUrl) : `/${locale}`;
       const safeDestination = destination.startsWith("/") && !destination.startsWith("//") ? destination : `/${locale}`;
       router.replace(safeDestination);
     }
-  }, [user, isLauncher, redirectUrl, locale, router, sendToLauncher]);
+  }, [user, isLauncher, redirectUrl, locale, router]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -266,12 +262,42 @@ function LoginContent() {
   };
 
   const handleGoogleResponse = useCallback(async (response: any) => {
+    setError("");
     try {
-      await loginWithGoogle(response.credential, rememberMeRef.current);
-      const user = useAuthStore.getState().user;
-      const { accessToken, refreshToken } = getStoredTokens();
+      // Strictly isolated Google login for GameVault Launcher:
+      // never overwrites or reuses the browser's active Web session.
+      if (isLauncher) {
+        const { data } = await api.post<{
+          data?: {
+            accessToken: string;
+            refreshToken?: string;
+            user?: { fullName?: string; roles?: string[] };
+          };
+        }>("/auth/google", { idToken: response.credential });
 
-      if (isLauncher && accessToken) {
+        const authData = data?.data;
+        if (!authData?.accessToken) {
+          setError(
+            isVi
+              ? "Không thể xác thực tài khoản Google."
+              : isZh
+              ? "无法验证 Google 账号。"
+              : "Failed to authenticate Google account."
+          );
+          return;
+        }
+
+        if (authData.user?.roles?.includes("Admin")) {
+          setError(
+            isVi
+              ? "Tài khoản Quản trị viên (Admin) không được phép đăng nhập vào Launcher."
+              : isZh
+              ? "管理员账号无法登录启动器。"
+              : "Admin accounts are not allowed to sign in to the Launcher."
+          );
+          return;
+        }
+
         useToastStore.getState().success(
           isVi
             ? "Đăng nhập Google thành công! Đang chuyển tiếp vào Launcher..."
@@ -279,23 +305,26 @@ function LoginContent() {
               ? "Google 登录成功！正在跳转至启动器..."
               : "Google sign-in successful! Connecting to Launcher..."
         );
-        sendToLauncher(accessToken, refreshToken || undefined);
+        sendToLauncher(authData.accessToken, authData.refreshToken || undefined);
         return;
       }
 
-      if (user) {
-        const isAdmin = user.roles.includes("Admin");
+      await loginWithGoogle(response.credential, rememberMeRef.current);
+      const loggedInUser = useAuthStore.getState().user;
+
+      if (loggedInUser) {
+        const isAdmin = loggedInUser.roles.includes("Admin");
         const msg = isAdmin
           ? (isVi
-              ? `Đăng nhập quyền Quản trị thành công! Chào mừng trở lại, Admin ${user.fullName}! 🛠️`
+              ? `Đăng nhập quyền Quản trị thành công! Chào mừng trở lại, Admin ${loggedInUser.fullName}! 🛠️`
               : isZh
-                ? `管理员登录成功！欢迎回来，Admin ${user.fullName}！🛠️`
-                : `Admin login successful! Welcome back, Admin ${user.fullName}! 🛠️`)
+                ? `管理员登录成功！欢迎回来，Admin ${loggedInUser.fullName}！🛠️`
+                : `Admin login successful! Welcome back, Admin ${loggedInUser.fullName}! 🛠️`)
           : (isVi
-              ? `Đăng nhập thành công! Chào mừng bạn quay trở lại, ${user.fullName}! 🎉`
+              ? `Đăng nhập thành công! Chào mừng bạn quay trở lại, ${loggedInUser.fullName}! 🎉`
               : isZh
-                ? `登录成功！欢迎回来，${user.fullName}！🎉`
-                : `Login successful! Welcome back, ${user.fullName}! 🎉`);
+                ? `登录成功！欢迎回来，${loggedInUser.fullName}！🎉`
+                : `Login successful! Welcome back, ${loggedInUser.fullName}! 🎉`);
         useToastStore.getState().success(msg);
       }
       const destination = redirectUrl ? decodeURIComponent(redirectUrl) : `/${locale}`;
@@ -320,6 +349,7 @@ function LoginContent() {
       google.accounts.id.initialize({
         client_id: envGoogleClientId,
         callback: handleGoogleResponse,
+        auto_select: false,
       });
       const btnContainer = document.getElementById("google-signin-btn");
       if (btnContainer) {
@@ -393,7 +423,9 @@ function LoginContent() {
           <div className="text-center flex flex-col items-center space-y-3">
             <img src="/logo.png" alt="Game Vault Logo" className="size-20 object-contain drop-shadow-xl select-none" />
             <h1 className="text-2xl font-bold text-white tracking-tight">
-              {isVi ? "Đăng nhập tài khoản" : isZh ? "登录账户" : "Sign in to your account"}
+              {isLauncher
+                ? (isVi ? "Đăng nhập Google cho Launcher" : isZh ? "使用 Google 登录启动器" : "Sign in with Google for Launcher")
+                : (isVi ? "Đăng nhập tài khoản" : isZh ? "登录账户" : "Sign in to your account")}
             </h1>
           </div>
 
@@ -424,6 +456,37 @@ function LoginContent() {
                   {isVi ? "Về trang chủ Web" : isZh ? "浏览网页商城" : "Go to Web Store"}
                 </button>
               </div>
+            </div>
+          ) : isLauncher ? (
+            /* Dedicated Google-Only Card for GameVault Launcher */
+            <div className="rounded-2xl border border-white/[0.08] bg-[#0E131E] p-7 sm:p-8 shadow-2xl space-y-5 text-center">
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                {isVi
+                  ? "Chọn tài khoản Google để đăng nhập vào GameVault Launcher. Phiên này hoàn toàn tách biệt với tài khoản đang mở trên trình duyệt."
+                  : isZh
+                  ? "请选择您的 Google 账号登录 GameVault 启动器。此登录与浏览器当前账号完全独立。"
+                  : "Choose your Google account to sign in to GameVault Launcher. This session is completely separate from your browser account."}
+              </p>
+
+              {error && (
+                <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 text-left">
+                  {error}
+                </div>
+              )}
+
+              {isGoogleAuthConfigured ? (
+                <div className="flex justify-center w-full min-h-[44px] py-1">
+                  <div id="google-signin-btn" />
+                </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+                  {isVi
+                    ? "Đăng nhập Google chưa được cấu hình (NEXT_PUBLIC_GOOGLE_CLIENT_ID)."
+                    : isZh
+                    ? "尚未配置 Google 登录 (NEXT_PUBLIC_GOOGLE_CLIENT_ID)。"
+                    : "Google Sign-In is not configured (NEXT_PUBLIC_GOOGLE_CLIENT_ID)."}
+                </div>
+              )}
             </div>
           ) : (
             /* Form Card */

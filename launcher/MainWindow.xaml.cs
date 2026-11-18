@@ -80,10 +80,29 @@ public partial class MainWindow : Window
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         App.Log($"MainWindow_Closing called! Cancel={e.Cancel}");
+
+        if (_gameManagerService.HasRunningGames)
+        {
+            var confirmExit = DarkMessageBoxWindow.ShowConfirm(
+                this,
+                "Hiện đang có trò chơi chạy qua GameVault Launcher. Nếu đóng Launcher, trò chơi sẽ được tự động tắt để khóa bảo vệ bản quyền.\n\nBạn có chắc chắn muốn thoát không?",
+                "Trò chơi đang chạy",
+                okText: "Đóng game & Thoát",
+                cancelText: "Ở lại",
+                isDestructive: true);
+
+            if (!confirmExit)
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+
         StopAuthHttpListener();
         _autoSyncTimer.Stop();
         _notificationTimer.Stop();
         CancelAllDownloads();
+        _gameManagerService.StopAllRunningGamesAndRelock();
     }
 
     private void CancelAllDownloads()
@@ -97,6 +116,7 @@ public partial class MainWindow : Window
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         App.Log("MainWindow_Loaded called.");
+        _ = Task.Run(() => _gameManagerService.EnsureAllInstalledGamesProtected());
         if (!string.IsNullOrEmpty(_session.SavedEmail))
         {
             txtLoginEmail.Text = _session.SavedEmail;
@@ -126,6 +146,10 @@ public partial class MainWindow : Window
         else
         {
             ShowLoginView();
+            if (!string.IsNullOrEmpty(App.LaunchArgument))
+            {
+                HandleDeepLink(App.LaunchArgument);
+            }
         }
     }
 
@@ -155,16 +179,77 @@ public partial class MainWindow : Window
             return;
         }
 
-        // 2. Launch or Open game in library
-        // format: gamevault://launch/{gameId} hoặc gamevault://open/{gameId}
+        // 2. Launch or Open game in library (with optional Web account sync)
+        // format: gamevault://launch/{gameId}[?userId=...&token=...&refreshToken=...]
+        //     or: gamevault://open/{gameId}[?userId=...&token=...&refreshToken=...]
         string? rawId = null;
-        if (arg.StartsWith("gamevault://launch/", StringComparison.OrdinalIgnoreCase))
+        Dictionary<string, string> queryParams = new(StringComparer.OrdinalIgnoreCase);
+
+        var qIdx = arg.IndexOf('?');
+        var basePart = qIdx >= 0 ? arg.Substring(0, qIdx) : arg;
+        if (qIdx >= 0)
         {
-            rawId = arg.Substring("gamevault://launch/".Length).TrimEnd('/');
+            queryParams = ParseQueryString(arg.Substring(qIdx + 1));
         }
-        else if (arg.StartsWith("gamevault://open/", StringComparison.OrdinalIgnoreCase))
+
+        if (basePart.StartsWith("gamevault://launch/", StringComparison.OrdinalIgnoreCase))
         {
-            rawId = arg.Substring("gamevault://open/".Length).TrimEnd('/');
+            rawId = basePart.Substring("gamevault://launch/".Length).TrimEnd('/');
+        }
+        else if (basePart.StartsWith("gamevault://open/", StringComparison.OrdinalIgnoreCase))
+        {
+            rawId = basePart.Substring("gamevault://open/".Length).TrimEnd('/');
+        }
+
+        // Sync active account with the Web account if a different user opened this deep link
+        var incomingToken = queryParams.GetValueOrDefault("token");
+        var incomingRefreshToken = queryParams.GetValueOrDefault("refreshToken");
+        var incomingUserIdStr = queryParams.GetValueOrDefault("userId");
+
+        bool hasIncomingUserId = Guid.TryParse(incomingUserIdStr, out var incomingUserId);
+        bool isLoggedOut = _session.User == null || string.IsNullOrEmpty(_session.AccessToken);
+        bool isDifferentUser = hasIncomingUserId && _session.User != null && _session.User.Id != incomingUserId;
+        bool shouldSyncAccount = !string.IsNullOrEmpty(incomingToken) && (isLoggedOut || isDifferentUser || !hasIncomingUserId);
+
+        if (shouldSyncAccount)
+        {
+            if (isDifferentUser && _gameManagerService.HasRunningGames)
+            {
+                var confirmSwitch = DarkMessageBoxWindow.ShowConfirm(
+                    this,
+                    "Bạn đang mở game bằng một tài khoản khác từ Website trong khi có trò chơi đang chạy.\n\nBạn có muốn đóng trò chơi hiện tại và chuyển sang tài khoản mới không?",
+                    "Chuyển tài khoản GameVault",
+                    okText: "Đóng game & Chuyển tài khoản",
+                    cancelText: "Hủy",
+                    isDestructive: true);
+
+                if (!confirmSwitch)
+                {
+                    return;
+                }
+                _gameManagerService.StopAllRunningGamesAndRelock();
+            }
+
+            if (isDifferentUser)
+            {
+                CancelAllDownloads();
+                _allGames.Clear();
+                _displayedGames.Clear();
+            }
+
+            await CompleteLoginWithTokenAsync(incomingToken!, incomingRefreshToken, clearOldRefreshToken: isDifferentUser);
+        }
+        else if (isDifferentUser)
+        {
+            // Different user signaled from Web without token -> sign out old account so user logs into the right one
+            if (_gameManagerService.HasRunningGames)
+            {
+                _gameManagerService.StopAllRunningGamesAndRelock();
+            }
+            CancelAllDownloads();
+            ClearSessionAndShowLogin();
+            ShowLoginError("Tài khoản trên Website khác với tài khoản đang đăng nhập trên Launcher. Vui lòng đăng nhập lại đúng tài khoản của bạn.");
+            return;
         }
 
         if (!string.IsNullOrEmpty(rawId) && Guid.TryParse(rawId, out var targetGameId))
@@ -236,7 +321,7 @@ public partial class MainWindow : Window
         }
     }
 
-    public async Task CompleteLoginWithTokenAsync(string token, string? refreshToken)
+    public async Task CompleteLoginWithTokenAsync(string token, string? refreshToken, bool clearOldRefreshToken = false)
     {
         try
         {
@@ -258,10 +343,15 @@ public partial class MainWindow : Window
                 return;
             }
 
+            bool switchingUser = _session.User != null && _session.User.Id != user.Id;
             _session.AccessToken = token;
             if (!string.IsNullOrEmpty(refreshToken))
             {
                 _session.RefreshToken = refreshToken;
+            }
+            else if (clearOldRefreshToken || switchingUser)
+            {
+                _session.RefreshToken = null;
             }
             _session.User = user;
             _session.SavedEmail = user.Email;
@@ -892,7 +982,7 @@ public partial class MainWindow : Window
             {
                 if (game.InstalledMetadata != null)
                 {
-                    _gameManagerService.LaunchGame(game.InstalledMetadata);
+                    _gameManagerService.LaunchGame(game.InstalledMetadata, game.Title);
                 }
                 else
                 {

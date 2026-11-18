@@ -19,8 +19,34 @@ namespace GameVault.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/library")]
-public class LibraryController(ILibraryService library, AppDbContext db) : ControllerBase
+public class LibraryController(ILibraryService library, AppDbContext db, IConfiguration config) : ControllerBase
 {
+    private const string LauncherClientHeader = "X-GameVault-Client";
+    private const string LauncherClientValue = "GameVault-Launcher";
+    private const string LauncherKeyHeader = "X-GameVault-Launcher-Key";
+    private const string DefaultLauncherKey = "GV-Launcher-2026-Secret";
+
+    private bool IsAuthorizedLauncherRequest()
+    {
+        if (!Request.Headers.TryGetValue(LauncherClientHeader, out var clientHeader) ||
+            !string.Equals(clientHeader.ToString().Trim(), LauncherClientValue, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (!Request.Headers.TryGetValue(LauncherKeyHeader, out var keyHeader))
+        {
+            return false;
+        }
+
+        var expectedKey = config["Launcher:DownloadClientKey"];
+        if (string.IsNullOrWhiteSpace(expectedKey))
+        {
+            expectedKey = DefaultLauncherKey;
+        }
+
+        return string.Equals(keyHeader.ToString().Trim(), expectedKey.Trim(), StringComparison.Ordinal);
+    }
     private Guid? CurrentUserId
     {
         get
@@ -59,7 +85,20 @@ public class LibraryController(ILibraryService library, AppDbContext db) : Contr
 
     [HttpGet("{gameId:guid}/download")]
     public async Task<ActionResult<ApiResponse<DownloadLinkDto>>> Download(Guid gameId, CancellationToken ct)
-        => Ok(ApiResponse<DownloadLinkDto>.Ok(await library.GetDownloadLinkAsync(UserId, gameId, ct)));
+    {
+        if (!IsAuthorizedLauncherRequest())
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                ApiResponse<DownloadLinkDto>.Fail(
+                    "LAUNCHER_REQUIRED",
+                    "Trò chơi chỉ có thể được tải xuống và cài đặt thông qua ứng dụng GameVault Launcher."
+                )
+            );
+        }
+
+        return Ok(ApiResponse<DownloadLinkDto>.Ok(await library.GetDownloadLinkAsync(UserId, gameId, ct)));
+    }
 
     [HttpDelete("{gameId:guid}")]
     public async Task<ActionResult<ApiResponse<object>>> Remove(Guid gameId, CancellationToken ct)

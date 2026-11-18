@@ -112,29 +112,7 @@ export function FloatingAiDock() {
 
   const effectiveUser = mounted ? user : null;
 
-  useEffect(() => {
-    const checkOverlays = () => {
-      const isFullscreen = Boolean(typeof document !== "undefined" && document.fullscreenElement);
-      const isDemoPlaying = Boolean(typeof document !== "undefined" && document.querySelector('iframe[title="Game Demo"]'));
-      const isQrOpen = Boolean(typeof document !== "undefined" && document.querySelector('[data-qr-modal="true"]'));
-      setIsOverlayActive(isFullscreen || isDemoPlaying || isQrOpen);
-    };
-
-    checkOverlays();
-
-    if (typeof document !== "undefined") {
-      document.addEventListener("fullscreenchange", checkOverlays);
-      const observer = new MutationObserver(checkOverlays);
-      observer.observe(document.body, { childList: true, subtree: true });
-
-      return () => {
-        document.removeEventListener("fullscreenchange", checkOverlays);
-        observer.disconnect();
-      };
-    }
-  }, []);
-
-  // Hide dock if we are inside admin section, auth pages, orders page, user is Admin, or overlay is active
+  // Hide dock if we are inside admin section, auth pages, orders page, or user is Admin
   const isHiddenRoute = Boolean(
     pathname?.includes("/admin") ||
     pathname?.includes("/login") ||
@@ -142,6 +120,43 @@ export function FloatingAiDock() {
     pathname?.includes("/orders") ||
     effectiveUser?.roles?.includes("Admin")
   );
+
+  useEffect(() => {
+    if (isHiddenRoute || typeof document === "undefined") {
+      setIsOverlayActive(false);
+      return;
+    }
+
+    let rafId: number | null = null;
+    const checkOverlays = () => {
+      rafId = null;
+      const isFullscreen = Boolean(document.fullscreenElement);
+      const isDemoPlaying = Boolean(document.querySelector('iframe[title="Game Demo"]'));
+      const isQrOpen = Boolean(document.querySelector('[data-qr-modal="true"]'));
+      const nextActive = isFullscreen || isDemoPlaying || isQrOpen;
+      setIsOverlayActive((prev) => (prev === nextActive ? prev : nextActive));
+    };
+
+    const scheduleCheck = () => {
+      if (rafId === null) {
+        rafId = requestAnimationFrame(checkOverlays);
+      }
+    };
+
+    checkOverlays();
+
+    document.addEventListener("fullscreenchange", scheduleCheck);
+    const observer = new MutationObserver(scheduleCheck);
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    return () => {
+      document.removeEventListener("fullscreenchange", scheduleCheck);
+      observer.disconnect();
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [isHiddenRoute]);
 
   if (isHiddenRoute || isOverlayActive) {
     return null;
